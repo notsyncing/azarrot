@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "azarrot"
+version = "0.1.0"
 description = "An OpenAI compatible server, focusing on OpenVINO usage."
 license = {file = "LICENSE"}
 authors = [
