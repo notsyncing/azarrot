@@ -43,7 +43,7 @@ class GenerationRequest:
 class CountedTextIteratorStreamer(TextIteratorStreamer):
     _generation_statistics: GenerationStatistics
 
-    def __init__(
+    def __init__(  # type: ignore[no-untyped-def]
         self,
         tokenizer: "AutoTokenizer",
         generation_statistics: GenerationStatistics,

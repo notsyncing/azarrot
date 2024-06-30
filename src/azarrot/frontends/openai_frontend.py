@@ -34,7 +34,7 @@ class AssistantChatCompletionMessage(BaseModel):
     name: str | None = None
 
 
-type ChatCompletionMessage = SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage
+type ChatCompletionMessage = SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage  # type: ignore[valid-type]
 
 
 class ChatCompletionStreamOptions(BaseModel):
