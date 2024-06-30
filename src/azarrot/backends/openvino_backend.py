@@ -1,9 +1,9 @@
-from datetime import datetime
 import gc
 import logging
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from threading import Thread
-from typing import Any, ClassVar, Optional, cast
+from typing import Any, ClassVar, cast
 
 import openvino
 from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction

@@ -76,6 +76,7 @@ extend-exclude = [
 target-version = "py312"
 lint.select = ["ALL"]
 lint.ignore = [
+    "C901",
     "D100",
     "D101",
     "D102",
