@@ -1,15 +1,17 @@
+from datetime import datetime
 import gc
 import logging
 from dataclasses import asdict, dataclass
 from threading import Thread
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Optional, cast
 
 import openvino
 from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction
+from torch import Tensor
 from transformers import AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase, TextIteratorStreamer
 
-from azarrot.common_data import Model
-from azarrot.config import ServerConfig
+from azarrot.common_data import GenerationStatistics, Model
+from azarrot.config import DEFAULT_MAX_TOKENS, ServerConfig
 
 TASK_MODEL_MAP = {
     "text-generation": OVModelForCausalLM,
@@ -35,6 +37,26 @@ class GenerationMessage:
 class GenerationRequest:
     model_id: str
     messages: list[GenerationMessage]
+    max_tokens: int = DEFAULT_MAX_TOKENS
+
+
+class CountedTextIteratorStreamer(TextIteratorStreamer):
+    _generation_statistics: GenerationStatistics
+
+    def __init__(self, tokenizer: "AutoTokenizer", generation_statistics: GenerationStatistics,
+                 skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs) -> None:  # noqa: ANN003
+        super().__init__(tokenizer, skip_prompt, timeout, **decode_kwargs)
+
+        self._generation_statistics = generation_statistics
+
+
+    def put(self, value: Tensor) -> None:
+        if len(value.shape) > 1:
+            value = value[0]
+
+        self._generation_statistics.total_tokens += len(value)
+
+        super().put(value)
 
 
 class OpenVINOBackend:
@@ -70,14 +92,16 @@ class OpenVINOBackend:
         model_class = TASK_MODEL_MAP[model.task]
         model_path = model.path.absolute()
 
-        self._log.info("Loading model %s from %s", model.id, model.path)
+        device = self._server_config.model_device_map.get(model.id, "CPU")
+
+        self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
         use_cache = model.task == "text-generation-with-past"
         tokenizer = AutoTokenizer.from_pretrained(model_path)
-        ov_model: Any = model_class.from_pretrained(model_path, use_cache=use_cache)
+        ov_model: Any = model_class.from_pretrained(model_path, device=device, use_cache=use_cache)
         self._models[model.id] = LoadedModel(model, ov_model, tokenizer)
 
-        self._log.info("Loaded model %s from %s", model.id, model.path)
+        self._log.info("Loaded model %s", model.id)
 
 
     def unload_model(self, model_id: str) -> None:
@@ -95,7 +119,7 @@ class OpenVINOBackend:
         return [asdict(m) for m in messages]
 
 
-    def generate(self, request: GenerationRequest) -> tuple[Model, TextIteratorStreamer]:
+    def generate(self, request: GenerationRequest) -> tuple[Model, TextIteratorStreamer, GenerationStatistics]:
         if request.model_id not in self._models:
             raise ValueError(f"Model {request.model_id} is not loaded!")
 
@@ -106,18 +130,27 @@ class OpenVINOBackend:
             return_tensors="pt"
         )
 
-        streamer = TextIteratorStreamer(
+        gen_stats = GenerationStatistics(
+            start_time=datetime.now(),
+            end_time=datetime.max,
+            prompt_tokens=len(cast(Tensor, inputs[0])),
+            total_tokens=0
+        )
+
+        streamer = CountedTextIteratorStreamer(
             cast(AutoTokenizer, loaded_model.tokenizer),
+            gen_stats,
             skip_prompt=True,
+            skip_special_tokens=True
         )
 
         generation_kwargs = {
             "inputs": inputs,
             "streamer": streamer,
-            "max_new_tokens": 2048,
+            "max_new_tokens": request.max_tokens,
         }
 
         thread = Thread(target=loaded_model.model.generate, kwargs=generation_kwargs)
         thread.start()
 
-        return loaded_model.info, streamer
+        return loaded_model.info, streamer, gen_stats

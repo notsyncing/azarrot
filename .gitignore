@@ -7,3 +7,5 @@ __pycache__/
 .tox/
 /models/
 /working/
+server.yml
+.ruff_cache/

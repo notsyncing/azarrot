@@ -1,7 +1,8 @@
 import json
+import logging
 import uuid
-from collections.abc import AsyncGenerator
-from datetime import datetime
+from collections.abc import Generator
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI
@@ -10,7 +11,8 @@ from starlette.responses import StreamingResponse
 from transformers import TextIteratorStreamer
 
 from azarrot.backends.openvino_backend import GenerationMessage, GenerationRequest, OpenVINOBackend
-from azarrot.common_data import Model
+from azarrot.common_data import GenerationStatistics, Model
+from azarrot.config import DEFAULT_MAX_TOKENS
 from azarrot.models import ModelManager
 
 
@@ -42,11 +44,13 @@ class ChatCompletionStreamOptions(BaseModel):
 class ChatCompletionRequest(BaseModel):
     messages: list[ChatCompletionMessage]
     model: str
+    max_tokens: int | None = None
     stream: bool = False
     stream_options: ChatCompletionStreamOptions = Field(default=ChatCompletionStreamOptions())
 
 
 class OpenAIFrontend:
+    _log = logging.getLogger(__name__)
     _model_manager: ModelManager
     _backend: OpenVINOBackend
 
@@ -104,7 +108,9 @@ class OpenAIFrontend:
 
 
     def __to_openai_chat_completion_object(self, model: Model, content: str | None, finish_reason: str | None = None,
-                                           contains_usage_info: bool = False, is_delta: bool = False) -> dict:
+                                           contains_usage_info: bool = False,
+                                           usage_info: GenerationStatistics | None = None,
+                                           is_delta: bool = False) -> dict:
         resp = {
             "id": str(uuid.uuid4()),
             "object": "chat.completion.chunk" if is_delta else "chat.completion",
@@ -124,18 +130,32 @@ class OpenAIFrontend:
             ]
         }
 
-        if contains_usage_info:
+        if contains_usage_info and usage_info is not None:
             resp["usage"] = {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0
+                "prompt_tokens": usage_info.prompt_tokens,
+                "completion_tokens": usage_info.total_tokens - usage_info.prompt_tokens,
+                "total_tokens": usage_info.total_tokens
             }
 
         return resp
 
 
+    def __log_generation_statistics(self, generation_statistics: GenerationStatistics) -> None:
+        time_delta = (generation_statistics.end_time - generation_statistics.start_time) / timedelta(milliseconds=1)
+
+        self._log.info(
+            "Total tokens: %d (prompt %d, completion %d), cost %d ms, %.3f tok/s",
+            generation_statistics.total_tokens,
+            generation_statistics.prompt_tokens,
+            generation_statistics.total_tokens - generation_statistics.prompt_tokens,
+            time_delta,
+            (generation_statistics.total_tokens - generation_statistics.prompt_tokens) / time_delta * 1000
+        )
+
+
     def __wrap_to_openai_chat_completion_stream(self, streamer: TextIteratorStreamer, model: Model,
-                                                contains_usage_info: bool = False):
+                                                generation_statistics: GenerationStatistics,
+                                                contains_usage_info: bool = False) -> Generator[str, Any, None]:
         for text in streamer:
             if text == "":
                 continue
@@ -144,8 +164,12 @@ class OpenAIFrontend:
                 model, text, finish_reason=None, contains_usage_info=False, is_delta=True
             )) + "\n\n"
 
+        generation_statistics.end_time = datetime.now()
+        self.__log_generation_statistics(generation_statistics)
+
         yield "data: " + json.dumps(self.__to_openai_chat_completion_object(
-            model, None, finish_reason="stop", contains_usage_info=contains_usage_info, is_delta=True
+            model, None, finish_reason="stop", contains_usage_info=contains_usage_info,
+            usage_info=generation_statistics, is_delta=True
         )) + "\n\n"
 
 
@@ -153,13 +177,15 @@ class OpenAIFrontend:
         generate_request = GenerationRequest(
             model_id=request.model,
             messages=self.__to_backend_generation_messages(request.messages),
+            max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS
         )
 
-        model, streamer = self._backend.generate(generate_request)
+        model, streamer, gen_stats = self._backend.generate(generate_request)
 
         if request.stream:
             return StreamingResponse(
-                self.__wrap_to_openai_chat_completion_stream(streamer, model, request.stream_options.include_usage),
+                self.__wrap_to_openai_chat_completion_stream(streamer, model, gen_stats,
+                request.stream_options.include_usage),
                 media_type="text/event-stream"
             )
 
@@ -168,5 +194,9 @@ class OpenAIFrontend:
         for text in streamer:
             content += text
 
-        return self.__to_openai_chat_completion_object(model, content, "stop",
-            contains_usage_info=True)
+        gen_stats.end_time = datetime.now()
+        self.__log_generation_statistics(gen_stats)
+
+        return self.__to_openai_chat_completion_object(
+            model, content, "stop", contains_usage_info=True, usage_info=gen_stats
+        )

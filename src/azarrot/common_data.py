@@ -14,3 +14,11 @@ class Model:
     # The following properties are computed at runtime
 
     create_time: datetime
+
+
+@dataclass
+class GenerationStatistics:
+    start_time: datetime
+    end_time: datetime
+    prompt_tokens: int
+    total_tokens: int
