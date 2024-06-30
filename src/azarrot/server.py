@@ -19,14 +19,24 @@ openvino_backend: OpenVINOBackend
 def __parse_arguments_and_load_config() -> ServerConfig:
     parser = argparse.ArgumentParser(prog="azarrot", description="An OpenAI compatible server")
 
-    parser.add_argument("--config", dest="config_file", metavar="CONFIG_FILE", default="./server.yml",
-        help="Specify the path to server config file")
+    parser.add_argument(
+        "--config",
+        dest="config_file",
+        metavar="CONFIG_FILE",
+        default="./server.yml",
+        help="Specify the path to server config file",
+    )
 
-    parser.add_argument("--models-dir", dest="models_dir", metavar="MODELS_DIR",
-        help="Specify the path where models are stored")
+    parser.add_argument(
+        "--models-dir", dest="models_dir", metavar="MODELS_DIR", help="Specify the path where models are stored"
+    )
 
-    parser.add_argument("--working-dir", dest="working_dir", metavar="WORKING_DIR",
-        help="Specify the path where caches and other mutable data are stored")
+    parser.add_argument(
+        "--working-dir",
+        dest="working_dir",
+        metavar="WORKING_DIR",
+        help="Specify the path where caches and other mutable data are stored",
+    )
 
     parser.add_argument("--host", dest="host", help="Specify the host of the API server")
 

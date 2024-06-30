@@ -12,6 +12,5 @@ class ManagementFrontend:
         router.add_api_route("/models/refresh", self.refresh_models, methods=["POST"])
         api.include_router(router)
 
-
     def refresh_models(self) -> None:
         self._model_manager.refresh_models()

@@ -19,7 +19,6 @@ class ModelManager:
         self._backend = backend
         self.refresh_models()
 
-
     def __parse_model_file(self, file: Path) -> Model:
         with file.open() as f:
             model_info = yaml.safe_load(f)
@@ -28,14 +27,11 @@ class ModelManager:
                 id=model_info["id"],
                 path=self._config.models_dir / Path(model_info["path"]),
                 task=model_info["task"],
-                create_time=datetime.fromtimestamp(file.stat().st_mtime)
+                create_time=datetime.fromtimestamp(file.stat().st_mtime),
             )
 
-
     def refresh_models(self) -> None:
-        new_models = [
-            self.__parse_model_file(file) for file in self._config.models_dir.glob("*.model.yml")
-        ]
+        new_models = [self.__parse_model_file(file) for file in self._config.models_dir.glob("*.model.yml")]
 
         for model in self._models:
             if model not in new_models:
@@ -47,10 +43,8 @@ class ModelManager:
                 self._backend.load_model(model)
                 self._models.append(model)
 
-
     def get_models(self) -> list[Model]:
         return self._models
-
 
     def get_model(self, model_id: str) -> Model:
         return next(m for m in self._models if m.id == model_id)

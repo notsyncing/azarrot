@@ -13,4 +13,3 @@ class ServerConfig:
     port = 8080
 
     model_device_map: ClassVar[dict[str, str]] = {}
-

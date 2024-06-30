@@ -16,7 +16,7 @@ from azarrot.config import DEFAULT_MAX_TOKENS, ServerConfig
 TASK_MODEL_MAP = {
     "text-generation": OVModelForCausalLM,
     "text-generation-with-past": OVModelForCausalLM,
-    "feature-extraction": OVModelForFeatureExtraction
+    "feature-extraction": OVModelForFeatureExtraction,
 }
 
 
@@ -43,12 +43,17 @@ class GenerationRequest:
 class CountedTextIteratorStreamer(TextIteratorStreamer):
     _generation_statistics: GenerationStatistics
 
-    def __init__(self, tokenizer: "AutoTokenizer", generation_statistics: GenerationStatistics,
-                 skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs) -> None:  # noqa: ANN003
+    def __init__(
+        self,
+        tokenizer: "AutoTokenizer",
+        generation_statistics: GenerationStatistics,
+        skip_prompt: bool = False,
+        timeout: float | None = None,
+        **decode_kwargs,  # noqa: ANN003
+    ) -> None:
         super().__init__(tokenizer, skip_prompt, timeout, **decode_kwargs)
 
         self._generation_statistics = generation_statistics
-
 
     def put(self, value: Tensor) -> None:
         if len(value.shape) > 1:
@@ -65,23 +70,19 @@ class OpenVINOBackend:
     _server_config: ServerConfig
     _models: ClassVar[dict[str, LoadedModel]] = {}
 
-
     def __print_device_list(self) -> None:
         self._log.info("Available devices:")
 
         for device in self._ov.available_devices:
             self._log.info(f"{device}: {self._ov.get_property(device, "FULL_DEVICE_NAME")}")
 
-
     def __init__(self, config: ServerConfig) -> None:
         self._server_config = config
         self.__print_device_list()
 
-
     def load_model(self, model: Model) -> None:
         if model.task not in TASK_MODEL_MAP:
-            self._log.error("Model %s (%s) wants task %s, which is not supported!", model.id, model.path,
-                model.task)
+            self._log.error("Model %s (%s) wants task %s, which is not supported!", model.id, model.path, model.task)
 
             return
 
@@ -103,7 +104,6 @@ class OpenVINOBackend:
 
         self._log.info("Loaded model %s", model.id)
 
-
     def unload_model(self, model_id: str) -> None:
         if model_id not in self._models:
             self._log.warn("Model %s is not loaded.", model_id)
@@ -114,10 +114,8 @@ class OpenVINOBackend:
 
         self._log.info("Model %s unloaded.", model_id)
 
-
     def __to_transformers_chat_messages(self, messages: list[GenerationMessage]) -> list[dict[str, str]]:
         return [asdict(m) for m in messages]
-
 
     def generate(self, request: GenerationRequest) -> tuple[Model, TextIteratorStreamer, GenerationStatistics]:
         if request.model_id not in self._models:
@@ -126,22 +124,15 @@ class OpenVINOBackend:
         loaded_model = self._models[request.model_id]
 
         inputs = loaded_model.tokenizer.apply_chat_template(
-            self.__to_transformers_chat_messages(request.messages),
-            return_tensors="pt"
+            self.__to_transformers_chat_messages(request.messages), return_tensors="pt"
         )
 
         gen_stats = GenerationStatistics(
-            start_time=datetime.now(),
-            end_time=datetime.max,
-            prompt_tokens=len(cast(Tensor, inputs[0])),
-            total_tokens=0
+            start_time=datetime.now(), end_time=datetime.max, prompt_tokens=len(cast(Tensor, inputs[0])), total_tokens=0
         )
 
         streamer = CountedTextIteratorStreamer(
-            cast(AutoTokenizer, loaded_model.tokenizer),
-            gen_stats,
-            skip_prompt=True,
-            skip_special_tokens=True
+            cast(AutoTokenizer, loaded_model.tokenizer), gen_stats, skip_prompt=True, skip_special_tokens=True
         )
 
         generation_kwargs = {
