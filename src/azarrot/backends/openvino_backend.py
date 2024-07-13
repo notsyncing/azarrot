@@ -1,8 +1,10 @@
 import gc
 import logging
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from threading import Thread
+from types import MethodType
 from typing import Any, ClassVar, cast
 
 import openvino
@@ -64,6 +66,49 @@ class CountedTextIteratorStreamer(TextIteratorStreamer):
         super().put(value)
 
 
+class ThreadLocalAwareInferRequest:
+    _log = logging.getLogger(__name__)
+    _model: openvino.CompiledModel
+    _request_holder = threading.local()
+
+    def __init__(self, model: openvino.CompiledModel) -> None:
+        self._model = model
+
+    def __get_request(self) -> openvino.InferRequest:
+        if not hasattr(self._request_holder, "request"):
+            self._request_holder.request = self._model.create_infer_request()
+
+        return self._request_holder.request
+
+    def reset_state(self) -> None:
+        req = self.__get_request()
+        req.reset_state()
+
+    def start_async(self, inputs: Any | None = None, userdata: Any | None = None, share_inputs: bool = False) -> None:    # noqa: ANN401
+        req = self.__get_request()
+        req.start_async(inputs, userdata, share_inputs)
+
+    def wait(self) -> None:
+        req = self.__get_request()
+        req.wait()
+
+    def get_tensor(self, *args, **kwargs) -> openvino.runtime.Tensor:   # noqa: ANN002, ANN003
+        req = self.__get_request()
+        return req.get_tensor(*args, **kwargs)
+
+
+def patched_compile(self) -> None:    # type: ignore[no-untyped-def]    # noqa: ANN001
+    if self.request is None:
+        super(type(self), self).compile()   # type: ignore[misc]
+
+        if isinstance(self.request, openvino.runtime.InferRequest):
+            self.compiled_model = self.request.get_compiled_model()
+        else:
+            self.compiled_model = self.request
+
+        self.request = ThreadLocalAwareInferRequest(self.compiled_model)
+
+
 class OpenVINOBackend:
     _log = logging.getLogger(__name__)
     _ov = openvino.Core()
@@ -79,6 +124,11 @@ class OpenVINOBackend:
     def __init__(self, config: ServerConfig) -> None:
         self._server_config = config
         self.__print_device_list()
+
+    def __patch_model(self, original_model):    # noqa: ANN001, ANN202
+        original_model.compiled_model = None
+        original_model.compile = MethodType(patched_compile, original_model)
+        return original_model
 
     def load_model(self, model: Model) -> None:
         if model.task not in TASK_MODEL_MAP:
@@ -97,9 +147,20 @@ class OpenVINOBackend:
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
+        ov_config = {
+            "PERFORMANCE_HINT": "THROUGHPUT"
+        }
+
         use_cache = model.task == "text-generation-with-past"
         tokenizer = AutoTokenizer.from_pretrained(model_path)
-        ov_model: Any = model_class.from_pretrained(model_path, device=device, use_cache=use_cache)
+
+        ov_model: Any = self.__patch_model(
+            model_class.from_pretrained(model_path, device=device, use_cache=use_cache,
+                ov_config=ov_config, compile=False)
+        )
+
+        ov_model.compile()
+
         self._models[model.id] = LoadedModel(model, ov_model, tokenizer)
 
         self._log.info("Loaded model %s", model.id)
