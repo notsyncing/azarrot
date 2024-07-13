@@ -1,7 +1,7 @@
 import gc
 import logging
 import threading
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from threading import Thread
 from types import MethodType
@@ -12,8 +12,10 @@ from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction
 from torch import Tensor
 from transformers import AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase, TextIteratorStreamer
 
-from azarrot.common_data import GenerationStatistics, Model
-from azarrot.config import DEFAULT_MAX_TOKENS, ServerConfig
+from azarrot.backends.backend_base import BaseBackend
+from azarrot.backends.common import CountedTextIteratorStreamer, to_transformers_chat_messages
+from azarrot.common_data import GenerationRequest, GenerationStatistics, Model
+from azarrot.config import ServerConfig
 
 TASK_MODEL_MAP = {
     "text-generation": OVModelForCausalLM,
@@ -21,49 +23,14 @@ TASK_MODEL_MAP = {
     "feature-extraction": OVModelForFeatureExtraction,
 }
 
+BACKEND_ID_OPENVINO = "openvino"
+
 
 @dataclass
 class LoadedModel:
     info: Model
     model: PreTrainedModel
     tokenizer: PreTrainedTokenizerBase
-
-
-@dataclass
-class GenerationMessage:
-    role: str
-    content: str
-
-
-@dataclass
-class GenerationRequest:
-    model_id: str
-    messages: list[GenerationMessage]
-    max_tokens: int = DEFAULT_MAX_TOKENS
-
-
-class CountedTextIteratorStreamer(TextIteratorStreamer):
-    _generation_statistics: GenerationStatistics
-
-    def __init__(  # type: ignore[no-untyped-def]
-        self,
-        tokenizer: "AutoTokenizer",
-        generation_statistics: GenerationStatistics,
-        skip_prompt: bool = False,
-        timeout: float | None = None,
-        **decode_kwargs,  # noqa: ANN003
-    ) -> None:
-        super().__init__(tokenizer, skip_prompt, timeout, **decode_kwargs)
-
-        self._generation_statistics = generation_statistics
-
-    def put(self, value: Tensor) -> None:
-        if len(value.shape) > 1:
-            value = value[0]
-
-        self._generation_statistics.total_tokens += len(value)
-
-        super().put(value)
 
 
 class ThreadLocalAwareInferRequest:
@@ -92,14 +59,14 @@ class ThreadLocalAwareInferRequest:
         req = self.__get_request()
         req.wait()
 
-    def get_tensor(self, *args, **kwargs) -> openvino.runtime.Tensor:   # noqa: ANN002, ANN003
+    def get_tensor(self, *args, **kwargs) -> openvino.runtime.Tensor:   # type: ignore[no-untyped-def]    # noqa: ANN002, ANN003
         req = self.__get_request()
         return req.get_tensor(*args, **kwargs)
 
 
 def patched_compile(self) -> None:    # type: ignore[no-untyped-def]    # noqa: ANN001
     if self.request is None:
-        super(type(self), self).compile()   # type: ignore[misc]
+        super(type(self), self).compile()   # type: ignore[unused-ignore]
 
         if isinstance(self.request, openvino.runtime.InferRequest):
             self.compiled_model = self.request.get_compiled_model()
@@ -109,23 +76,26 @@ def patched_compile(self) -> None:    # type: ignore[no-untyped-def]    # noqa: 
         self.request = ThreadLocalAwareInferRequest(self.compiled_model)
 
 
-class OpenVINOBackend:
+class OpenVINOBackend(BaseBackend):
     _log = logging.getLogger(__name__)
     _ov = openvino.Core()
     _server_config: ServerConfig
     _models: ClassVar[dict[str, LoadedModel]] = {}
 
-    def __print_device_list(self) -> None:
-        self._log.info("Available devices:")
-
-        for device in self._ov.available_devices:
-            self._log.info(f"{device}: {self._ov.get_property(device, "FULL_DEVICE_NAME")}")
-
     def __init__(self, config: ServerConfig) -> None:
         self._server_config = config
         self.__print_device_list()
 
-    def __patch_model(self, original_model):    # noqa: ANN001, ANN202
+    def id(self) -> str:
+        return BACKEND_ID_OPENVINO
+
+    def __print_device_list(self) -> None:
+        self._log.info("OpenVINO Available devices:")
+
+        for device in self._ov.available_devices:
+            self._log.info("%s: %s", device, self._ov.get_property(device, "FULL_DEVICE_NAME"))
+
+    def __patch_model(self, original_model: Any) -> Any:    # noqa: ANN401
         original_model.compiled_model = None
         original_model.compile = MethodType(patched_compile, original_model)
         return original_model
@@ -175,17 +145,14 @@ class OpenVINOBackend:
 
         self._log.info("Model %s unloaded.", model_id)
 
-    def __to_transformers_chat_messages(self, messages: list[GenerationMessage]) -> list[dict[str, str]]:
-        return [asdict(m) for m in messages]
-
-    def generate(self, request: GenerationRequest) -> tuple[Model, TextIteratorStreamer, GenerationStatistics]:
+    def generate(self, request: GenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
         if request.model_id not in self._models:
             raise ValueError(f"Model {request.model_id} is not loaded!")
 
         loaded_model = self._models[request.model_id]
 
         inputs = loaded_model.tokenizer.apply_chat_template(
-            self.__to_transformers_chat_messages(request.messages), return_tensors="pt"
+            to_transformers_chat_messages(request.messages), return_tensors="pt"
         )
 
         gen_stats = GenerationStatistics(
@@ -205,4 +172,4 @@ class OpenVINOBackend:
         thread = Thread(target=loaded_model.model.generate, kwargs=generation_kwargs)
         thread.start()
 
-        return loaded_model.info, streamer, gen_stats
+        return streamer, gen_stats

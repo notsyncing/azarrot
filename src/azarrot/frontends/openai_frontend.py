@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 from transformers import TextIteratorStreamer
 
-from azarrot.backends.openvino_backend import GenerationMessage, GenerationRequest, OpenVINOBackend
-from azarrot.common_data import GenerationStatistics, Model
+from azarrot.backends.backend_base import BaseBackend
+from azarrot.common_data import GenerationMessage, GenerationRequest, GenerationStatistics, Model
 from azarrot.config import DEFAULT_MAX_TOKENS
 from azarrot.models import ModelManager
 
@@ -34,15 +34,12 @@ class AssistantChatCompletionMessage(BaseModel):
     name: str | None = None
 
 
-type ChatCompletionMessage = SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage  # type: ignore[valid-type]
-
-
 class ChatCompletionStreamOptions(BaseModel):
     include_usage: bool = False
 
 
 class ChatCompletionRequest(BaseModel):
-    messages: list[ChatCompletionMessage]
+    messages: list[SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage]
     model: str
     max_tokens: int | None = None
     stream: bool = False
@@ -52,11 +49,15 @@ class ChatCompletionRequest(BaseModel):
 class OpenAIFrontend:
     _log = logging.getLogger(__name__)
     _model_manager: ModelManager
-    _backend: OpenVINOBackend
+    _backends: dict[str, BaseBackend]
 
-    def __init__(self, model_manager: ModelManager, backend: OpenVINOBackend, api: FastAPI) -> None:
+    def __init__(self, model_manager: ModelManager, backends: list[BaseBackend], api: FastAPI) -> None:
         self._model_manager = model_manager
-        self._backend = backend
+
+        self._backends = {}
+
+        for backend in backends:
+            self._backends[backend.id()] = backend
 
         router = APIRouter()
 
@@ -86,7 +87,10 @@ class OpenAIFrontend:
 
         return self.__to_openai_model(model)
 
-    def __to_backend_generation_messages(self, openai_messages: list[ChatCompletionMessage]) -> list[GenerationMessage]:
+    def __to_backend_generation_messages(
+        self,
+        openai_messages: list[SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage]
+    ) -> list[GenerationMessage]:
         return [GenerationMessage(role=m.role, content=m.content) for m in openai_messages]
 
     def __to_openai_chat_completion_object(
@@ -183,7 +187,13 @@ class OpenAIFrontend:
             max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS,
         )
 
-        model, streamer, gen_stats = self._backend.generate(generate_request)
+        model = self._model_manager.get_model(request.model)
+
+        if model is None:
+            raise ValueError(f"Requested model {request.model} is not loaded!")
+
+        backend = self._backends[model.backend]
+        streamer, gen_stats = backend.generate(generate_request)
 
         if request.stream:
             return StreamingResponse(

@@ -1,15 +1,20 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import uvicorn
 import yaml
 from fastapi import FastAPI
 
+from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.config import ServerConfig
 from azarrot.frontends.openai_frontend import OpenAIFrontend
 from azarrot.models import ModelManager
+
+if TYPE_CHECKING:
+    from azarrot.backends.backend_base import BaseBackend
 
 log = logging.getLogger(__name__)
 
@@ -100,13 +105,16 @@ def main() -> None:
     if not config.working_dir.exists():
         config.working_dir.mkdir(parents=True)
 
-    backend = OpenVINOBackend(config)
+    backends: list[BaseBackend] = [
+        #OpenVINOBackend(config),
+        IPEXLLMBackend(config)
+    ]
 
-    model_manager = ModelManager(config, backend)
+    model_manager = ModelManager(config, backends)
 
     log.info("Starting API server...")
     api = FastAPI()
-    OpenAIFrontend(model_manager, backend, api)
+    OpenAIFrontend(model_manager, backends, api)
     uvicorn.run(api, host=config.host, port=config.port)
 
 

@@ -1,3 +1,3 @@
 # Azarrot
 
-An OpenAI compatible server, focusing on OpenVINO usage.
+An OpenAI compatible server, focusing on OpenVINO and IPEX-LLM usage.
