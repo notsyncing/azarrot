@@ -18,8 +18,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-openvino_backend: OpenVINOBackend
-
 
 def __parse_arguments_and_load_config() -> ServerConfig:
     parser = argparse.ArgumentParser(prog="azarrot", description="An OpenAI compatible server")
