@@ -106,8 +106,8 @@ def main() -> None:
         config.working_dir.mkdir(parents=True)
 
     backends: list[BaseBackend] = [
-        #OpenVINOBackend(config),
-        IPEXLLMBackend(config)
+        IPEXLLMBackend(config),
+        OpenVINOBackend(config),
     ]
 
     model_manager = ModelManager(config, backends)
