@@ -26,10 +26,16 @@ class GenerationMessage:
 
 
 @dataclass
-class GenerationRequest:
+class TextGenerationRequest:
     model_id: str
     messages: list[GenerationMessage]
     max_tokens: int = DEFAULT_MAX_TOKENS
+
+
+@dataclass
+class EmbeddingsGenerationRequest:
+    model_id: str
+    text: str
 
 
 @dataclass

@@ -11,7 +11,7 @@ from starlette.responses import StreamingResponse
 from transformers import TextIteratorStreamer
 
 from azarrot.backends.backend_base import BaseBackend
-from azarrot.common_data import GenerationMessage, GenerationRequest, GenerationStatistics, Model
+from azarrot.common_data import EmbeddingsGenerationRequest, GenerationMessage, TextGenerationRequest, GenerationStatistics, Model
 from azarrot.config import DEFAULT_MAX_TOKENS
 from azarrot.models import ModelManager
 
@@ -46,6 +46,14 @@ class ChatCompletionRequest(BaseModel):
     stream_options: ChatCompletionStreamOptions = Field(default=ChatCompletionStreamOptions())
 
 
+class CreateEmbeddingsRequest(BaseModel):
+    input: str
+    model: str
+    encoding_format: Literal["float", "base64"] = Field(default="float")
+    dimensions: int | None = None
+    user: str | None = None
+
+
 class OpenAIFrontend:
     _log = logging.getLogger(__name__)
     _model_manager: ModelManager
@@ -67,6 +75,9 @@ class OpenAIFrontend:
 
         # Chat API
         router.add_api_route("/v1/chat/completions", self.chat_completions, methods=["POST"], response_model=None)
+
+        # Embeddings API
+        router.add_api_route("/v1/embeddings", self.create_embeddings, methods=["POST"])
 
         api.include_router(router)
 
@@ -180,18 +191,22 @@ class OpenAIFrontend:
             + "\n\n"
         )
 
+    def __get_model(self, model_id: str) -> Model:
+        model = self._model_manager.get_model(model_id)
+
+        if model is None:
+            raise ValueError(f"Requested model {model_id} is not loaded!")
+
+        return model
+
     def chat_completions(self, request: ChatCompletionRequest) -> dict | StreamingResponse:
-        generate_request = GenerationRequest(
+        generate_request = TextGenerationRequest(
             model_id=request.model,
             messages=self.__to_backend_generation_messages(request.messages),
             max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS,
         )
 
-        model = self._model_manager.get_model(request.model)
-
-        if model is None:
-            raise ValueError(f"Requested model {request.model} is not loaded!")
-
+        model = self.__get_model(request.model)
         backend = self._backends[model.backend]
         streamer, gen_stats = backend.generate(generate_request)
 
@@ -214,3 +229,29 @@ class OpenAIFrontend:
         return self.__to_openai_chat_completion_object(
             model, content, "stop", contains_usage_info=True, usage_info=gen_stats
         )
+
+    def create_embeddings(self, request: CreateEmbeddingsRequest) -> dict:
+        model = self.__get_model(request.model)
+        backend = self._backends[model.backend]
+
+        gen_req = EmbeddingsGenerationRequest(request.model, request.input)
+        data, gen_stats = backend.generate_embeddings(gen_req)
+
+        self.__log_generation_statistics(gen_stats)
+
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "object": "embedding",
+                    "embedding": data,
+                    "index": 0
+                }
+            ],
+            "model": request.model,
+            "usage": {
+                "prompt_tokens": gen_stats.prompt_tokens,
+                "total_tokens": gen_stats.total_tokens
+            }
+        }
+

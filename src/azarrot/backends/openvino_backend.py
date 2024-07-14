@@ -8,13 +8,20 @@ from types import MethodType
 from typing import Any, ClassVar, cast
 
 import openvino
+import torch
 from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction
 from torch import Tensor
-from transformers import AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase, TextIteratorStreamer
+from transformers import (
+    AutoTokenizer,
+    PreTrainedModel,
+    PreTrainedTokenizer,
+    TextIteratorStreamer,
+    pipeline,
+)
 
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.common import CountedTextIteratorStreamer, to_transformers_chat_messages
-from azarrot.common_data import GenerationRequest, GenerationStatistics, Model
+from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
 from azarrot.config import ServerConfig
 
 TASK_MODEL_MAP = {
@@ -30,7 +37,8 @@ BACKEND_ID_OPENVINO = "openvino"
 class LoadedModel:
     info: Model
     model: PreTrainedModel
-    tokenizer: PreTrainedTokenizerBase
+    tokenizer: PreTrainedTokenizer
+    device: str
 
 
 class ThreadLocalAwareInferRequest:
@@ -62,6 +70,12 @@ class ThreadLocalAwareInferRequest:
     def get_tensor(self, *args, **kwargs) -> openvino.runtime.Tensor:   # type: ignore[no-untyped-def]    # noqa: ANN002, ANN003
         req = self.__get_request()
         return req.get_tensor(*args, **kwargs)
+
+    def __call__(self, inputs: Any) -> Any:     # noqa: ANN401
+        req = self.__get_request()
+        req.start_async(inputs)
+        req.wait()
+        return req.results
 
 
 def patched_compile(self) -> None:    # type: ignore[no-untyped-def]    # noqa: ANN001
@@ -96,7 +110,7 @@ class OpenVINOBackend(BaseBackend):
             self._log.info("%s: %s", device, self._ov.get_property(device, "FULL_DEVICE_NAME"))
 
     def __patch_model(self, original_model: Any) -> Any:    # noqa: ANN401
-        original_model.compiled_model = None
+        cast(Any, original_model).compiled_model = None
         original_model.compile = MethodType(patched_compile, original_model)
         return original_model
 
@@ -131,7 +145,7 @@ class OpenVINOBackend(BaseBackend):
 
         ov_model.compile()
 
-        self._models[model.id] = LoadedModel(model, ov_model, tokenizer)
+        self._models[model.id] = LoadedModel(model, ov_model, tokenizer, device)
 
         self._log.info("Loaded model %s", model.id)
 
@@ -145,11 +159,14 @@ class OpenVINOBackend(BaseBackend):
 
         self._log.info("Model %s unloaded.", model_id)
 
-    def generate(self, request: GenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
-        if request.model_id not in self._models:
-            raise ValueError(f"Model {request.model_id} is not loaded!")
+    def __get_model(self, model_id: str) -> LoadedModel:
+        if model_id not in self._models:
+            raise ValueError(f"Model {model_id} is not loaded!")
 
-        loaded_model = self._models[request.model_id]
+        return self._models[model_id]
+
+    def generate(self, request: TextGenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
+        loaded_model = self.__get_model(request.model_id)
 
         inputs = loaded_model.tokenizer.apply_chat_template(
             to_transformers_chat_messages(request.messages), return_tensors="pt"
@@ -160,7 +177,10 @@ class OpenVINOBackend(BaseBackend):
         )
 
         streamer = CountedTextIteratorStreamer(
-            cast(AutoTokenizer, loaded_model.tokenizer), gen_stats, skip_prompt=True, skip_special_tokens=True
+            cast(AutoTokenizer, loaded_model.tokenizer),
+            gen_stats,
+            skip_prompt=True,
+            skip_special_tokens=True
         )
 
         generation_kwargs = {
@@ -173,3 +193,28 @@ class OpenVINOBackend(BaseBackend):
         thread.start()
 
         return streamer, gen_stats
+
+    def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
+        loaded_model = self.__get_model(request.model_id)
+
+        gen_stats = GenerationStatistics(
+            start_time=datetime.now(), end_time=datetime.max, prompt_tokens=0, total_tokens=0
+        )
+
+        pipe = pipeline(
+            "feature-extraction",
+            loaded_model.model,
+            tokenizer=loaded_model.tokenizer,
+            trust_remote_code=True
+        )
+
+        outputs = cast(Tensor, pipe(request.text, return_tensors=True))
+
+        normalized_embeddings = torch.nn.functional.normalize(outputs, dim=-1)
+        embeddings = normalized_embeddings[0][0]
+
+        gen_stats.prompt_tokens = outputs.size()[1]
+        gen_stats.total_tokens = gen_stats.prompt_tokens + outputs.size()[2]
+        gen_stats.end_time = datetime.now()
+
+        return cast(Tensor, embeddings).tolist(), gen_stats

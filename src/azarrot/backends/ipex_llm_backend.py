@@ -10,17 +10,17 @@ from ipex_llm.transformers import AutoModelForCausalLM
 from transformers import (
     AutoTokenizer,
     PreTrainedModel,
-    PreTrainedTokenizerBase,
+    PreTrainedTokenizer,
     TextIteratorStreamer,
 )
 
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.common import CountedTextIteratorStreamer, to_transformers_chat_messages
-from azarrot.common_data import GenerationRequest, GenerationStatistics, Model
+from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
 from azarrot.config import ServerConfig
 
 TASK_MODEL_MAP = {
-    "text-generation": AutoModelForCausalLM
+    "text-generation": AutoModelForCausalLM,
 }
 
 BACKEND_ID_IPEX_LLM = "ipex-llm"
@@ -30,7 +30,7 @@ BACKEND_ID_IPEX_LLM = "ipex-llm"
 class LoadedModel:
     info: Model
     model: PreTrainedModel
-    tokenizer: PreTrainedTokenizerBase
+    tokenizer: PreTrainedTokenizer
     device: str
 
 
@@ -97,11 +97,14 @@ class IPEXLLMBackend(BaseBackend):
 
         self._log.info("Model %s unloaded.", model_id)
 
-    def generate(self, request: GenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
-        if request.model_id not in self._models:
-            raise ValueError(f"Model {request.model_id} is not loaded!")
+    def __get_model(self, model_id: str) -> LoadedModel:
+        if model_id not in self._models:
+            raise ValueError(f"Model {model_id} is not loaded!")
 
-        loaded_model = self._models[request.model_id]
+        return self._models[model_id]
+
+    def generate(self, request: TextGenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
+        loaded_model = self.__get_model(request.model_id)
 
         inputs = loaded_model.tokenizer.apply_chat_template(
             to_transformers_chat_messages(request.messages), return_tensors="pt"
@@ -131,3 +134,6 @@ class IPEXLLMBackend(BaseBackend):
         thread.start()
 
         return streamer, gen_stats
+
+    def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
+        raise NotImplementedError
