@@ -131,6 +131,7 @@ exclude = [
     "build/",
     "dist/",
     "docs/",
+    "models/",
 ]
 
 [tool.pytest.ini_options]

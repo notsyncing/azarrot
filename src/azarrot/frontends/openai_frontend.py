@@ -11,7 +11,13 @@ from starlette.responses import StreamingResponse
 from transformers import TextIteratorStreamer
 
 from azarrot.backends.backend_base import BaseBackend
-from azarrot.common_data import EmbeddingsGenerationRequest, GenerationMessage, TextGenerationRequest, GenerationStatistics, Model
+from azarrot.common_data import (
+    EmbeddingsGenerationRequest,
+    GenerationMessage,
+    GenerationStatistics,
+    Model,
+    TextGenerationRequest,
+)
 from azarrot.config import DEFAULT_MAX_TOKENS
 from azarrot.models import ModelManager
 
