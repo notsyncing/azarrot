@@ -134,6 +134,7 @@ class IPEXLLMBackend(BaseBackend):
 
         gen_stats = GenerationStatistics(
             start_time=datetime.now(),
+            first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=len(cast(torch.Tensor, inputs[0])),
             completion_tokens=0
@@ -179,6 +180,7 @@ class IPEXLLMBackend(BaseBackend):
 
         gen_stats = GenerationStatistics(
             start_time=datetime.now(),
+            first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=len(cast(torch.Tensor, inputs[0])) + (len(pixel_values) if pixel_values is not None else 0),
             completion_tokens=0

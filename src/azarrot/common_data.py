@@ -71,6 +71,7 @@ class EmbeddingsGenerationRequest:
 @dataclass
 class GenerationStatistics:
     start_time: datetime
+    first_token_time: datetime
     end_time: datetime
     prompt_tokens: int
     completion_tokens: int

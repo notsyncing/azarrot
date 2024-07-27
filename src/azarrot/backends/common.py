@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from torch import Tensor
@@ -9,6 +10,7 @@ from azarrot.common_data import GenerationMessage, GenerationStatistics, TextGen
 class CountedTextIteratorStreamer(TextIteratorStreamer):
     _generation_statistics: GenerationStatistics
     _failed = False
+    _first_token = True
 
     def __init__(  # type: ignore[no-untyped-def]
         self,
@@ -27,6 +29,10 @@ class CountedTextIteratorStreamer(TextIteratorStreamer):
             value = value[0]
 
         self._generation_statistics.completion_tokens += len(value)
+
+        if self._first_token:
+            self._generation_statistics.first_token_time = datetime.now()
+            self._first_token = False
 
         super().put(value)
 

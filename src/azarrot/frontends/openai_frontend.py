@@ -246,12 +246,14 @@ class OpenAIFrontend:
 
     def __log_generation_statistics(self, generation_statistics: GenerationStatistics) -> None:
         time_delta = (generation_statistics.end_time - generation_statistics.start_time) / timedelta(milliseconds=1)
+        ftt = (generation_statistics.first_token_time - generation_statistics.start_time) / timedelta(milliseconds=1)
 
         self._log.info(
-            "Total tokens: %d (prompt %d, completion %d), cost %d ms, %.3f tok/s",
+            "Total tokens: %d (prompt %d, completion %d), first token latency: %d ms, cost %d ms, %.3f tok/s",
             generation_statistics.prompt_tokens + generation_statistics.completion_tokens,
             generation_statistics.prompt_tokens,
             generation_statistics.completion_tokens,
+            ftt,
             time_delta,
             (generation_statistics.completion_tokens) / time_delta * 1000,
         )
