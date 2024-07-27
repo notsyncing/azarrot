@@ -7,7 +7,7 @@ import yaml
 
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
-from azarrot.common_data import Model
+from azarrot.common_data import IPEXLLMModelConfig, Model
 from azarrot.config import ServerConfig
 
 
@@ -32,11 +32,21 @@ class ModelManager:
         with file.open() as f:
             model_info = yaml.safe_load(f)
 
+            ipex_llm_config = model_info.get("ipex_llm", None)
+            ipex_llm: IPEXLLMModelConfig | None = None
+
+            if ipex_llm_config is not None:
+                ipex_llm = IPEXLLMModelConfig(
+                    use_cache=ipex_llm_config.get("use_cache", False),
+                    generation_variant=ipex_llm_config.get("generation_variant", "normal")
+                )
+
             return Model(
                 id=model_info["id"],
                 backend=model_info.get("backend", BACKEND_ID_OPENVINO),
                 path=self._config.models_dir / Path(model_info["path"]),
                 task=model_info["task"],
+                ipex_llm=ipex_llm,
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
             )
 

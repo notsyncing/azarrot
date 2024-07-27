@@ -59,7 +59,7 @@ class ThreadLocalAwareInferRequest:
         req = self.__get_request()
         req.reset_state()
 
-    def start_async(self, inputs: Any | None = None, userdata: Any | None = None, share_inputs: bool = False) -> None:    # noqa: ANN401
+    def start_async(self, inputs: Any | None = None, userdata: Any | None = None, share_inputs: bool = False) -> None:
         req = self.__get_request()
         req.start_async(inputs, userdata, share_inputs)
 
@@ -71,7 +71,7 @@ class ThreadLocalAwareInferRequest:
         req = self.__get_request()
         return req.get_tensor(*args, **kwargs)
 
-    def __call__(self, inputs: Any) -> Any:     # noqa: ANN401
+    def __call__(self, inputs: Any) -> Any:
         req = self.__get_request()
         req.start_async(inputs)
         req.wait()
@@ -109,7 +109,7 @@ class OpenVINOBackend(BaseBackend):
         for device in self._ov.available_devices:
             self._log.info("%s: %s", device, self._ov.get_property(device, "FULL_DEVICE_NAME"))
 
-    def __patch_model(self, original_model: Any) -> Any:    # noqa: ANN401
+    def __patch_model(self, original_model: Any) -> Any:
         cast(Any, original_model).compiled_model = None
         original_model.compile = MethodType(patched_compile, original_model)
         return original_model
@@ -173,7 +173,10 @@ class OpenVINOBackend(BaseBackend):
         )
 
         gen_stats = GenerationStatistics(
-            start_time=datetime.now(), end_time=datetime.max, prompt_tokens=len(cast(Tensor, inputs[0])), total_tokens=0
+            start_time=datetime.now(),
+            end_time=datetime.max,
+            prompt_tokens=len(cast(Tensor, inputs[0])),
+            completion_tokens=0
         )
 
         streamer = CountedTextIteratorStreamer(
@@ -198,7 +201,7 @@ class OpenVINOBackend(BaseBackend):
         loaded_model = self.__get_model(request.model_id)
 
         gen_stats = GenerationStatistics(
-            start_time=datetime.now(), end_time=datetime.max, prompt_tokens=0, total_tokens=0
+            start_time=datetime.now(), end_time=datetime.max, prompt_tokens=0, completion_tokens=0
         )
 
         pipe = pipeline(
@@ -214,7 +217,7 @@ class OpenVINOBackend(BaseBackend):
         embeddings = normalized_embeddings[0][0]
 
         gen_stats.prompt_tokens = outputs.size()[1]
-        gen_stats.total_tokens = gen_stats.prompt_tokens + outputs.size()[2]
+        gen_stats.completion_tokens = outputs.size()[2]
         gen_stats.end_time = datetime.now()
 
         return cast(Tensor, embeddings).tolist(), gen_stats

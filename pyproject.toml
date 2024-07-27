@@ -15,9 +15,10 @@ dynamic = ["version"]
 dependencies = [
     "openvino==2024.2",
     "optimum[openvino]==1.18.1",
-    "ipex-llm[xpu]==2.1.0b20240712",
+    "ipex-llm[xpu]==2.1.0b20240719",
     "fastapi==0.111.0",
-    "pyyaml==6.0.1"
+    "pyyaml==6.0.1",
+    "decord==0.6.0",
 ]
 classifiers = [
   # How mature is this project? Common values are
@@ -84,10 +85,13 @@ lint.ignore = [
     "D107",
     "D200",
     "D415",
+    "EM101",
     "EM102",
+    "E722",
     "COM812",   # Conflicts with the formatter
     "ISC001",   # Conflicts with the formatter
     "ANN101",   # "missing-type-self"
+    "ANN401",
     "PT001",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
     "PT004",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
     "PT005",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
@@ -96,8 +100,13 @@ lint.ignore = [
     "DTZ005",
     "DTZ006",
     "TRY003",
+    "TRY004",
     "FBT001",
-    "FBT002"
+    "FBT002",
+    "RET505",
+    "SIM102",
+    "N812",
+    "S101",
 ]
 
 [tool.ruff.lint.per-file-ignores]

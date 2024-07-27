@@ -11,3 +11,4 @@ server.yml
 .ruff_cache/
 reports/
 .coverage
+.mypy_cache/

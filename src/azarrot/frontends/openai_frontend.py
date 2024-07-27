@@ -1,9 +1,12 @@
 import json
 import logging
+import os
+import urllib.request
 import uuid
 from collections.abc import Generator
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from pathlib import Path
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel, Field
@@ -14,30 +17,49 @@ from azarrot.backends.backend_base import BaseBackend
 from azarrot.common_data import (
     EmbeddingsGenerationRequest,
     GenerationMessage,
+    GenerationMessageContent,
     GenerationStatistics,
+    ImageGenerationMessageContent,
     Model,
+    TextGenerationMessageContent,
     TextGenerationRequest,
+    WorkingDirectories,
 )
 from azarrot.config import DEFAULT_MAX_TOKENS
 from azarrot.models import ModelManager
 
 
+class UserChatImageUrl(BaseModel):
+    url: str
+    detail: Literal["low", "high", "auto"] = "auto"
+
+
+class UserChatTextContentItem(BaseModel):
+    type: Literal["text"]
+    text: str
+
+
+class UserChatImageContentItem(BaseModel):
+    type: Literal["image_url"]
+    image_url: str | UserChatImageUrl
+
+
 class SystemChatCompletionMessage(BaseModel):
+    name: str | None = None
     content: str
     role: Literal["system"]
-    name: str | None = None
 
 
 class UserChatCompletionMessage(BaseModel):
-    content: str
-    role: Literal["user"]
     name: str | None = None
+    content: str | list[Annotated[UserChatTextContentItem | UserChatImageContentItem, Field(discriminator="type")]]
+    role: Literal["user"]
 
 
 class AssistantChatCompletionMessage(BaseModel):
+    name: str | None = None
     content: str
     role: Literal["assistant"]
-    name: str | None = None
 
 
 class ChatCompletionStreamOptions(BaseModel):
@@ -45,7 +67,13 @@ class ChatCompletionStreamOptions(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
-    messages: list[SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage]
+    messages: list[
+        Annotated[
+            SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage,
+            Field(discriminator="role")
+        ]
+    ]
+
     model: str
     max_tokens: int | None = None
     stream: bool = False
@@ -64,9 +92,17 @@ class OpenAIFrontend:
     _log = logging.getLogger(__name__)
     _model_manager: ModelManager
     _backends: dict[str, BaseBackend]
+    _working_dirs: WorkingDirectories
 
-    def __init__(self, model_manager: ModelManager, backends: list[BaseBackend], api: FastAPI) -> None:
+    def __init__(
+        self,
+        model_manager: ModelManager,
+        backends: list[BaseBackend],
+        api: FastAPI,
+        working_dirs: WorkingDirectories
+    ) -> None:
         self._model_manager = model_manager
+        self._working_dirs = working_dirs
 
         self._backends = {}
 
@@ -104,11 +140,73 @@ class OpenAIFrontend:
 
         return self.__to_openai_model(model)
 
-    def __to_backend_generation_messages(
+    def __check_path(self, path: Path) -> None:
+        prefix = Path(os.path.commonpath([path, self._working_dirs.uploaded_images]))
+
+        if prefix != self._working_dirs.uploaded_images:
+            raise ValueError("Target path %s is out of working directory %s", path,
+                self._working_dirs.uploaded_images)
+
+    def __store_uploaded_image(self, image_url: str) -> str:
+        local_file: Path
+
+        if image_url.startswith(("http://", "https://")):
+            local_file = (self._working_dirs.uploaded_images / (str(uuid.uuid4()) + ".image")).resolve()
+            self.__check_path(local_file)
+
+            self._log.info("Downloading image from %s to %s", image_url, local_file)
+            urllib.request.urlretrieve(image_url, local_file)   # noqa: S310
+        else:
+            local_file = (self._working_dirs.uploaded_images / image_url).resolve()
+            self.__check_path(local_file)
+
+        return str(local_file)
+
+    def __to_backend_generation_messages(   # noqa: PLR0912
         self,
         openai_messages: list[SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage]
     ) -> list[GenerationMessage]:
-        return [GenerationMessage(role=m.role, content=m.content) for m in openai_messages]
+        result: list[GenerationMessage] = []
+
+        for m in openai_messages:
+            content: list[GenerationMessageContent]
+
+            if isinstance(m, UserChatCompletionMessage):
+                if isinstance(m.content, str):
+                    content = [TextGenerationMessageContent(m.content)]
+                elif isinstance(m.content, list):
+                    content = []
+
+                    for c in m.content:
+                        if isinstance(c, UserChatTextContentItem):
+                            content.append(TextGenerationMessageContent(c.text))
+                        elif isinstance(c, UserChatImageContentItem):
+                            url: str
+
+                            if isinstance(c.image_url, str):
+                                url = c.image_url
+                            elif isinstance(c.image_url, UserChatImageUrl):
+                                url = c.image_url.url
+                            else:
+                                raise ValueError("Invalid image url %s", str(c.image_url))
+
+                            image_path = self.__store_uploaded_image(url)
+                            content.append( ImageGenerationMessageContent(image_path))
+                        else:
+                            raise ValueError("Invalid content %s", str(c))
+                else:
+                    raise ValueError("Invalid messsage %s", str(m))
+            else:
+                content = [TextGenerationMessageContent(m.content)]
+
+            msg = GenerationMessage(
+                role=m.role,
+                content=content
+            )
+
+            result.append(msg)
+
+        return result
 
     def __to_openai_chat_completion_object(
         self,
@@ -140,8 +238,8 @@ class OpenAIFrontend:
         if contains_usage_info and usage_info is not None:
             resp["usage"] = {
                 "prompt_tokens": usage_info.prompt_tokens,
-                "completion_tokens": usage_info.total_tokens - usage_info.prompt_tokens,
-                "total_tokens": usage_info.total_tokens,
+                "completion_tokens": usage_info.completion_tokens,
+                "total_tokens": usage_info.prompt_tokens + usage_info.completion_tokens,
             }
 
         return resp
@@ -151,11 +249,11 @@ class OpenAIFrontend:
 
         self._log.info(
             "Total tokens: %d (prompt %d, completion %d), cost %d ms, %.3f tok/s",
-            generation_statistics.total_tokens,
+            generation_statistics.prompt_tokens + generation_statistics.completion_tokens,
             generation_statistics.prompt_tokens,
-            generation_statistics.total_tokens - generation_statistics.prompt_tokens,
+            generation_statistics.completion_tokens,
             time_delta,
-            (generation_statistics.total_tokens - generation_statistics.prompt_tokens) / time_delta * 1000,
+            (generation_statistics.completion_tokens) / time_delta * 1000,
         )
 
     def __wrap_to_openai_chat_completion_stream(
@@ -257,7 +355,7 @@ class OpenAIFrontend:
             "model": request.model,
             "usage": {
                 "prompt_tokens": gen_stats.prompt_tokens,
-                "total_tokens": gen_stats.total_tokens
+                "total_tokens": gen_stats.prompt_tokens + gen_stats.completion_tokens
             }
         }
 
