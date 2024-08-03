@@ -11,8 +11,11 @@ from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.common_data import WorkingDirectories
 from azarrot.config import ServerConfig
+from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.openai_frontend import OpenAIFrontend
-from azarrot.models import ModelManager
+from azarrot.models.chat_templates import ChatTemplateManager
+from azarrot.models.model_manager import ModelManager
+from azarrot.tools import GLOBAL_TOOL_MANAGER
 
 if TYPE_CHECKING:
     from azarrot.backends.backend_base import BaseBackend
@@ -118,6 +121,8 @@ def main() -> None:
 
     working_dirs = __create_working_directories(config)
 
+    chat_template_manager = ChatTemplateManager(GLOBAL_TOOL_MANAGER)
+
     backends: list[BaseBackend] = [
         IPEXLLMBackend(config),
         OpenVINOBackend(config),
@@ -125,9 +130,11 @@ def main() -> None:
 
     model_manager = ModelManager(config, backends)
 
+    backend_pipe = BackendPipe(backends, chat_template_manager)
+
     log.info("Starting API server...")
     api = FastAPI()
-    OpenAIFrontend(model_manager, backends, api, working_dirs)
+    OpenAIFrontend(model_manager, backend_pipe, api, working_dirs)
     uvicorn.run(api, host=config.host, port=config.port)
 
 

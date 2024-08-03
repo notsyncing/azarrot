@@ -6,15 +6,15 @@ import uuid
 from collections.abc import Generator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI
-from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 from transformers import TextIteratorStreamer
 
-from azarrot.backends.backend_base import BaseBackend
+from azarrot.backends.common import CTIS_HAS_OBJECT
 from azarrot.common_data import (
+    CallableToolsInfo,
     EmbeddingsGenerationRequest,
     GenerationMessage,
     GenerationMessageContent,
@@ -23,91 +23,46 @@ from azarrot.common_data import (
     Model,
     TextGenerationMessageContent,
     TextGenerationRequest,
+    ToolCallRequestMessageContent,
+    ToolCallRequestMessageContentList,
+    ToolCallResponseMessageContent,
     WorkingDirectories,
 )
 from azarrot.config import DEFAULT_MAX_TOKENS
-from azarrot.models import ModelManager
-
-
-class UserChatImageUrl(BaseModel):
-    url: str
-    detail: Literal["low", "high", "auto"] = "auto"
-
-
-class UserChatTextContentItem(BaseModel):
-    type: Literal["text"]
-    text: str
-
-
-class UserChatImageContentItem(BaseModel):
-    type: Literal["image_url"]
-    image_url: str | UserChatImageUrl
-
-
-class SystemChatCompletionMessage(BaseModel):
-    name: str | None = None
-    content: str
-    role: Literal["system"]
-
-
-class UserChatCompletionMessage(BaseModel):
-    name: str | None = None
-    content: str | list[Annotated[UserChatTextContentItem | UserChatImageContentItem, Field(discriminator="type")]]
-    role: Literal["user"]
-
-
-class AssistantChatCompletionMessage(BaseModel):
-    name: str | None = None
-    content: str
-    role: Literal["assistant"]
-
-
-class ChatCompletionStreamOptions(BaseModel):
-    include_usage: bool = False
-
-
-class ChatCompletionRequest(BaseModel):
-    messages: list[
-        Annotated[
-            SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage,
-            Field(discriminator="role")
-        ]
-    ]
-
-    model: str
-    max_tokens: int | None = None
-    stream: bool = False
-    stream_options: ChatCompletionStreamOptions = Field(default=ChatCompletionStreamOptions())
-
-
-class CreateEmbeddingsRequest(BaseModel):
-    input: str
-    model: str
-    encoding_format: Literal["float", "base64"] = Field(default="float")
-    dimensions: int | None = None
-    user: str | None = None
+from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.openai_support.openai_data import (
+    AssistantChatCompletionMessage,
+    ChatCompletionRequest,
+    CreateEmbeddingsRequest,
+    SystemChatCompletionMessage,
+    ToolChatCompletionMessage,
+    ToolChoice,
+    ToolInfo,
+    UserChatCompletionMessage,
+    UserChatImageContentItem,
+    UserChatImageUrl,
+    UserChatTextContentItem,
+)
+from azarrot.models.model_manager import ModelManager
+from azarrot.tools.tool import LocalizedToolDescription, LocalizedToolParameter
 
 
 class OpenAIFrontend:
     _log = logging.getLogger(__name__)
     _model_manager: ModelManager
-    _backends: dict[str, BaseBackend]
+    _backend_pipe: BackendPipe
     _working_dirs: WorkingDirectories
 
     def __init__(
         self,
         model_manager: ModelManager,
-        backends: list[BaseBackend],
+        backend_pipe: BackendPipe,
         api: FastAPI,
         working_dirs: WorkingDirectories
     ) -> None:
         self._model_manager = model_manager
         self._working_dirs = working_dirs
-
-        self._backends = {}
-
-        for backend in backends:
-            self._backends[backend.id()] = backend
+        self._backend_pipe = backend_pipe
 
         router = APIRouter()
 
@@ -162,9 +117,12 @@ class OpenAIFrontend:
 
         return str(local_file)
 
-    def __to_backend_generation_messages(   # noqa: PLR0912
+    def __to_backend_generation_messages(
         self,
-        openai_messages: list[SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage]
+        openai_messages: list[
+            SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage
+                | ToolChatCompletionMessage
+        ]
     ) -> list[GenerationMessage]:
         result: list[GenerationMessage] = []
 
@@ -196,27 +154,109 @@ class OpenAIFrontend:
                             raise ValueError("Invalid content %s", str(c))
                 else:
                     raise ValueError("Invalid messsage %s", str(m))
+            elif isinstance(m, AssistantChatCompletionMessage):
+                if m.content is not None:
+                    content = [TextGenerationMessageContent(m.content)]
+                else:
+                    if m.tool_calls is None:
+                        raise ValueError("No content in assistant message %s, nor exists any tool calls!", m)
+
+                    content = []
+
+                    for tool_call in m.tool_calls:
+                        content.append(
+                            ToolCallRequestMessageContent(
+                                    id=tool_call.id,
+                                    function_name=tool_call.function.name,
+                                    function_arguments=json.loads(tool_call.function.arguments)
+                            )
+                        )
+            elif isinstance(m, ToolChatCompletionMessage):
+                content = [ToolCallResponseMessageContent(m.tool_call_id, m.content)]
             else:
                 content = [TextGenerationMessageContent(m.content)]
 
             msg = GenerationMessage(
                 role=m.role,
-                content=content
+                contents=content
             )
 
             result.append(msg)
 
         return result
 
+    def __to_backend_tool_parameters(
+        self,
+        tool_parameters: list[dict[str, Any]] | None
+    ) -> list[LocalizedToolParameter]:
+        if tool_parameters is None:
+            return []
+
+        return [
+            LocalizedToolParameter(
+                name=parameter["name"],
+                description=parameter.get("description"),
+                type=parameter["type"],
+                required=parameter.get("required", False)
+            ) for parameter in tool_parameters
+        ]
+
+    def __to_backend_tools_info(
+        self,
+        tools_info: list[ToolInfo] | None,
+        tools_choice: Literal["none", "auto", "required"] | ToolChoice | None
+    ) -> CallableToolsInfo | None:
+        if tools_info is None:
+            return None
+
+        tools = [
+            LocalizedToolDescription(
+                name=tool_info.function.name,
+                display_name=None,
+                description=tool_info.function.description,
+                parameters=self.__to_backend_tool_parameters(tool_info.function.parameters)
+            ) for tool_info in tools_info
+        ]
+
+        return CallableToolsInfo(
+            tools=tools,
+            force_use_no_tool=tools_choice == "none",
+            force_use_any_tool=tools_choice == "required",
+            force_use_tool_name=tools_choice.function.name if isinstance(tools_choice, ToolChoice) else None
+        )
+
     def __to_openai_chat_completion_object(
         self,
         model: Model,
-        content: str | None,
+        content: Any | None,
         finish_reason: str | None = None,
         contains_usage_info: bool = False,
         usage_info: GenerationStatistics | None = None,
         is_delta: bool = False,
     ) -> dict:
+        message: dict[str, Any]
+
+        if isinstance(content, str):
+            message = {"role": "assistant", "content": content}
+        elif isinstance(content, ToolCallRequestMessageContentList):
+            tool_calls = [{
+                "id": tool_call_req.id,
+                "type": "function",
+                "function": {
+                    "name": tool_call_req.function_name,
+                    "arguments": json.dumps(tool_call_req.function_arguments)
+                }
+            } for tool_call_req in content]
+
+            message = {
+                "role": "assistant",
+                "tool_calls": tool_calls
+            }
+
+            is_delta = False
+        else:
+            message = {}
+
         resp = {
             "id": str(uuid.uuid4()),
             "object": "chat.completion.chunk" if is_delta else "chat.completion",
@@ -226,9 +266,7 @@ class OpenAIFrontend:
             "choices": [
                 {
                     "index": 0,
-                    ("delta" if is_delta else "message"): {}
-                    if content is None
-                    else {"role": "assistant", "content": content},
+                    ("delta" if is_delta else "message"): message,
                     "logprobs": None,
                     "finish_reason": finish_reason,
                 }
@@ -309,12 +347,13 @@ class OpenAIFrontend:
         generate_request = TextGenerationRequest(
             model_id=request.model,
             messages=self.__to_backend_generation_messages(request.messages),
+            tools_info=self.__to_backend_tools_info(request.tools, request.tool_choice),
             max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS,
+            parallel_tool_calling=request.parallel_tool_calls
         )
 
         model = self.__get_model(request.model)
-        backend = self._backends[model.backend]
-        streamer, gen_stats = backend.generate(generate_request)
+        streamer, gen_stats = self._backend_pipe.generate(model, generate_request)
 
         if request.stream:
             return StreamingResponse(
@@ -324,24 +363,30 @@ class OpenAIFrontend:
                 media_type="text/event-stream",
             )
 
+        result = None
         content = ""
 
         for text in streamer:
+            if text == CTIS_HAS_OBJECT:
+                result = streamer.fetch_object()
+                break
+
             content += text
+
+        if result is None:
+            result = content
 
         gen_stats.end_time = datetime.now()
         self.__log_generation_statistics(gen_stats)
 
         return self.__to_openai_chat_completion_object(
-            model, content, "stop", contains_usage_info=True, usage_info=gen_stats
+            model, result, "stop", contains_usage_info=True, usage_info=gen_stats
         )
 
     def create_embeddings(self, request: CreateEmbeddingsRequest) -> dict:
         model = self.__get_model(request.model)
-        backend = self._backends[model.backend]
-
         gen_req = EmbeddingsGenerationRequest(request.model, request.input)
-        data, gen_stats = backend.generate_embeddings(gen_req)
+        data, gen_stats = self._backend_pipe.generate_embeddings(model, gen_req)
 
         self.__log_generation_statistics(gen_stats)
 

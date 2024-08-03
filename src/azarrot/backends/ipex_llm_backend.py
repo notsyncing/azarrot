@@ -12,23 +12,34 @@ from transformers import (
     AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizer,
-    TextIteratorStreamer,
 )
 
 from azarrot.backends.backend_base import BaseBackend
-from azarrot.backends.common import CountedTextIteratorStreamer, to_transformers_chat_messages
+from azarrot.backends.common import (
+    CustomTextIteratorStreamer,
+    GenerationHandlers,
+    StopGenerationError,
+    to_transformers_chat_messages,
+)
 from azarrot.backends.ipex_llm_support.internvl2_processor import (
     internvl2_apply_chat_template,
     internvl2_patch_model,
 )
 from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
 from azarrot.config import ServerConfig
+from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
 TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
 }
 
 BACKEND_ID_IPEX_LLM = "ipex-llm"
+
+MODEL_IPEXLLM_QUIRKS = {
+    "internvl2": {
+        "use_cache": False
+    }
+}
 
 
 @dataclass
@@ -45,7 +56,11 @@ class IPEXLLMBackend(BaseBackend):
     _models: ClassVar[dict[str, LoadedModel]] = {}
 
     _generation_variants: dict[
-        str, Callable[[LoadedModel, TextGenerationRequest], tuple[TextIteratorStreamer, GenerationStatistics]]
+        str,
+        Callable[
+            [LoadedModel, TextGenerationRequest, GenerationHandlers],
+            tuple[CustomTextIteratorStreamer, GenerationStatistics]
+        ]
     ]
 
     def __init__(self, config: ServerConfig) -> None:
@@ -89,10 +104,14 @@ class IPEXLLMBackend(BaseBackend):
         )
 
         model_kwargs = {}
+        generation_variant = model.generation_variant
 
         if model.ipex_llm is not None:
             if model.ipex_llm.use_cache:
                 model_kwargs["use_cache"] = True
+
+        model_quirks = MODEL_IPEXLLM_QUIRKS.get(generation_variant, {})
+        model_kwargs.update(model_quirks)
 
         ipex_model: Any = model_class.from_pretrained(
             model_path,
@@ -126,8 +145,9 @@ class IPEXLLMBackend(BaseBackend):
     def __generate_normal(
         self,
         loaded_model: LoadedModel,
-        request: TextGenerationRequest
-    ) -> tuple[TextIteratorStreamer, GenerationStatistics]:
+        request: TextGenerationRequest,
+        generation_handlers: GenerationHandlers
+    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         inputs = loaded_model.tokenizer.apply_chat_template(
             to_transformers_chat_messages(request.messages), return_tensors="pt"
         )
@@ -140,11 +160,13 @@ class IPEXLLMBackend(BaseBackend):
             completion_tokens=0
         )
 
-        streamer = CountedTextIteratorStreamer(
+        streamer = CustomTextIteratorStreamer(
             cast(AutoTokenizer, loaded_model.tokenizer),
             gen_stats,
             skip_prompt=True,
-            skip_special_tokens=True
+            skip_special_tokens=True,
+            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
+            generation_handlers=generation_handlers
         )
 
         generation_kwargs = {
@@ -156,6 +178,8 @@ class IPEXLLMBackend(BaseBackend):
         def generate_method() -> None:
             try:
                 loaded_model.model.generate(**generation_kwargs)
+            except StopGenerationError:
+                return
             except:
                 streamer.set_failed()
                 self._log.exception("An exception occurred in generation thread")
@@ -168,8 +192,9 @@ class IPEXLLMBackend(BaseBackend):
     def __generate_internvl2(
         self,
         loaded_model: LoadedModel,
-        request: TextGenerationRequest
-    ) -> tuple[TextIteratorStreamer, GenerationStatistics]:
+        request: TextGenerationRequest,
+        generation_handlers: GenerationHandlers
+    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
 
         inputs, pixel_values = internvl2_apply_chat_template(
@@ -186,11 +211,13 @@ class IPEXLLMBackend(BaseBackend):
             completion_tokens=0
         )
 
-        streamer = CountedTextIteratorStreamer(
+        streamer = CustomTextIteratorStreamer(
             cast(AutoTokenizer, loaded_model.tokenizer),
             gen_stats,
             skip_prompt=True,
-            skip_special_tokens=True
+            skip_special_tokens=True,
+            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
+            generation_handlers=generation_handlers
         )
 
         # token id 2 is from tokenizer.json ('</s>')
@@ -215,6 +242,8 @@ class IPEXLLMBackend(BaseBackend):
         def generate_method() -> None:
             try:
                 loaded_model.model.generate(**generation_kwargs)
+            except StopGenerationError:
+                return
             except:
                 streamer.set_failed()
                 self._log.exception("An exception occurred in generation thread")
@@ -224,15 +253,15 @@ class IPEXLLMBackend(BaseBackend):
 
         return streamer, gen_stats
 
-    def generate(self, request: TextGenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
+    def generate(
+        self,
+        request: TextGenerationRequest,
+        generation_handlers: GenerationHandlers
+    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
-        generation_variant = "normal"
-
-        if loaded_model.info.ipex_llm is not None:
-            generation_variant = loaded_model.info.ipex_llm.generation_variant
-
-        generation_method = self._generation_variants[generation_variant]
-        return generation_method(loaded_model, request)
+        generation_variant = loaded_model.info.generation_variant
+        generation_method = self._generation_variants.get(generation_variant, self.__generate_normal)
+        return generation_method(loaded_model, request, generation_handlers)
 
     def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
         raise NotImplementedError

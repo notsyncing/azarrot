@@ -29,7 +29,7 @@ def internvl2_apply_chat_template(
     for m in messages:
         final_content = ""
 
-        for mc in m.content:
+        for mc in m.contents:
             if isinstance(mc, TextGenerationMessageContent):
                 final_content += mc.text
             elif isinstance(mc, ImageGenerationMessageContent):

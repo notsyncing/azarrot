@@ -15,14 +15,19 @@ from transformers import (
     AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizer,
-    TextIteratorStreamer,
     pipeline,
 )
 
 from azarrot.backends.backend_base import BaseBackend
-from azarrot.backends.common import CountedTextIteratorStreamer, to_transformers_chat_messages
+from azarrot.backends.common import (
+    CustomTextIteratorStreamer,
+    GenerationHandlers,
+    StopGenerationError,
+    to_transformers_chat_messages,
+)
 from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
 from azarrot.config import ServerConfig
+from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
 TASK_MODEL_MAP = {
     "text-generation": OVModelForCausalLM,
@@ -165,7 +170,11 @@ class OpenVINOBackend(BaseBackend):
 
         return self._models[model_id]
 
-    def generate(self, request: TextGenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
+    def generate(
+        self,
+        request: TextGenerationRequest,
+        generation_handlers: GenerationHandlers
+    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
 
         inputs = loaded_model.tokenizer.apply_chat_template(
@@ -174,16 +183,19 @@ class OpenVINOBackend(BaseBackend):
 
         gen_stats = GenerationStatistics(
             start_time=datetime.now(),
+            first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=len(cast(Tensor, inputs[0])),
             completion_tokens=0
         )
 
-        streamer = CountedTextIteratorStreamer(
+        streamer = CustomTextIteratorStreamer(
             cast(AutoTokenizer, loaded_model.tokenizer),
             gen_stats,
             skip_prompt=True,
-            skip_special_tokens=True
+            skip_special_tokens=True,
+            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
+            generation_handlers=generation_handlers
         )
 
         generation_kwargs = {
@@ -192,7 +204,16 @@ class OpenVINOBackend(BaseBackend):
             "max_new_tokens": request.max_tokens,
         }
 
-        thread = Thread(target=loaded_model.model.generate, kwargs=generation_kwargs)
+        def generate_method() -> None:
+            try:
+                loaded_model.model.generate(**generation_kwargs)
+            except StopGenerationError:
+                return
+            except:
+                streamer.set_failed()
+                self._log.exception("An exception occurred in generation thread")
+
+        thread = Thread(target=generate_method)
         thread.start()
 
         return streamer, gen_stats
@@ -201,7 +222,11 @@ class OpenVINOBackend(BaseBackend):
         loaded_model = self.__get_model(request.model_id)
 
         gen_stats = GenerationStatistics(
-            start_time=datetime.now(), end_time=datetime.max, prompt_tokens=0, completion_tokens=0
+            start_time=datetime.now(),
+            first_token_time=datetime.max,
+            end_time=datetime.max,
+            prompt_tokens=0,
+            completion_tokens=0
         )
 
         pipe = pipeline(

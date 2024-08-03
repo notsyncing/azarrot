@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 
-from transformers import TextIteratorStreamer
-
+from azarrot.backends.common import CustomTextIteratorStreamer, GenerationHandlers
 from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
 
 
@@ -19,7 +18,11 @@ class BaseBackend(ABC):
         pass
 
     @abstractmethod
-    def generate(self, request: TextGenerationRequest) -> tuple[TextIteratorStreamer, GenerationStatistics]:
+    def generate(
+        self,
+        request: TextGenerationRequest,
+        generation_handlers: GenerationHandlers
+    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         pass
 
     @abstractmethod
