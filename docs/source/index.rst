@@ -3,12 +3,22 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to azarrot's documentation!
+Welcome to Azarrot's documentation!
 ===================================
+
+**Azarrot** is an OpenAI compatible LLM inference server, focusing on OpenVINO™ and IPEX-LLM usage.
+
+The name `azarrot` is combined from `azalea` and `parrot`.
+
+.. note::
+
+   This project is under active development.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Contents
+
+   quick-start
 
 
 

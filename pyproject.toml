@@ -58,6 +58,8 @@ test = [
 ]
 doc = [
     "sphinx",
+    "myst-parser",
+    "furo",
 ]
 build = [
     "build[virtualenv]==1.0.3",
