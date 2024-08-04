@@ -18,7 +18,7 @@ jobs:
         pip install sphinx furo myst_parser importlib_metadata
     - name: Build HTML
       run: |
-        sphinx-build docs _build
+        sphinx-build docs/source _build
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
