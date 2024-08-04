@@ -119,4 +119,4 @@ python -m azarrot
 
 And access `http://localhost:8080/v1/models` too see all loaded models.
 
-More details are in the documents: (Coming soon)
+More details are in the documents: [Azarrot documents](https://notsyncing.github.io/azarrot/)
