@@ -6,12 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-import importlib_metadata
-
 project = 'azarrot'
 copyright = '2024, notsyncing'
 author = 'notsyncing'
-release = importlib_metadata.version("azarrot")
+release = '0.2.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
