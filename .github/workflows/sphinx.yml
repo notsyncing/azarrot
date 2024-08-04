@@ -1,6 +1,6 @@
 name: "Sphinx: Render docs"
 
-on: [push, workflow_dispatch]
+on: [push, pull_request, workflow_dispatch]
 
 permissions:
   contents: write
@@ -11,19 +11,24 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' 
     - name: Install dependencies
       run: |
         pip install sphinx furo myst_parser importlib_metadata
     - name: Build HTML
-      uses: ammaraskar/sphinx-action@master
+      run: |
+        sphinx-build doc _build
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: html-docs
-        path: docs/build/html/
+        path: _build/
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
-      if: github.ref == 'refs/heads/main'
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       with:
+        publish_branch: gh-pages
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: docs/build/html
+        publish_dir: _build/
+        force_orphan: true
