@@ -23,6 +23,7 @@ class IPEXLLMModelConfig:
 class ModelPreset:
     preferred_locale: Literal["zh-cn", "en-us"] | None
     supports_tool_calling: bool
+    enable_internal_tools: bool
 
 
 @dataclass

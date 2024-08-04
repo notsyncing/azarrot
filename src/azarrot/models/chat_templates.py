@@ -45,6 +45,7 @@ class ChatTemplateManager:
     def __generate_tools_prompt(
         self,
         generation_variant: str,
+        enable_internal_tools: bool,
         tools_info: CallableToolsInfo | None,
         locale: str,
         runtime_configs: ChatTemplateRuntimeConfigs
@@ -66,10 +67,13 @@ class ChatTemplateManager:
 
         jinja_template = self._template_engine.from_string(template)
 
-        tools = self._tool_manager.get_tool_list()
-        tool_descriptions = [t.description().to_localized(locale) for t in tools]
+        tool_descriptions = []
         force_use_any_tool = False
         force_use_tool_name: str | None = None
+
+        if enable_internal_tools:
+            internal_tools = self._tool_manager.get_tool_list()
+            tool_descriptions.extend([t.description().to_localized(locale) for t in internal_tools])
 
         if tools_info is not None:
             tool_descriptions.extend(tools_info.tools)
@@ -80,6 +84,9 @@ class ChatTemplateManager:
                 force_use_any_tool = True
             elif tools_info.force_use_tool_name is not None:
                 force_use_tool_name = tools_info.force_use_tool_name
+
+        if len(tool_descriptions) <= 0:
+            return ""
 
         return jinja_template.render({
             "tools": tool_descriptions,
@@ -112,7 +119,10 @@ class ChatTemplateManager:
 
         if model_preset.supports_tool_calling:
             final_sys_prompt += "\n\n"
-            final_sys_prompt += self.__generate_tools_prompt(generation_variant, tools_info, locale, runtime_configs)
+
+            final_sys_prompt += self.__generate_tools_prompt(
+                generation_variant, model_preset.enable_internal_tools, tools_info, locale, runtime_configs
+            )
 
         return final_sys_prompt
 
