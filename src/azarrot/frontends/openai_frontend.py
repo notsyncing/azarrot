@@ -54,11 +54,7 @@ class OpenAIFrontend:
     _working_dirs: WorkingDirectories
 
     def __init__(
-        self,
-        model_manager: ModelManager,
-        backend_pipe: BackendPipe,
-        api: FastAPI,
-        working_dirs: WorkingDirectories
+        self, model_manager: ModelManager, backend_pipe: BackendPipe, api: FastAPI, working_dirs: WorkingDirectories
     ) -> None:
         self._model_manager = model_manager
         self._working_dirs = working_dirs
@@ -99,8 +95,7 @@ class OpenAIFrontend:
         prefix = Path(os.path.commonpath([path, self._working_dirs.uploaded_images]))
 
         if prefix != self._working_dirs.uploaded_images:
-            raise ValueError("Target path %s is out of working directory %s", path,
-                self._working_dirs.uploaded_images)
+            raise ValueError("Target path %s is out of working directory %s", path, self._working_dirs.uploaded_images)
 
     def __store_uploaded_image(self, image_url: str) -> str:
         local_file: Path
@@ -110,7 +105,7 @@ class OpenAIFrontend:
             self.__check_path(local_file)
 
             self._log.info("Downloading image from %s to %s", image_url, local_file)
-            urllib.request.urlretrieve(image_url, local_file)   # noqa: S310
+            urllib.request.urlretrieve(image_url, local_file)  # noqa: S310
         else:
             local_file = (self._working_dirs.uploaded_images / image_url).resolve()
             self.__check_path(local_file)
@@ -120,9 +115,11 @@ class OpenAIFrontend:
     def __to_backend_generation_messages(
         self,
         openai_messages: list[
-            SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage
-                | ToolChatCompletionMessage
-        ]
+            SystemChatCompletionMessage
+            | UserChatCompletionMessage
+            | AssistantChatCompletionMessage
+            | ToolChatCompletionMessage
+        ],
     ) -> list[GenerationMessage]:
         result: list[GenerationMessage] = []
 
@@ -149,7 +146,7 @@ class OpenAIFrontend:
                                 raise ValueError("Invalid image url %s", str(c.image_url))
 
                             image_path = self.__store_uploaded_image(url)
-                            content.append( ImageGenerationMessageContent(image_path))
+                            content.append(ImageGenerationMessageContent(image_path))
                         else:
                             raise ValueError("Invalid content %s", str(c))
                 else:
@@ -166,9 +163,9 @@ class OpenAIFrontend:
                     for tool_call in m.tool_calls:
                         content.append(
                             ToolCallRequestMessageContent(
-                                    id=tool_call.id,
-                                    function_name=tool_call.function.name,
-                                    function_arguments=json.loads(tool_call.function.arguments)
+                                id=tool_call.id,
+                                function_name=tool_call.function.name,
+                                function_arguments=json.loads(tool_call.function.arguments),
                             )
                         )
             elif isinstance(m, ToolChatCompletionMessage):
@@ -176,18 +173,14 @@ class OpenAIFrontend:
             else:
                 content = [TextGenerationMessageContent(m.content)]
 
-            msg = GenerationMessage(
-                role=m.role,
-                contents=content
-            )
+            msg = GenerationMessage(role=m.role, contents=content)
 
             result.append(msg)
 
         return result
 
     def __to_backend_tool_parameters(
-        self,
-        tool_parameters: list[dict[str, Any]] | None
+        self, tool_parameters: list[dict[str, Any]] | None
     ) -> list[LocalizedToolParameter]:
         if tool_parameters is None:
             return []
@@ -197,14 +190,13 @@ class OpenAIFrontend:
                 name=parameter["name"],
                 description=parameter.get("description"),
                 type=parameter["type"],
-                required=parameter.get("required", False)
-            ) for parameter in tool_parameters
+                required=parameter.get("required", False),
+            )
+            for parameter in tool_parameters
         ]
 
     def __to_backend_tools_info(
-        self,
-        tools_info: list[ToolInfo] | None,
-        tools_choice: Literal["none", "auto", "required"] | ToolChoice | None
+        self, tools_info: list[ToolInfo] | None, tools_choice: Literal["none", "auto", "required"] | ToolChoice | None
     ) -> CallableToolsInfo | None:
         if tools_info is None:
             return None
@@ -214,15 +206,16 @@ class OpenAIFrontend:
                 name=tool_info.function.name,
                 display_name=None,
                 description=tool_info.function.description,
-                parameters=self.__to_backend_tool_parameters(tool_info.function.parameters)
-            ) for tool_info in tools_info
+                parameters=self.__to_backend_tool_parameters(tool_info.function.parameters),
+            )
+            for tool_info in tools_info
         ]
 
         return CallableToolsInfo(
             tools=tools,
             force_use_no_tool=tools_choice == "none",
             force_use_any_tool=tools_choice == "required",
-            force_use_tool_name=tools_choice.function.name if isinstance(tools_choice, ToolChoice) else None
+            force_use_tool_name=tools_choice.function.name if isinstance(tools_choice, ToolChoice) else None,
         )
 
     def __to_openai_chat_completion_object(
@@ -239,19 +232,19 @@ class OpenAIFrontend:
         if isinstance(content, str):
             message = {"role": "assistant", "content": content}
         elif isinstance(content, ToolCallRequestMessageContentList):
-            tool_calls = [{
-                "id": tool_call_req.id,
-                "type": "function",
-                "function": {
-                    "name": tool_call_req.function_name,
-                    "arguments": json.dumps(tool_call_req.function_arguments)
+            tool_calls = [
+                {
+                    "id": tool_call_req.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call_req.function_name,
+                        "arguments": json.dumps(tool_call_req.function_arguments),
+                    },
                 }
-            } for tool_call_req in content]
+                for tool_call_req in content
+            ]
 
-            message = {
-                "role": "assistant",
-                "tool_calls": tool_calls
-            }
+            message = {"role": "assistant", "tool_calls": tool_calls}
 
             is_delta = False
         else:
@@ -349,7 +342,7 @@ class OpenAIFrontend:
             messages=self.__to_backend_generation_messages(request.messages),
             tools_info=self.__to_backend_tools_info(request.tools, request.tool_choice),
             max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS,
-            parallel_tool_calling=request.parallel_tool_calls
+            parallel_tool_calling=request.parallel_tool_calls,
         )
 
         model = self.__get_model(request.model)
@@ -392,17 +385,10 @@ class OpenAIFrontend:
 
         return {
             "object": "list",
-            "data": [
-                {
-                    "object": "embedding",
-                    "embedding": data,
-                    "index": 0
-                }
-            ],
+            "data": [{"object": "embedding", "embedding": data, "index": 0}],
             "model": request.model,
             "usage": {
                 "prompt_tokens": gen_stats.prompt_tokens,
-                "total_tokens": gen_stats.prompt_tokens + gen_stats.completion_tokens
-            }
+                "total_tokens": gen_stats.prompt_tokens + gen_stats.completion_tokens,
+            },
         }
-

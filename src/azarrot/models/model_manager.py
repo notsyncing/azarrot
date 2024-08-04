@@ -14,17 +14,13 @@ from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
 
 DEFAULT_MODEL_PRESET = ModelPreset(
-    preferred_locale=DEFAULT_LOCALE,
+    preferred_locale=DEFAULT_LOCALE,  # type: ignore[arg-type]
     supports_tool_calling=False,
-    enable_internal_tools=True
+    enable_internal_tools=True,
 )
 
 DEFAULT_MODEL_PRESETS: dict[str, ModelPreset] = {
-    "qwen2": ModelPreset(
-        preferred_locale=DEFAULT_LOCALE,
-        supports_tool_calling=True,
-        enable_internal_tools=False
-    )
+    "qwen2": ModelPreset(preferred_locale=DEFAULT_LOCALE, supports_tool_calling=True, enable_internal_tools=False)  # type: ignore[arg-type]
 }
 
 
@@ -70,9 +66,8 @@ class ModelManager:
             model_path = self._config.models_dir / Path(model_info["path"])
             model_backend = model_info.get("backend", BACKEND_ID_OPENVINO)
 
-            model_generation_variant=model_info.get(
-                "generation_variant",
-                self.__determine_model_generation_variant(model_path)
+            model_generation_variant = model_info.get(
+                "generation_variant", self.__determine_model_generation_variant(model_path)
             )
 
             ipex_llm = None
@@ -80,9 +75,7 @@ class ModelManager:
             if model_backend == BACKEND_ID_IPEX_LLM:
                 ipex_llm_config = model_info.get("ipex_llm", {})
 
-                ipex_llm = IPEXLLMModelConfig(
-                    use_cache=ipex_llm_config.get("use_cache", False)
-                )
+                ipex_llm = IPEXLLMModelConfig(use_cache=ipex_llm_config.get("use_cache", False))
 
             default_model_preset = DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET)
             model_preset_data = model_info.get("preset", None)
@@ -90,15 +83,13 @@ class ModelManager:
 
             if model_preset_data is not None:
                 model_preset = ModelPreset(
-                    preferred_locale=model_preset_data.get(
-                        "preferred_locale", default_model_preset.preferred_locale
-                    ),
+                    preferred_locale=model_preset_data.get("preferred_locale", default_model_preset.preferred_locale),
                     supports_tool_calling=model_preset_data.get(
                         "support_tool_calling", default_model_preset.supports_tool_calling
                     ),
                     enable_internal_tools=model_preset_data.get(
                         "enable_internal_tools", default_model_preset.enable_internal_tools
-                    )
+                    ),
                 )
             else:
                 model_preset = default_model_preset
@@ -108,12 +99,9 @@ class ModelManager:
                 backend=model_backend,
                 path=model_path,
                 task=model_info["task"],
-
                 generation_variant=model_generation_variant,
                 preset=model_preset,
-
                 ipex_llm=ipex_llm,
-
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
             )
 

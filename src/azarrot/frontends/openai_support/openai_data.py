@@ -81,9 +81,11 @@ class ToolChoice(BaseModel):
 class ChatCompletionRequest(BaseModel):
     messages: list[
         Annotated[
-            SystemChatCompletionMessage | UserChatCompletionMessage | AssistantChatCompletionMessage
-                | ToolChatCompletionMessage,
-            Field(discriminator="role")
+            SystemChatCompletionMessage
+            | UserChatCompletionMessage
+            | AssistantChatCompletionMessage
+            | ToolChatCompletionMessage,
+            Field(discriminator="role"),
         ]
     ]
 

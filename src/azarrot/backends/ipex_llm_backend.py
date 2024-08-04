@@ -35,11 +35,7 @@ TASK_MODEL_MAP = {
 
 BACKEND_ID_IPEX_LLM = "ipex-llm"
 
-MODEL_IPEXLLM_QUIRKS = {
-    "internvl2": {
-        "use_cache": False
-    }
-}
+MODEL_IPEXLLM_QUIRKS = {"internvl2": {"use_cache": False}}
 
 
 @dataclass
@@ -59,8 +55,8 @@ class IPEXLLMBackend(BaseBackend):
         str,
         Callable[
             [LoadedModel, TextGenerationRequest, GenerationHandlers],
-            tuple[CustomTextIteratorStreamer, GenerationStatistics]
-        ]
+            tuple[CustomTextIteratorStreamer, GenerationStatistics],
+        ],
     ]
 
     def __init__(self, config: ServerConfig) -> None:
@@ -98,10 +94,7 @@ class IPEXLLMBackend(BaseBackend):
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_path,
-            trust_remote_code=True
-        )
+        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
 
         model_kwargs = {}
         generation_variant = model.generation_variant
@@ -114,11 +107,7 @@ class IPEXLLMBackend(BaseBackend):
         model_kwargs.update(model_quirks)
 
         ipex_model: Any = model_class.from_pretrained(
-            model_path,
-            load_in_4bit=True,
-            optimize_model=True,
-            trust_remote_code=True,
-            **model_kwargs
+            model_path, load_in_4bit=True, optimize_model=True, trust_remote_code=True, **model_kwargs
         ).to(device)
 
         self._models[model.id] = LoadedModel(model, ipex_model, tokenizer, device)
@@ -143,10 +132,7 @@ class IPEXLLMBackend(BaseBackend):
         return self._models[model_id]
 
     def __generate_normal(
-        self,
-        loaded_model: LoadedModel,
-        request: TextGenerationRequest,
-        generation_handlers: GenerationHandlers
+        self, loaded_model: LoadedModel, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         inputs = loaded_model.tokenizer.apply_chat_template(
             to_transformers_chat_messages(request.messages), return_tensors="pt"
@@ -157,7 +143,7 @@ class IPEXLLMBackend(BaseBackend):
             first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=len(cast(torch.Tensor, inputs[0])),
-            completion_tokens=0
+            completion_tokens=0,
         )
 
         streamer = CustomTextIteratorStreamer(
@@ -166,7 +152,7 @@ class IPEXLLMBackend(BaseBackend):
             skip_prompt=True,
             skip_special_tokens=True,
             model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
-            generation_handlers=generation_handlers
+            generation_handlers=generation_handlers,
         )
 
         generation_kwargs = {
@@ -190,17 +176,12 @@ class IPEXLLMBackend(BaseBackend):
         return streamer, gen_stats
 
     def __generate_internvl2(
-        self,
-        loaded_model: LoadedModel,
-        request: TextGenerationRequest,
-        generation_handlers: GenerationHandlers
+        self, loaded_model: LoadedModel, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
 
         inputs, pixel_values = internvl2_apply_chat_template(
-            loaded_model.model,
-            loaded_model.tokenizer,
-            request.messages
+            loaded_model.model, loaded_model.tokenizer, request.messages
         )
 
         gen_stats = GenerationStatistics(
@@ -208,7 +189,7 @@ class IPEXLLMBackend(BaseBackend):
             first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=len(cast(torch.Tensor, inputs[0])) + (len(pixel_values) if pixel_values is not None else 0),
-            completion_tokens=0
+            completion_tokens=0,
         )
 
         streamer = CustomTextIteratorStreamer(
@@ -217,11 +198,11 @@ class IPEXLLMBackend(BaseBackend):
             skip_prompt=True,
             skip_special_tokens=True,
             model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
-            generation_handlers=generation_handlers
+            generation_handlers=generation_handlers,
         )
 
         # token id 2 is from tokenizer.json ('</s>')
-        attention_mask = loaded_model.model._prepare_attention_mask_for_generation(   # noqa: SLF001
+        attention_mask = loaded_model.model._prepare_attention_mask_for_generation(  # noqa: SLF001
             inputs, torch.Tensor([2]), torch.Tensor([2])
         )
 
@@ -234,7 +215,6 @@ class IPEXLLMBackend(BaseBackend):
             "pixel_values": pixel_values,
             "streamer": streamer,
             "max_new_tokens": request.max_tokens,
-
             # token id list is taken from https://huggingface.co/OpenGVLab/InternVL2-8B/blob/main/conversation.py#368
             "eos_token_id": [2, 92543, 92542],
         }
@@ -254,9 +234,7 @@ class IPEXLLMBackend(BaseBackend):
         return streamer, gen_stats
 
     def generate(
-        self,
-        request: TextGenerationRequest,
-        generation_handlers: GenerationHandlers
+        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
         generation_variant = loaded_model.info.generation_variant

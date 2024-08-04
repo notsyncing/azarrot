@@ -84,10 +84,7 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     def __on_stream_end(self) -> None:
         if self._full_text and self._generation_handlers is not None:
             if self._generation_handlers.full_text_handler is not None:
-                should_override, new_text = self._generation_handlers.full_text_handler(
-                    self,
-                    self._output_buffer
-                )
+                should_override, new_text = self._generation_handlers.full_text_handler(self, self._output_buffer)
 
                 if should_override:
                     self._output_buffer = new_text if new_text is not None else ""
@@ -112,8 +109,8 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
                         raise StopGenerationError
 
                 if not self._full_text and len(self._output_buffer) > self._model_quirks.output_buffering_length * 2:
-                    output_text = self._output_buffer[:self._model_quirks.output_buffering_length]
-                    self._output_buffer = self._output_buffer[self._model_quirks.output_buffering_length:]
+                    output_text = self._output_buffer[: self._model_quirks.output_buffering_length]
+                    self._output_buffer = self._output_buffer[self._model_quirks.output_buffering_length :]
                     super().on_finalized_text(output_text, stream_end=False)
 
                 if stream_end:
@@ -129,7 +126,7 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
         self._failed = True
         self.text_queue.put(self.stop_signal)
 
-    def __next__(self) -> Any:      # noqa: D105
+    def __next__(self) -> Any:  # noqa: D105
         if self._failed:
             raise ValueError("TextStreamer is forced to fail")
 

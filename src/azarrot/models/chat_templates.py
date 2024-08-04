@@ -13,20 +13,15 @@ from azarrot.tools.tool_manager import ToolManager
 
 DEFAULT_LOCALE = "zh-cn"
 
-DEFAULT_SYSTEM_PROMPT = {
-    "zh-cn": "你是一个乐于助人的智能助手。",
-    "en-us": "You are a helpful assistant."
-}
+DEFAULT_SYSTEM_PROMPT = {"zh-cn": "你是一个乐于助人的智能助手。", "en-us": "You are a helpful assistant."}
 
 BASE_SYSTEM_PROMPTS = {
     "internvl2": {
-        "zh-cn": "你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL，是一个有用无害的人工智能助手。" # noqa: RUF001, E501
+        "zh-cn": "你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL，是一个有用无害的人工智能助手。"  # noqa: RUF001, E501
     }
 }
 
-MODEL_TOOL_CALL_CONFIGS = {
-    "qwen2": QWEN2_MODEL_TOOL_CALL_CONFIG
-}
+MODEL_TOOL_CALL_CONFIGS = {"qwen2": QWEN2_MODEL_TOOL_CALL_CONFIG}
 
 
 @dataclass
@@ -40,7 +35,7 @@ class ChatTemplateManager:
 
     def __init__(self, tool_manager: ToolManager) -> None:
         self._tool_manager = tool_manager
-        self._template_engine = jinja2.Environment()    # noqa: S701
+        self._template_engine = jinja2.Environment()  # noqa: S701
 
     def __generate_tools_prompt(
         self,
@@ -48,7 +43,7 @@ class ChatTemplateManager:
         enable_internal_tools: bool,
         tools_info: CallableToolsInfo | None,
         locale: str,
-        runtime_configs: ChatTemplateRuntimeConfigs
+        runtime_configs: ChatTemplateRuntimeConfigs,
     ) -> str:
         config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
 
@@ -88,20 +83,22 @@ class ChatTemplateManager:
         if len(tool_descriptions) <= 0:
             return ""
 
-        return jinja_template.render({
-            "tools": tool_descriptions,
-            "tool_names": [t.name for t in tool_descriptions],
-            "runtime_configs": runtime_configs,
-            "force_use_any_tool": force_use_any_tool,
-            "force_use_tool_name": force_use_tool_name
-        })
+        return jinja_template.render(
+            {
+                "tools": tool_descriptions,
+                "tool_names": [t.name for t in tool_descriptions],
+                "runtime_configs": runtime_configs,
+                "force_use_any_tool": force_use_any_tool,
+                "force_use_tool_name": force_use_tool_name,
+            }
+        )
 
     def get_system_prompt(
         self,
         generation_variant: str,
         model_preset: ModelPreset,
         runtime_configs: ChatTemplateRuntimeConfigs,
-        tools_info: CallableToolsInfo | None
+        tools_info: CallableToolsInfo | None,
     ) -> str:
         base_sys_prompts = BASE_SYSTEM_PROMPTS.get(generation_variant, DEFAULT_SYSTEM_PROMPT)
 
@@ -127,9 +124,7 @@ class ChatTemplateManager:
         return final_sys_prompt
 
     def format_tool_calling_request(
-        self,
-        tool_calling_requests: list[ToolCallRequestMessageContent],
-        generation_variant: str
+        self, tool_calling_requests: list[ToolCallRequestMessageContent], generation_variant: str
     ) -> str:
         config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
 
@@ -139,10 +134,7 @@ class ChatTemplateManager:
         return config.request_formatting_method(tool_calling_requests)
 
     def parse_tool_calling_request(
-        self,
-        message: str,
-        generation_variant: str,
-        model_preset: ModelPreset
+        self, message: str, generation_variant: str, model_preset: ModelPreset
     ) -> tuple[bool, list[ToolCallRequestMessageContent] | None]:
         if not model_preset.supports_tool_calling:
             return False, None
@@ -163,9 +155,7 @@ class ChatTemplateManager:
         return False, None
 
     def format_tool_calling_response(
-        self,
-        tool_calling_responses: list[ToolCallResponseMessageContent],
-        generation_variant: str
+        self, tool_calling_responses: list[ToolCallResponseMessageContent], generation_variant: str
     ) -> str:
         config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
 

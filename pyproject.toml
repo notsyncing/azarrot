@@ -10,7 +10,7 @@ authors = [
   {name = "notsyncing", email = "song.fc@gmail.com"},
 ]
 readme = "README.md"
-requires-python = "<= 3.11"
+requires-python = "<= 3.11.99"
 dynamic = ["version"]
 dependencies = [
     "openvino==2024.3",

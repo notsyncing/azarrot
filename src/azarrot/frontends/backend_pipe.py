@@ -26,10 +26,7 @@ class BackendPipe:
         self._chat_template_manager = chat_template_manager
 
     def __on_full_text_available(
-        self,
-        model: Model,
-        streamer: CustomTextIteratorStreamer,
-        full_text: str
+        self, model: Model, streamer: CustomTextIteratorStreamer, full_text: str
     ) -> tuple[bool, str | None]:
         is_tool_calling_request, tool_calling_requests = self._chat_template_manager.parse_tool_calling_request(
             full_text, model.generation_variant, model.preset
@@ -42,23 +39,19 @@ class BackendPipe:
         return False, None
 
     def generate(
-        self,
-        model: Model,
-        request: TextGenerationRequest
+        self, model: Model, request: TextGenerationRequest
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         messages = []
         next_index = 0
 
         if request.messages[0].role != "system":
-            runtime_configs = ChatTemplateRuntimeConfigs(
-                enable_parallel_tool_calling=request.parallel_tool_calling
-            )
+            runtime_configs = ChatTemplateRuntimeConfigs(enable_parallel_tool_calling=request.parallel_tool_calling)
 
             system_prompt = self._chat_template_manager.get_system_prompt(
                 generation_variant=model.generation_variant,
                 model_preset=model.preset,
                 runtime_configs=runtime_configs,
-                tools_info=request.tools_info
+                tools_info=request.tools_info,
             )
 
             messages.append(GenerationMessage("system", [TextGenerationMessageContent(system_prompt)]))
@@ -85,8 +78,7 @@ class BackendPipe:
                 message.contents = [
                     TextGenerationMessageContent(
                         text=self._chat_template_manager.format_tool_calling_request(
-                            cast(list[ToolCallRequestMessageContent], tool_call_contents),
-                            model.generation_variant
+                            cast(list[ToolCallRequestMessageContent], tool_call_contents), model.generation_variant
                         )
                     )
                 ]
@@ -115,9 +107,7 @@ class BackendPipe:
         return bk.generate(request, gen_handlers)
 
     def generate_embeddings(
-        self,
-        model: Model,
-        request: EmbeddingsGenerationRequest
+        self, model: Model, request: EmbeddingsGenerationRequest
     ) -> tuple[list[float], GenerationStatistics]:
         bk = self._backends[model.backend]
         return bk.generate_embeddings(request)

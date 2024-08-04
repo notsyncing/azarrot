@@ -1,3 +1,6 @@
+# Chat templates are taken from https://github.com/QwenLM/Qwen-Agent/blob/main/qwen_agent/llm/function_calling.py
+# See licenses/LICENSE.qwen-agent for more details.
+
 import json
 import textwrap
 
@@ -12,6 +15,7 @@ QWEN2_FUNCTION = "✿FUNCTION✿"
 QWEN2_ARGS = "✿ARGS✿"
 QWEN2_RESULT = "✿RESULT✿"
 QWEN2_RETURN = "✿RETURN✿"
+
 
 def parse_tool_calling_request_qwen2(raw_message: str) -> list[ToolCallRequestMessageContent]:
     requests = []
@@ -53,15 +57,14 @@ def parse_tool_calling_request_qwen2(raw_message: str) -> list[ToolCallRequestMe
 
         requests.append(
             ToolCallRequestMessageContent(
-                id=str(counter),
-                function_name=function_name,
-                function_arguments=json.loads(function_args)
+                id=str(counter), function_name=function_name, function_arguments=json.loads(function_args)
             )
         )
 
         counter = counter + 1
 
     return requests
+
 
 def format_tool_calling_request_qwen2(contents: list[ToolCallRequestMessageContent]) -> str:
     text = ""
@@ -72,6 +75,7 @@ def format_tool_calling_request_qwen2(contents: list[ToolCallRequestMessageConte
 
     return text
 
+
 def format_tool_calling_response_qwen2(contents: list[ToolCallResponseMessageContent]) -> str:
     text = ""
 
@@ -80,6 +84,7 @@ def format_tool_calling_response_qwen2(contents: list[ToolCallResponseMessageCon
 
     text += f"{QWEN2_RETURN}: "
     return text
+
 
 QWEN2_MODEL_TOOL_CALL_CONFIG = ModelToolCallConfig(
     prompts={
@@ -124,15 +129,14 @@ QWEN2_MODEL_TOOL_CALL_CONFIG = ModelToolCallConfig(
             ## 你必须在回复中使用工具{{force_use_tool_name}}。
             {% endif %}
             {% endif %}
-        """) # noqa: RUF001
+        """)  # noqa: RUF001
     },
     indicators=[QWEN2_FUNCTION],
     request_parsing_method=parse_tool_calling_request_qwen2,
     request_formatting_method=format_tool_calling_request_qwen2,
-    response_formatting_method=format_tool_calling_response_qwen2
+    response_formatting_method=format_tool_calling_response_qwen2,
 )
 
 QWEN2_MODEL_QUIRKS = ModelQuirks(
-    additional_stop_before_strings=[QWEN2_RESULT, QWEN2_RETURN],
-    full_text_indicators=[QWEN2_FUNCTION]
+    additional_stop_before_strings=[QWEN2_RESULT, QWEN2_RETURN], full_text_indicators=[QWEN2_FUNCTION]
 )

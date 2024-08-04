@@ -101,10 +101,7 @@ def __create_working_directories(config: ServerConfig) -> WorkingDirectories:
     if not image_temp_path.exists():
         image_temp_path.mkdir(parents=True)
 
-    return WorkingDirectories(
-        root=config.working_dir,
-        uploaded_images=image_temp_path
-    )
+    return WorkingDirectories(root=config.working_dir, uploaded_images=image_temp_path)
 
 
 def main() -> None:

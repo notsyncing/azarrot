@@ -35,10 +35,7 @@ class ToolParameter:
 
     def to_localized(self, locale: str) -> LocalizedToolParameter:
         return LocalizedToolParameter(
-            name=self.name,
-            type=self.type,
-            description=self.get_description(locale),
-            required=self.required
+            name=self.name, type=self.type, description=self.get_description(locale), required=self.required
         )
 
 
@@ -64,7 +61,7 @@ class ToolDescription:
             name=self.name,
             display_name=self.get_display_name(locale),
             description=self.get_description(locale),
-            parameters=[p.to_localized(locale) for p in self.parameters]
+            parameters=[p.to_localized(locale) for p in self.parameters],
         )
 
 

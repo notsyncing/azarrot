@@ -19,9 +19,7 @@ class BaseBackend(ABC):
 
     @abstractmethod
     def generate(
-        self,
-        request: TextGenerationRequest,
-        generation_handlers: GenerationHandlers
+        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         pass
 

@@ -72,7 +72,7 @@ class ThreadLocalAwareInferRequest:
         req = self.__get_request()
         req.wait()
 
-    def get_tensor(self, *args, **kwargs) -> openvino.runtime.Tensor:   # type: ignore[no-untyped-def]    # noqa: ANN002, ANN003
+    def get_tensor(self, *args, **kwargs) -> openvino.runtime.Tensor:  # type: ignore[no-untyped-def]    # noqa: ANN002, ANN003
         req = self.__get_request()
         return req.get_tensor(*args, **kwargs)
 
@@ -83,9 +83,9 @@ class ThreadLocalAwareInferRequest:
         return req.results
 
 
-def patched_compile(self) -> None:    # type: ignore[no-untyped-def]    # noqa: ANN001
+def patched_compile(self) -> None:  # type: ignore[no-untyped-def]    # noqa: ANN001
     if self.request is None:
-        super(type(self), self).compile()   # type: ignore[unused-ignore]
+        super(type(self), self).compile()  # type: ignore[unused-ignore]
 
         if isinstance(self.request, openvino.runtime.InferRequest):
             self.compiled_model = self.request.get_compiled_model()
@@ -136,16 +136,15 @@ class OpenVINOBackend(BaseBackend):
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
-        ov_config = {
-            "PERFORMANCE_HINT": "THROUGHPUT"
-        }
+        ov_config = {"PERFORMANCE_HINT": "THROUGHPUT"}
 
         use_cache = model.task == "text-generation-with-past"
         tokenizer = AutoTokenizer.from_pretrained(model_path)
 
         ov_model: Any = self.__patch_model(
-            model_class.from_pretrained(model_path, device=device, use_cache=use_cache,
-                ov_config=ov_config, compile=False)
+            model_class.from_pretrained(
+                model_path, device=device, use_cache=use_cache, ov_config=ov_config, compile=False
+            )
         )
 
         ov_model.compile()
@@ -171,9 +170,7 @@ class OpenVINOBackend(BaseBackend):
         return self._models[model_id]
 
     def generate(
-        self,
-        request: TextGenerationRequest,
-        generation_handlers: GenerationHandlers
+        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
 
@@ -186,7 +183,7 @@ class OpenVINOBackend(BaseBackend):
             first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=len(cast(Tensor, inputs[0])),
-            completion_tokens=0
+            completion_tokens=0,
         )
 
         streamer = CustomTextIteratorStreamer(
@@ -195,7 +192,7 @@ class OpenVINOBackend(BaseBackend):
             skip_prompt=True,
             skip_special_tokens=True,
             model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
-            generation_handlers=generation_handlers
+            generation_handlers=generation_handlers,
         )
 
         generation_kwargs = {
@@ -226,14 +223,11 @@ class OpenVINOBackend(BaseBackend):
             first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=0,
-            completion_tokens=0
+            completion_tokens=0,
         )
 
         pipe = pipeline(
-            "feature-extraction",
-            loaded_model.model,
-            tokenizer=loaded_model.tokenizer,
-            trust_remote_code=True
+            "feature-extraction", loaded_model.model, tokenizer=loaded_model.tokenizer, trust_remote_code=True
         )
 
         outputs = cast(Tensor, pipe(request.text, return_tensors=True))
