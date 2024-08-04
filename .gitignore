@@ -12,3 +12,4 @@ server.yml
 reports/
 .coverage
 .mypy_cache/
+.pytest_cache/

@@ -1,0 +1,4 @@
+id: CodeQwen1.5-7B-ipex-llm
+backend: ipex-llm
+path: ./CodeQwen1.5-7B
+task: text-generation

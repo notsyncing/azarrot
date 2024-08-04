@@ -1,0 +1,4 @@
+id: Nxcode-CQ-7B-orpo-ipex-llm
+backend: ipex-llm
+path: ./Nxcode-CQ-7B-orpo
+task: text-generation

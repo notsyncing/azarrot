@@ -1,0 +1,4 @@
+id: Qwen2-7B-Instruct-ipex-llm
+backend: ipex-llm
+path: ./Qwen2-7B-Instruct
+task: text-generation
