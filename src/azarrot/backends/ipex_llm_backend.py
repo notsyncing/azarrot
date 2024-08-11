@@ -53,10 +53,7 @@ class IPEXLLMBackend(BaseBackend):
 
     _generation_variants: dict[
         str,
-        Callable[
-            [LoadedModel, TextGenerationRequest, GenerationHandlers],
-            tuple[CustomTextIteratorStreamer, GenerationStatistics],
-        ],
+        Callable[[LoadedModel, TextGenerationRequest, CustomTextIteratorStreamer, GenerationStatistics], None],
     ]
 
     def __init__(self, config: ServerConfig) -> None:
@@ -106,7 +103,7 @@ class IPEXLLMBackend(BaseBackend):
         model_quirks = MODEL_IPEXLLM_QUIRKS.get(generation_variant, {})
         model_kwargs.update(model_quirks)
 
-        if not model_kwargs.get("use_cache"):
+        if "use_cache" in model_kwargs and not model_kwargs.get("use_cache"):
             del model_kwargs["use_cache"]
 
         ipex_model: Any = model_class.from_pretrained(
@@ -134,36 +131,9 @@ class IPEXLLMBackend(BaseBackend):
 
         return self._models[model_id]
 
-    def __generate_normal(
-        self, loaded_model: LoadedModel, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
-        inputs = loaded_model.tokenizer.apply_chat_template(
-            to_transformers_chat_messages(request.messages), return_tensors="pt"
-        )
-
-        gen_stats = GenerationStatistics(
-            start_time=datetime.now(),
-            first_token_time=datetime.max,
-            end_time=datetime.max,
-            prompt_tokens=len(cast(torch.Tensor, inputs[0])),
-            completion_tokens=0,
-        )
-
-        streamer = CustomTextIteratorStreamer(
-            cast(AutoTokenizer, loaded_model.tokenizer),
-            gen_stats,
-            skip_prompt=True,
-            skip_special_tokens=True,
-            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
-            generation_handlers=generation_handlers,
-        )
-
-        generation_kwargs = {
-            "inputs": cast(torch.Tensor, inputs).to(loaded_model.device),
-            "streamer": streamer,
-            "max_new_tokens": request.max_tokens,
-        }
-
+    def __make_generation_method(
+        self, loaded_model: LoadedModel, streamer: CustomTextIteratorStreamer, generation_kwargs: dict[str, Any]
+    ) -> Callable[[], None]:
         def generate_method() -> None:
             try:
                 loaded_model.model.generate(**generation_kwargs)
@@ -173,40 +143,52 @@ class IPEXLLMBackend(BaseBackend):
                 streamer.set_failed()
                 self._log.exception("An exception occurred in generation thread")
 
-        thread = Thread(target=generate_method)
+        return generate_method
+
+    def __generate_normal(
+        self,
+        loaded_model: LoadedModel,
+        request: TextGenerationRequest,
+        streamer: CustomTextIteratorStreamer,
+        gen_stats: GenerationStatistics,
+    ) -> None:
+        inputs = loaded_model.tokenizer.apply_chat_template(
+            to_transformers_chat_messages(request.messages), return_tensors="pt"
+        )
+
+        gen_stats.prompt_tokens = len(cast(torch.Tensor, inputs[0]))
+
+        generation_kwargs = {
+            "inputs": cast(torch.Tensor, inputs).to(loaded_model.device),
+            "streamer": streamer,
+            "max_new_tokens": request.max_tokens,
+        }
+
+        thread = Thread(target=self.__make_generation_method(loaded_model, streamer, generation_kwargs))
         thread.start()
 
-        return streamer, gen_stats
-
     def __generate_internvl2(
-        self, loaded_model: LoadedModel, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+        self,
+        loaded_model: LoadedModel,
+        request: TextGenerationRequest,
+        streamer: CustomTextIteratorStreamer,
+        gen_stats: GenerationStatistics,
+    ) -> None:
         internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
 
         inputs, pixel_values = internvl2_apply_chat_template(
             loaded_model.model, loaded_model.tokenizer, request.messages
         )
 
-        gen_stats = GenerationStatistics(
-            start_time=datetime.now(),
-            first_token_time=datetime.max,
-            end_time=datetime.max,
-            prompt_tokens=len(cast(torch.Tensor, inputs[0])) + (len(pixel_values) if pixel_values is not None else 0),
-            completion_tokens=0,
-        )
-
-        streamer = CustomTextIteratorStreamer(
-            cast(AutoTokenizer, loaded_model.tokenizer),
-            gen_stats,
-            skip_prompt=True,
-            skip_special_tokens=True,
-            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
-            generation_handlers=generation_handlers,
-        )
+        text_input_length = len(cast(torch.Tensor, inputs[0]))
+        image_input_length = len(pixel_values) if pixel_values is not None else 0
+        gen_stats.prompt_tokens = text_input_length + image_input_length
 
         # token id 2 is from tokenizer.json ('</s>')
         attention_mask = loaded_model.model._prepare_attention_mask_for_generation(  # noqa: SLF001
-            inputs, torch.Tensor([2]), torch.Tensor([2])    # pyright: ignore[reportArgumentType]
+            inputs,
+            torch.Tensor([2]),
+            torch.Tensor([2]),  # pyright: ignore[reportArgumentType]
         )
 
         if pixel_values is not None:
@@ -222,19 +204,8 @@ class IPEXLLMBackend(BaseBackend):
             "eos_token_id": [2, 92543, 92542],
         }
 
-        def generate_method() -> None:
-            try:
-                loaded_model.model.generate(**generation_kwargs)
-            except StopGenerationError:
-                return
-            except:
-                streamer.set_failed()
-                self._log.exception("An exception occurred in generation thread")
-
-        thread = Thread(target=generate_method)
+        thread = Thread(target=self.__make_generation_method(loaded_model, streamer, generation_kwargs))
         thread.start()
-
-        return streamer, gen_stats
 
     def generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
@@ -242,7 +213,27 @@ class IPEXLLMBackend(BaseBackend):
         loaded_model = self.__get_model(request.model_id)
         generation_variant = loaded_model.info.generation_variant
         generation_method = self._generation_variants.get(generation_variant, self.__generate_normal)
-        return generation_method(loaded_model, request, generation_handlers)
+
+        gen_stats = GenerationStatistics(
+            start_time=datetime.now(),
+            first_token_time=datetime.max,
+            end_time=datetime.max,
+            prompt_tokens=0,
+            completion_tokens=0,
+        )
+
+        streamer = CustomTextIteratorStreamer(
+            cast(AutoTokenizer, loaded_model.tokenizer),
+            gen_stats,
+            skip_prompt=True,
+            skip_special_tokens=True,
+            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
+            generation_handlers=generation_handlers,
+        )
+
+        generation_method(loaded_model, request, streamer, gen_stats)
+
+        return streamer, gen_stats
 
     def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
         raise NotImplementedError
