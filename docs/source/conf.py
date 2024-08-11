@@ -9,7 +9,7 @@
 project = 'azarrot'
 copyright = '2024, notsyncing'
 author = 'notsyncing'
-release = '0.2.0'
+release = '0.3.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
