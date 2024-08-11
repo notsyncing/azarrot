@@ -106,6 +106,9 @@ class IPEXLLMBackend(BaseBackend):
         model_quirks = MODEL_IPEXLLM_QUIRKS.get(generation_variant, {})
         model_kwargs.update(model_quirks)
 
+        if not model_kwargs.get("use_cache"):
+            del model_kwargs["use_cache"]
+
         ipex_model: Any = model_class.from_pretrained(
             model_path, load_in_4bit=True, optimize_model=True, trust_remote_code=True, **model_kwargs
         ).to(device)
@@ -203,7 +206,7 @@ class IPEXLLMBackend(BaseBackend):
 
         # token id 2 is from tokenizer.json ('</s>')
         attention_mask = loaded_model.model._prepare_attention_mask_for_generation(  # noqa: SLF001
-            inputs, torch.Tensor([2]), torch.Tensor([2])
+            inputs, torch.Tensor([2]), torch.Tensor([2])    # pyright: ignore[reportArgumentType]
         )
 
         if pixel_values is not None:
