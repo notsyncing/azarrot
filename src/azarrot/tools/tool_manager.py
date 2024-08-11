@@ -1,5 +1,5 @@
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from azarrot.tools.tool import Tool, ToolDescription
 
@@ -33,3 +33,17 @@ class ToolManager:
 
     def get_tool_list(self) -> list[Tool]:
         return list(self._tools.values())
+
+    def is_internal_tool(self, tool_name: str) -> bool:
+        return tool_name in self._tools
+
+    def execute_tool(self, name: str, arguments: dict[str, Any]) -> Any | None:
+        tool = self.get_tool(name)
+
+        if tool is None:
+            self._log.warn("Tool %s to execute does not exist!", name)
+            return None
+
+        self._log.info("Executing tool %s", name)
+
+        return tool.execute(**arguments)

@@ -66,10 +66,6 @@ class ChatTemplateManager:
         force_use_any_tool = False
         force_use_tool_name: str | None = None
 
-        if enable_internal_tools:
-            internal_tools = self._tool_manager.get_tool_list()
-            tool_descriptions.extend([t.description().to_localized(locale) for t in internal_tools])
-
         if tools_info is not None:
             tool_descriptions.extend(tools_info.tools)
 
@@ -79,6 +75,9 @@ class ChatTemplateManager:
                 force_use_any_tool = True
             elif tools_info.force_use_tool_name is not None:
                 force_use_tool_name = tools_info.force_use_tool_name
+        elif enable_internal_tools:
+            internal_tools = self._tool_manager.get_tool_list()
+            tool_descriptions.extend([t.description().to_localized(locale) for t in internal_tools])
 
         if len(tool_descriptions) <= 0:
             return ""

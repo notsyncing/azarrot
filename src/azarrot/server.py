@@ -127,7 +127,7 @@ def main() -> None:
 
     model_manager = ModelManager(config, backends)
 
-    backend_pipe = BackendPipe(backends, chat_template_manager)
+    backend_pipe = BackendPipe(backends, chat_template_manager, GLOBAL_TOOL_MANAGER)
 
     log.info("Starting API server...")
     api = FastAPI()

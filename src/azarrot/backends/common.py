@@ -10,6 +10,7 @@ from transformers import AutoTokenizer, TextIteratorStreamer
 from azarrot.common_data import GenerationMessage, GenerationStatistics, ModelQuirks, TextGenerationMessageContent
 
 CTIS_HAS_OBJECT = "__ctis_has_object__"
+CTIS_DELEGATE_TO_NEXT = "__ctis_delegate_to_next__"
 
 
 @dataclass
@@ -30,6 +31,8 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     _full_text = False
     _generation_handlers: GenerationHandlers | None = None
     _object_queue: Queue[Any] = Queue()
+    _current_ended = False
+    _next_streamer: "CustomTextIteratorStreamer | None" = None
 
     def __init__(  # type: ignore[no-untyped-def]
         self,
@@ -46,6 +49,12 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
         self._generation_statistics = generation_statistics
         self._model_quirks = model_quirks
         self._generation_handlers = generation_handlers
+
+    def set_next_streamer(self, next_streamer: "CustomTextIteratorStreamer") -> None:
+        self._next_streamer = next_streamer
+
+    def get_completion_tokens(self) -> int:
+        return self._generation_statistics.completion_tokens
 
     def put(self, value: Tensor) -> None:
         if len(value.shape) > 1:
@@ -87,6 +96,14 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
                 should_override, new_text = self._generation_handlers.full_text_handler(self, self._output_buffer)
 
                 if should_override:
+                    if new_text == CTIS_DELEGATE_TO_NEXT:
+                        if self._next_streamer is None:
+                            raise ValueError(
+                                "You have specified delegate to next TextStreamer, but no TextStreamer was given!"
+                            )
+
+                        new_text = ""
+
                     self._output_buffer = new_text if new_text is not None else ""
 
     def on_finalized_text(self, text: str, stream_end: bool = False) -> None:
@@ -130,7 +147,23 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
         if self._failed:
             raise ValueError("TextStreamer is forced to fail")
 
-        return super().__next__()
+        if not self._current_ended:
+            try:
+                return super().__next__()
+            except StopIteration:
+                self._current_ended = True
+
+        if self._current_ended:
+            if self._next_streamer is not None:
+                try:
+                    return self._next_streamer.__next__()
+                except StopIteration as e:
+                    self._generation_statistics.completion_tokens += self._next_streamer.get_completion_tokens()
+                    raise StopIteration from e
+            else:
+                raise StopIteration
+
+        raise ValueError("TextStreamer has invalid end state")
 
 
 def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dict[str, str]]:

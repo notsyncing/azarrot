@@ -10,9 +10,8 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI
 from starlette.responses import StreamingResponse
-from transformers import TextIteratorStreamer
 
-from azarrot.backends.common import CTIS_HAS_OBJECT
+from azarrot.backends.common import CTIS_HAS_OBJECT, CustomTextIteratorStreamer
 from azarrot.common_data import (
     CallableToolsInfo,
     EmbeddingsGenerationRequest,
@@ -231,6 +230,8 @@ class OpenAIFrontend:
 
         if isinstance(content, str):
             message = {"role": "assistant", "content": content}
+        elif isinstance(content, ToolCallResponseMessageContent):
+            message = {"role": "tool", "content": content.result, "tool_call_id": content.to_id}
         elif isinstance(content, ToolCallRequestMessageContentList):
             tool_calls = [
                 {
@@ -291,7 +292,7 @@ class OpenAIFrontend:
 
     def __wrap_to_openai_chat_completion_stream(
         self,
-        streamer: TextIteratorStreamer,
+        streamer: CustomTextIteratorStreamer,
         model: Model,
         generation_statistics: GenerationStatistics,
         contains_usage_info: bool = False,
@@ -300,11 +301,16 @@ class OpenAIFrontend:
             if text == "":
                 continue
 
+            result = text
+
+            if text == CTIS_HAS_OBJECT:
+                result = streamer.fetch_object()
+
             yield (
                 "data: "
                 + json.dumps(
                     self.__to_openai_chat_completion_object(
-                        model, text, finish_reason=None, contains_usage_info=False, is_delta=True
+                        model, result, finish_reason=None, contains_usage_info=False, is_delta=True
                     )
                 )
                 + "\n\n"
