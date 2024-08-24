@@ -14,8 +14,8 @@ requires-python = "<= 3.11.99"
 version = "0.3.0"
 dependencies = [
     "openvino==2024.3",
-    "optimum[openvino]==1.18.1",
-    "ipex-llm[xpu]==2.1.0b2",
+    "optimum[openvino]==1.20.0",
+    "ipex-llm[xpu]==2.1.0",
     "fastapi==0.111.0",
     "pyyaml==6.0.1",
     "decord==0.6.0",
