@@ -53,7 +53,9 @@ class IPEXLLMBackend(BaseBackend):
 
     _generation_variants: dict[
         str,
-        Callable[[LoadedModel, TextGenerationRequest, CustomTextIteratorStreamer, GenerationStatistics], None],
+        Callable[
+            [LoadedModel, TextGenerationRequest, dict[str, Any], CustomTextIteratorStreamer, GenerationStatistics], None
+        ],
     ]
 
     def __init__(self, config: ServerConfig) -> None:
@@ -149,6 +151,7 @@ class IPEXLLMBackend(BaseBackend):
         self,
         loaded_model: LoadedModel,
         request: TextGenerationRequest,
+        common_generation_kwargs: dict[str, Any],
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
     ) -> None:
@@ -158,11 +161,15 @@ class IPEXLLMBackend(BaseBackend):
 
         gen_stats.prompt_tokens = len(cast(torch.Tensor, inputs[0]))
 
-        generation_kwargs = {
-            "inputs": cast(torch.Tensor, inputs).to(loaded_model.device),
-            "streamer": streamer,
-            "max_new_tokens": request.max_tokens,
-        }
+        generation_kwargs = common_generation_kwargs.copy()
+
+        generation_kwargs.update(
+            {
+                "inputs": cast(torch.Tensor, inputs).to(loaded_model.device),
+                "streamer": streamer,
+                "max_new_tokens": request.max_tokens,
+            }
+        )
 
         thread = Thread(target=self.__make_generation_method(loaded_model, streamer, generation_kwargs))
         thread.start()
@@ -171,6 +178,7 @@ class IPEXLLMBackend(BaseBackend):
         self,
         loaded_model: LoadedModel,
         request: TextGenerationRequest,
+        common_generation_kwargs: dict[str, Any],
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
     ) -> None:
@@ -194,15 +202,19 @@ class IPEXLLMBackend(BaseBackend):
         if pixel_values is not None:
             pixel_values = pixel_values.to(loaded_model.device)
 
-        generation_kwargs = {
-            "input_ids": cast(torch.Tensor, inputs).to(loaded_model.device),
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "streamer": streamer,
-            "max_new_tokens": request.max_tokens,
-            # token id list is taken from https://huggingface.co/OpenGVLab/InternVL2-8B/blob/main/conversation.py#368
-            "eos_token_id": [2, 92543, 92542],
-        }
+        generation_kwargs = common_generation_kwargs.copy()
+
+        generation_kwargs.update(
+            {
+                "input_ids": cast(torch.Tensor, inputs).to(loaded_model.device),
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "streamer": streamer,
+                "max_new_tokens": request.max_tokens,
+                # token id list is taken from https://huggingface.co/OpenGVLab/InternVL2-8B/blob/main/conversation.py#368
+                "eos_token_id": [2, 92543, 92542],
+            }
+        )
 
         thread = Thread(target=self.__make_generation_method(loaded_model, streamer, generation_kwargs))
         thread.start()
@@ -231,7 +243,9 @@ class IPEXLLMBackend(BaseBackend):
             generation_handlers=generation_handlers,
         )
 
-        generation_method(loaded_model, request, streamer, gen_stats)
+        common_generation_kwargs = {"do_sample": True, "temperature": request.temperature, "top_p": request.top_p}
+
+        generation_method(loaded_model, request, common_generation_kwargs, streamer, gen_stats)
 
         return streamer, gen_stats
 

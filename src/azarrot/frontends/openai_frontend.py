@@ -346,8 +346,10 @@ class OpenAIFrontend:
         generate_request = TextGenerationRequest(
             model_id=request.model,
             messages=self.__to_backend_generation_messages(request.messages),
-            tools_info=self.__to_backend_tools_info(request.tools, request.tool_choice),
             max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS,
+            temperature=request.temperature,
+            top_p=request.top_p,
+            tools_info=self.__to_backend_tools_info(request.tools, request.tool_choice),
             parallel_tool_calling=request.parallel_tool_calls,
         )
 

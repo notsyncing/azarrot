@@ -103,6 +103,11 @@ class TextGenerationRequest:
     model_id: str
     messages: list[GenerationMessage]
     max_tokens: int = DEFAULT_MAX_TOKENS
+
+    repetition_penalty: float = 1
+    temperature: float = 1
+    top_p: float = 1
+
     tools_info: CallableToolsInfo | None = None
     parallel_tool_calling: bool = True
 

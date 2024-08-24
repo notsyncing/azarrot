@@ -199,6 +199,9 @@ class OpenVINOBackend(BaseBackend):
             "inputs": inputs,
             "streamer": streamer,
             "max_new_tokens": request.max_tokens,
+            "do_sample": True,
+            "temperature": request.temperature,
+            "top_p": request.top_p,
         }
 
         def generate_method() -> None:
