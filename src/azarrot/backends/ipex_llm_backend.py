@@ -187,7 +187,7 @@ class IPEXLLMBackend(BaseBackend):
         # token id 2 is from tokenizer.json ('</s>')
         attention_mask = loaded_model.model._prepare_attention_mask_for_generation(  # noqa: SLF001
             inputs,
-            torch.Tensor([2]),
+            torch.Tensor([2]),  # pyright: ignore[reportArgumentType]
             torch.Tensor([2]),  # pyright: ignore[reportArgumentType]
         )
 
