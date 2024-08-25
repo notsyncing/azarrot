@@ -29,10 +29,10 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     _model_quirks: ModelQuirks | None
     _output_buffer: str = ""
     _full_text = False
-    _generation_handlers: GenerationHandlers | None = None
-    _object_queue: Queue[Any] = Queue()
+    _generation_handlers: GenerationHandlers | None
+    _object_queue: Queue[Any]
     _current_ended = False
-    _next_streamer: "CustomTextIteratorStreamer | None" = None
+    _next_streamer: "CustomTextIteratorStreamer | None"
 
     def __init__(  # type: ignore[no-untyped-def]
         self,
@@ -46,6 +46,7 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     ) -> None:
         super().__init__(tokenizer, skip_prompt, timeout, **decode_kwargs)
 
+        self._object_queue = Queue()
         self._generation_statistics = generation_statistics
         self._model_quirks = model_quirks
         self._generation_handlers = generation_handlers
