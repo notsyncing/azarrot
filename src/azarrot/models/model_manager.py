@@ -2,7 +2,6 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import ClassVar
 
 import yaml
 
@@ -28,11 +27,12 @@ class ModelManager:
     _log = logging.getLogger(__name__)
     _config: ServerConfig
     _backends: dict[str, BaseBackend]
-    _models: ClassVar[list[Model]] = []
+    _models: list[Model]
 
     def __init__(self, config: ServerConfig, backends: list[BaseBackend]) -> None:
         self._config = config
 
+        self._models = []
         self._backends = {}
 
         for backend in backends:

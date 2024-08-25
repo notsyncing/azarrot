@@ -3,8 +3,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from threading import Thread
-from typing import Any, ClassVar, cast
+from typing import Any, cast
 
 import torch
 from ipex_llm.transformers import AutoModelForCausalLM
@@ -14,7 +13,7 @@ from transformers import (
     PreTrainedTokenizer,
 )
 
-from azarrot.backends.backend_base import BaseBackend
+from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
     CustomTextIteratorStreamer,
     GenerationHandlers,
@@ -49,23 +48,28 @@ class LoadedModel:
 class IPEXLLMBackend(BaseBackend):
     _log = logging.getLogger(__name__)
     _server_config: ServerConfig
-    _models: ClassVar[dict[str, LoadedModel]] = {}
+    _models: dict[str, LoadedModel]
 
     _generation_variants: dict[
         str,
         Callable[
-            [LoadedModel, TextGenerationRequest, dict[str, Any], CustomTextIteratorStreamer, GenerationStatistics], None
+            [LoadedModel, TextGenerationRequest, dict[str, Any], CustomTextIteratorStreamer, GenerationStatistics],
+            Callable[[], None],
         ],
     ]
 
     def __init__(self, config: ServerConfig) -> None:
+        super().__init__()
+
         self._server_config = config
-        self.__print_device_list()
+        self._models = {}
 
         self._generation_variants = {
             "normal": self.__generate_normal,
             "internvl2": self.__generate_internvl2,
         }
+
+        self.__print_device_list()
 
     def id(self) -> str:
         return BACKEND_ID_IPEX_LLM
@@ -133,6 +137,20 @@ class IPEXLLMBackend(BaseBackend):
 
         return self._models[model_id]
 
+    def _parse_device_str(self, device_str: str) -> list[str]:
+        def sanitize_device(device: str) -> str:
+            if device.isdigit():
+                return device
+            elif device != "cpu" and ":" not in device:
+                return device + ":0"
+            else:
+                return device
+
+        if device_str is None or device_str == "":
+            return []
+
+        return [sanitize_device(d.strip().lower()) for d in device_str.split(",")]
+
     def __make_generation_method(
         self, loaded_model: LoadedModel, streamer: CustomTextIteratorStreamer, generation_kwargs: dict[str, Any]
     ) -> Callable[[], None]:
@@ -154,7 +172,7 @@ class IPEXLLMBackend(BaseBackend):
         common_generation_kwargs: dict[str, Any],
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
-    ) -> None:
+    ) -> Callable[[], None]:
         inputs = loaded_model.tokenizer.apply_chat_template(
             to_transformers_chat_messages(request.messages), return_tensors="pt"
         )
@@ -171,8 +189,7 @@ class IPEXLLMBackend(BaseBackend):
             }
         )
 
-        thread = Thread(target=self.__make_generation_method(loaded_model, streamer, generation_kwargs))
-        thread.start()
+        return self.__make_generation_method(loaded_model, streamer, generation_kwargs)
 
     def __generate_internvl2(
         self,
@@ -181,7 +198,7 @@ class IPEXLLMBackend(BaseBackend):
         common_generation_kwargs: dict[str, Any],
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
-    ) -> None:
+    ) -> Callable[[], None]:
         internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
 
         inputs, pixel_values = internvl2_apply_chat_template(
@@ -216,12 +233,11 @@ class IPEXLLMBackend(BaseBackend):
             }
         )
 
-        thread = Thread(target=self.__make_generation_method(loaded_model, streamer, generation_kwargs))
-        thread.start()
+        return self.__make_generation_method(loaded_model, streamer, generation_kwargs)
 
-    def generate(
+    def _generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+    ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
         generation_variant = loaded_model.info.generation_variant
         generation_method = self._generation_variants.get(generation_variant, self.__generate_normal)
@@ -245,9 +261,11 @@ class IPEXLLMBackend(BaseBackend):
 
         common_generation_kwargs = {"do_sample": True, "temperature": request.temperature, "top_p": request.top_p}
 
-        generation_method(loaded_model, request, common_generation_kwargs, streamer, gen_stats)
+        m = generation_method(loaded_model, request, common_generation_kwargs, streamer, gen_stats)
 
-        return streamer, gen_stats
+        task = BackendGenerationTask(method=m, device=loaded_model.device)
+
+        return task, streamer, gen_stats
 
     def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
         raise NotImplementedError

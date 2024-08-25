@@ -1,6 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
 
 DEFAULT_MAX_TOKENS = 512
 
@@ -12,4 +11,4 @@ class ServerConfig:
     host = "127.0.0.1"
     port = 8080
 
-    model_device_map: ClassVar[dict[str, str]] = {}
+    model_device_map: dict[str, str] = field(default_factory=dict)

@@ -1,15 +1,15 @@
 import logging
-from typing import Any, ClassVar
+from typing import Any
 
 from azarrot.tools.tool import Tool, ToolDescription
 
 
 class ToolManager:
     _log = logging.getLogger(__name__)
-    _tools: ClassVar[dict[str, Tool]] = {}
+    _tools: dict[str, Tool]
 
     def __init__(self) -> None:
-        pass
+        self._tools = {}
 
     def register_tool(self, tool: Tool) -> None:
         desc = tool.description()

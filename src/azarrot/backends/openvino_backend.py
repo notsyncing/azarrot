@@ -3,9 +3,8 @@ import logging
 import threading
 from dataclasses import dataclass
 from datetime import datetime
-from threading import Thread
 from types import MethodType
-from typing import Any, ClassVar, cast
+from typing import Any, cast
 
 import openvino
 import torch
@@ -18,7 +17,7 @@ from transformers import (
     pipeline,
 )
 
-from azarrot.backends.backend_base import BaseBackend
+from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
     CustomTextIteratorStreamer,
     GenerationHandlers,
@@ -99,10 +98,14 @@ class OpenVINOBackend(BaseBackend):
     _log = logging.getLogger(__name__)
     _ov = openvino.Core()
     _server_config: ServerConfig
-    _models: ClassVar[dict[str, LoadedModel]] = {}
+    _models: dict[str, LoadedModel]
 
     def __init__(self, config: ServerConfig) -> None:
+        super().__init__()
+
         self._server_config = config
+        self._models = {}
+
         self.__print_device_list()
 
     def id(self) -> str:
@@ -169,9 +172,21 @@ class OpenVINOBackend(BaseBackend):
 
         return self._models[model_id]
 
-    def generate(
+    def _parse_device_str(self, device_str: str) -> list[str]:
+        def sanitize_device(device: str) -> str:
+            if device != "CPU" and "." not in device:
+                return device + ".0"
+            else:
+                return device
+
+        if device_str is None or device_str == "":
+            return []
+
+        return [sanitize_device(d.strip().upper()) for d in device_str.split(",")]
+
+    def _generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+    ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
 
         inputs = loaded_model.tokenizer.apply_chat_template(
@@ -213,10 +228,9 @@ class OpenVINOBackend(BaseBackend):
                 streamer.set_failed()
                 self._log.exception("An exception occurred in generation thread")
 
-        thread = Thread(target=generate_method)
-        thread.start()
+        task = BackendGenerationTask(method=generate_method, device=loaded_model.device)
 
-        return streamer, gen_stats
+        return task, streamer, gen_stats
 
     def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
