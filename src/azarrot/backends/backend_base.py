@@ -21,12 +21,15 @@ class TaskReference:
     task: BackendGenerationTask
     dependencies: list["TaskReference"]
 
-    _ready = threading.Event()
-    _done = threading.Event()
+    _ready: threading.Event
+    _done: threading.Event
 
     def __init__(self, task: BackendGenerationTask) -> None:
         self.dependencies = []
         self.task = task
+
+        self._ready = threading.Event()
+        self._done = threading.Event()
 
     def add_dependency(self, dependency: "TaskReference") -> None:
         self.dependencies.append(dependency)
