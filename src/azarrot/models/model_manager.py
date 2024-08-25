@@ -56,7 +56,7 @@ class ModelManager:
                 elif "Qwen2ForCausalLM" in hf_model_archs:
                     return "qwen2"
             except:
-                self._log.warn("Failed to parse config %s as JSON", hf_config_file)
+                self._log.warning("Failed to parse config %s as JSON", hf_config_file)
 
         return "normal"
 

@@ -95,7 +95,7 @@ class BackendPipe:
                 return True, CTIS_DELEGATE_TO_NEXT
             elif len(external_req_list) > 0:
                 if len(internal_req_list) > 0:
-                    self._log.warn(
+                    self._log.warning(
                         "The model called both internal and external tools. Internal tool calls will be ignored."
                     )
 

@@ -41,7 +41,7 @@ class ToolManager:
         tool = self.get_tool(name)
 
         if tool is None:
-            self._log.warn("Tool %s to execute does not exist!", name)
+            self._log.warning("Tool %s to execute does not exist!", name)
             return None
 
         self._log.info("Executing tool %s", name)

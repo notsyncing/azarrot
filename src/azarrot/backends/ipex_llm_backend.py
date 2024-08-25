@@ -83,7 +83,7 @@ class IPEXLLMBackend(BaseBackend):
             return
 
         if model.id in self._models:
-            self._log.warn("Model %s is already loaded, will skip it.", model.id)
+            self._log.warning("Model %s is already loaded, will skip it.", model.id)
             return
 
         model_class = TASK_MODEL_MAP[model.task]
@@ -118,7 +118,7 @@ class IPEXLLMBackend(BaseBackend):
 
     def unload_model(self, model_id: str) -> None:
         if model_id not in self._models:
-            self._log.warn("Model %s is not loaded.", model_id)
+            self._log.warning("Model %s is not loaded.", model_id)
             return
 
         del self._models[model_id]
