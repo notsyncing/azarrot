@@ -26,13 +26,13 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     _generation_statistics: GenerationStatistics
     _failed = False
     _first_token = True
-    _model_quirks: ModelQuirks | None
+    _model_quirks: ModelQuirks | None = None
     _output_buffer: str = ""
     _full_text = False
-    _generation_handlers: GenerationHandlers | None
+    _generation_handlers: GenerationHandlers | None = None
     _object_queue: Queue[Any]
     _current_ended = False
-    _next_streamer: "CustomTextIteratorStreamer | None"
+    _next_streamer: "CustomTextIteratorStreamer | None" = None
 
     def __init__(  # type: ignore[no-untyped-def]
         self,

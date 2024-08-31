@@ -15,6 +15,7 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
     pipeline,
+    set_seed,
 )
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
@@ -220,6 +221,9 @@ class OpenVINOBackend(BaseBackend):
         }
 
         def generate_method() -> None:
+            if request.seed is not None:
+                set_seed(request.seed)
+
             try:
                 loaded_model.model.generate(**generation_kwargs)
             except StopGenerationError:
@@ -227,6 +231,9 @@ class OpenVINOBackend(BaseBackend):
             except:
                 streamer.set_failed()
                 self._log.exception("An exception occurred in generation thread")
+
+            if request.seed is not None:
+                set_seed(int(datetime.now().timestamp()))
 
         task = BackendGenerationTask(method=generate_method, device=loaded_model.device)
 

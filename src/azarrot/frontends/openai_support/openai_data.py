@@ -97,6 +97,7 @@ class ChatCompletionRequest(BaseModel):
     frequency_penalty: float = Field(default=0, ge=-2.0, le=2.0)
     temperature: float = Field(default=1, ge=0, le=2)
     top_p: float = Field(default=1, ge=0, le=1)
+    seed: int | None = None
 
     tools: list[ToolInfo] | None = None
     tool_choice: Literal["none", "auto", "required"] | ToolChoice | None = None

@@ -107,6 +107,7 @@ class TextGenerationRequest:
     repetition_penalty: float = 1
     temperature: float = 1
     top_p: float = 1
+    seed: int | None = None
 
     tools_info: CallableToolsInfo | None = None
     parallel_tool_calling: bool = True

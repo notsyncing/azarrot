@@ -28,7 +28,8 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 
 |Feature|Subfeature|IPEX-LLM|OpenVINO|Remarks|
 |-------|----------|--------|--------|-------|
-|Chat|Basic chat completion|⭕|⭕|Text generation works, parameters (like `frequency_penalty`, `temperature`) not implemented yet|
+|Chat|Basic chat completion|⭕|⭕|Text generation works, some parameters (like `frequency_penalty`) not implemented yet|
+|Chat|Seeding|✅|✅||
 |Chat|Streaming response|✅|✅||
 |Chat|Image input|✅|❌|InternVL2 supported|
 |Chat|Tool calling|✅|❓|Qwen2 supported|

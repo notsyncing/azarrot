@@ -349,6 +349,7 @@ class OpenAIFrontend:
             max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS,
             temperature=request.temperature,
             top_p=request.top_p,
+            seed=request.seed,
             tools_info=self.__to_backend_tools_info(request.tools, request.tool_choice),
             parallel_tool_calling=request.parallel_tool_calls,
         )

@@ -7,11 +7,7 @@ from typing import Any, cast
 
 import torch
 from ipex_llm.transformers import AutoModelForCausalLM
-from transformers import (
-    AutoTokenizer,
-    PreTrainedModel,
-    PreTrainedTokenizer,
-)
+from transformers import AutoTokenizer, PreTrainedModel, PreTrainedTokenizer, set_seed
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
@@ -152,9 +148,16 @@ class IPEXLLMBackend(BaseBackend):
         return [sanitize_device(d.strip().lower()) for d in device_str.split(",")]
 
     def __make_generation_method(
-        self, loaded_model: LoadedModel, streamer: CustomTextIteratorStreamer, generation_kwargs: dict[str, Any]
+        self,
+        loaded_model: LoadedModel,
+        streamer: CustomTextIteratorStreamer,
+        seed: int | None,
+        generation_kwargs: dict[str, Any]
     ) -> Callable[[], None]:
         def generate_method() -> None:
+            if seed is not None:
+                set_seed(seed)
+
             try:
                 loaded_model.model.generate(**generation_kwargs)
             except StopGenerationError:
@@ -162,6 +165,9 @@ class IPEXLLMBackend(BaseBackend):
             except:
                 streamer.set_failed()
                 self._log.exception("An exception occurred in generation thread")
+
+            if seed is not None:
+                set_seed(int(datetime.now().timestamp()))
 
         return generate_method
 
@@ -189,7 +195,7 @@ class IPEXLLMBackend(BaseBackend):
             }
         )
 
-        return self.__make_generation_method(loaded_model, streamer, generation_kwargs)
+        return self.__make_generation_method(loaded_model, streamer, request.seed, generation_kwargs)
 
     def __generate_internvl2(
         self,
@@ -233,7 +239,7 @@ class IPEXLLMBackend(BaseBackend):
             }
         )
 
-        return self.__make_generation_method(loaded_model, streamer, generation_kwargs)
+        return self.__make_generation_method(loaded_model, streamer, request.seed, generation_kwargs)
 
     def _generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
