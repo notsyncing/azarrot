@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -11,6 +12,7 @@ from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.common_data import IPEXLLMModelConfig, Model, ModelPreset
 from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
+import huggingface_hub
 
 DEFAULT_MODEL_PRESET = ModelPreset(
     preferred_locale=DEFAULT_LOCALE,  # type: ignore[arg-type]
@@ -22,17 +24,21 @@ DEFAULT_MODEL_PRESETS: dict[str, ModelPreset] = {
     "qwen2": ModelPreset(preferred_locale=DEFAULT_LOCALE, supports_tool_calling=True, enable_internal_tools=False)  # type: ignore[arg-type]
 }
 
+MODEL_PATH_HUGGINGFACE = "huggingface://"
+
 
 class ModelManager:
     _log = logging.getLogger(__name__)
     _config: ServerConfig
     _backends: dict[str, BaseBackend]
-    _models: list[Model]
+    _models: dict[str, Model]
+    _dynamic_loaded_models: dict[str, Model]
 
     def __init__(self, config: ServerConfig, backends: list[BaseBackend]) -> None:
         self._config = config
 
-        self._models = []
+        self._models = {}
+        self._dynamic_loaded_models = {}
         self._backends = {}
 
         for backend in backends:
@@ -41,7 +47,7 @@ class ModelManager:
 
         self.refresh_models()
 
-    def __determine_model_generation_variant(self, model_path: Path) -> str:
+    def __determine_model_generation_variant(self, model_path: Path) -> Literal["normal", "internvl2", "qwen2"]:
         hf_config_file = model_path / "config.json"
 
         if hf_config_file.exists():
@@ -63,7 +69,17 @@ class ModelManager:
     def __parse_model_file(self, file: Path) -> Model:
         with file.open() as f:
             model_info = yaml.safe_load(f)
-            model_path = self._config.models_dir / Path(model_info["path"])
+
+            raw_model_path = model_info["path"]
+            model_path: Path
+
+            if raw_model_path.startswith(MODEL_PATH_HUGGINGFACE):
+                hf_model_id = raw_model_path[len(MODEL_PATH_HUGGINGFACE):]
+                hf_model_path = huggingface_hub.snapshot_download(hf_model_id)
+                model_path = Path(hf_model_path)
+            else:
+                model_path = self._config.models_dir / Path(model_info["path"])
+
             model_backend = model_info.get("backend", BACKEND_ID_OPENVINO)
 
             model_generation_variant = model_info.get(
@@ -108,25 +124,51 @@ class ModelManager:
     def refresh_models(self) -> None:
         new_models = [self.__parse_model_file(file) for file in self._config.models_dir.glob("*.model.yml")]
 
-        for model in self._models:
+        for model in self._models.values():
             backend = self._backends[model.backend]
 
-            if model not in new_models:
+            if model.id not in new_models and model.id not in self._dynamic_loaded_models:
                 backend.unload_model(model.id)
-                self._models.remove(model)
+                del self._models[model.id]
 
         for model in new_models:
             backend = self._backends[model.backend]
 
-            if model not in self._models:
+            if model.id not in self._models:
                 backend.load_model(model)
-                self._models.append(model)
+                self._models[model.id] = model
 
     def get_models(self) -> list[Model]:
-        return self._models
+        return list(self._models.values())
 
     def get_model(self, model_id: str) -> Model | None:
-        try:
-            return next(m for m in self._models if m.id == model_id)
-        except StopIteration:
-            return None
+        return self._models.get(model_id)
+
+    def load_huggingface_model(self, huggingface_id: str, backend_id: str, for_task: str) -> None:
+        backend = self._backends.get(backend_id)
+
+        if backend is None:
+            raise ValueError(f"Unknown backend {backend_id}")
+
+        if huggingface_id in self._models:
+            raise ValueError(f"Model {huggingface_id} from huggingface is already loaded!")
+
+        self._log.info("Downloading model %s from huggingface...", huggingface_id)
+
+        model_path = Path(huggingface_hub.snapshot_download(huggingface_id))
+
+        model = Model(
+            id=huggingface_id,
+            backend=backend_id,
+            path=model_path,
+            task=for_task,
+            generation_variant=self.__determine_model_generation_variant(model_path),
+            preset=DEFAULT_MODEL_PRESET,
+            ipex_llm=None,
+            create_time=datetime.now()
+        )
+
+        backend.load_model(model)
+
+        self._models[model.id] = model
+        self._dynamic_loaded_models[model.id] = model
