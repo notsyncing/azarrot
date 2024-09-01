@@ -12,3 +12,6 @@ class ServerConfig:
     port = 8080
 
     model_device_map: dict[str, str] = field(default_factory=dict)
+    single_token_generation_timeout: int = 60000
+    auto_batch_threshold: int = 100
+    auto_batch_max_size: int = 8

@@ -7,16 +7,18 @@ from typing import Any, cast
 
 import torch
 from ipex_llm.transformers import AutoModelForCausalLM
-from transformers import AutoTokenizer, PreTrainedModel, PreTrainedTokenizer, set_seed
+from transformers import AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
     CustomTextIteratorStreamer,
     GenerationHandlers,
-    StopGenerationError,
+    GenerationMethods,
+    TransformersGenerationMethods,
     to_transformers_chat_messages,
 )
 from azarrot.backends.ipex_llm_support.internvl2_processor import (
+    InternVL2TransformersGenerationMethods,
     internvl2_apply_chat_template,
     internvl2_patch_model,
 )
@@ -43,19 +45,18 @@ class LoadedModel:
 
 class IPEXLLMBackend(BaseBackend):
     _log = logging.getLogger(__name__)
-    _server_config: ServerConfig
     _models: dict[str, LoadedModel]
 
     _generation_variants: dict[
         str,
         Callable[
             [LoadedModel, TextGenerationRequest, dict[str, Any], CustomTextIteratorStreamer, GenerationStatistics],
-            Callable[[], None],
+            GenerationMethods,
         ],
     ]
 
     def __init__(self, config: ServerConfig) -> None:
-        super().__init__()
+        super().__init__(config)
 
         self._server_config = config
         self._models = {}
@@ -102,8 +103,8 @@ class IPEXLLMBackend(BaseBackend):
             if model.ipex_llm.use_cache:
                 model_kwargs["use_cache"] = True
 
-        model_quirks = MODEL_IPEXLLM_QUIRKS.get(generation_variant, {})
-        model_kwargs.update(model_quirks)
+        model_kwargs_quirks = MODEL_IPEXLLM_QUIRKS.get(generation_variant, {})
+        model_kwargs.update(model_kwargs_quirks)
 
         if "use_cache" in model_kwargs and not model_kwargs.get("use_cache"):
             del model_kwargs["use_cache"]
@@ -147,30 +148,6 @@ class IPEXLLMBackend(BaseBackend):
 
         return [sanitize_device(d.strip().lower()) for d in device_str.split(",")]
 
-    def __make_generation_method(
-        self,
-        loaded_model: LoadedModel,
-        streamer: CustomTextIteratorStreamer,
-        seed: int | None,
-        generation_kwargs: dict[str, Any]
-    ) -> Callable[[], None]:
-        def generate_method() -> None:
-            if seed is not None:
-                set_seed(seed)
-
-            try:
-                loaded_model.model.generate(**generation_kwargs)
-            except StopGenerationError:
-                return
-            except:
-                streamer.set_failed()
-                self._log.exception("An exception occurred in generation thread")
-
-            if seed is not None:
-                set_seed(int(datetime.now().timestamp()))
-
-        return generate_method
-
     def __generate_normal(
         self,
         loaded_model: LoadedModel,
@@ -178,7 +155,7 @@ class IPEXLLMBackend(BaseBackend):
         common_generation_kwargs: dict[str, Any],
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
-    ) -> Callable[[], None]:
+    ) -> GenerationMethods:
         inputs = loaded_model.tokenizer.apply_chat_template(
             to_transformers_chat_messages(request.messages), return_tensors="pt"
         )
@@ -195,7 +172,9 @@ class IPEXLLMBackend(BaseBackend):
             }
         )
 
-        return self.__make_generation_method(loaded_model, streamer, request.seed, generation_kwargs)
+        return TransformersGenerationMethods(
+            model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
+        )
 
     def __generate_internvl2(
         self,
@@ -204,7 +183,7 @@ class IPEXLLMBackend(BaseBackend):
         common_generation_kwargs: dict[str, Any],
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
-    ) -> Callable[[], None]:
+    ) -> GenerationMethods:
         internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
 
         inputs, pixel_values = internvl2_apply_chat_template(
@@ -230,7 +209,7 @@ class IPEXLLMBackend(BaseBackend):
         generation_kwargs.update(
             {
                 "input_ids": cast(torch.Tensor, inputs).to(loaded_model.device),
-                "attention_mask": attention_mask,
+                "attention_mask": attention_mask.to(loaded_model.device),
                 "pixel_values": pixel_values,
                 "streamer": streamer,
                 "max_new_tokens": request.max_tokens,
@@ -239,7 +218,9 @@ class IPEXLLMBackend(BaseBackend):
             }
         )
 
-        return self.__make_generation_method(loaded_model, streamer, request.seed, generation_kwargs)
+        return InternVL2TransformersGenerationMethods(
+            model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
+        )
 
     def _generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
@@ -256,12 +237,15 @@ class IPEXLLMBackend(BaseBackend):
             completion_tokens=0,
         )
 
+        model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant)
+
         streamer = CustomTextIteratorStreamer(
             cast(AutoTokenizer, loaded_model.tokenizer),
             gen_stats,
             skip_prompt=True,
+            timeout=self._server_config.single_token_generation_timeout / 1000,
             skip_special_tokens=True,
-            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
+            model_quirks=model_quirks,
             generation_handlers=generation_handlers,
         )
 
@@ -269,7 +253,14 @@ class IPEXLLMBackend(BaseBackend):
 
         m = generation_method(loaded_model, request, common_generation_kwargs, streamer, gen_stats)
 
-        task = BackendGenerationTask(method=m, device=loaded_model.device)
+        task = BackendGenerationTask(
+            model_id=loaded_model.info.id,
+            model_quirks=model_quirks,
+            backend_id=BACKEND_ID_IPEX_LLM,
+            methods=m,
+            device=loaded_model.device,
+            seed=request.seed,
+        )
 
         return task, streamer, gen_stats
 

@@ -36,6 +36,10 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Embeddings|Create embeddings|❌|⭕|`encoding_format` not implemented yet|
 |Models|List models|✅|✅||
 
+### Other features on OpenAI API
+
+- Auto-batching Chat API
+
 ## Tested models
 
 |Model|Repository|Device|Backend|Remarks|

@@ -61,21 +61,30 @@ def __parse_arguments_and_load_config() -> ServerConfig:
         with config_file.open() as f:
             config_yaml = yaml.safe_load(f)
 
-            if config_yaml["models_dir"] is not None:
+            if "models_dir" in config_yaml:
                 config.models_dir = Path(config_yaml["models_dir"]).resolve()
 
-            if config_yaml["working_dir"] is not None:
+            if "working_dir" in config_yaml:
                 config.working_dir = Path(config_yaml["working_dir"]).resolve()
 
-            if config_yaml["host"] is not None:
+            if "host" in config_yaml:
                 config.host = config_yaml["host"]
 
-            if config_yaml["port"] is not None:
+            if "port" in config_yaml:
                 config.port = config_yaml["port"]
 
-            if config_yaml["model_device_map"] is not None:
+            if "model_device_map" in config_yaml:
                 for k, v in config_yaml["model_device_map"].items():
                     config.model_device_map[k] = v
+
+            if "single_token_generation_timeout" in config_yaml:
+                config.single_token_generation_timeout = config_yaml["single_token_generation_timeout"]
+
+            if "auto_batch_threshold" in config_yaml:
+                config.auto_batch_threshold = config_yaml["auto_batch_threshold"]
+
+            if "auto_batch_max_size" in config_yaml:
+                config.auto_batch_max_size = config_yaml["auto_batch_max_size"]
 
     if args.models_dir is not None:
         config.models_dir = Path(args.models_dir).resolve()

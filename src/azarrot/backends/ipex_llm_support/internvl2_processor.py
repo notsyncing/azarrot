@@ -3,10 +3,20 @@ from typing import Any, cast
 import torch
 from transformers import PreTrainedTokenizer
 
+from azarrot.backends.common import TransformersGenerationMethods
 from azarrot.backends.ipex_llm_support.internvl2_tools import load_image
 from azarrot.common_data import GenerationMessage, ImageGenerationMessageContent, TextGenerationMessageContent
 
 INTERNVL2_IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"  # noqa: S105
+
+
+class InternVL2TransformersGenerationMethods(TransformersGenerationMethods):
+    def merge_into_batch(self, others: list["TransformersGenerationMethods"]) -> None:
+        self._merge_kwargs_tensors("input_ids", others)
+        self._merge_kwargs_tensors("attention_mask", others)
+        self._stack_kwargs_tensors("pixel_values", others)
+
+        return super().merge_into_batch(others)
 
 
 def internvl2_patch_model(model: Any, tokenizer: PreTrainedTokenizer) -> None:

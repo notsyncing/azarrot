@@ -31,6 +31,7 @@ class ModelQuirks:
     output_buffering_length = 10
     additional_stop_before_strings: list[str] | None = None
     full_text_indicators: list[str] | None = None
+    does_not_support_batching = False
 
 
 @dataclass

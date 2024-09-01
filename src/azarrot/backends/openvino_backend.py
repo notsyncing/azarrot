@@ -15,14 +15,13 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
     pipeline,
-    set_seed,
 )
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
     CustomTextIteratorStreamer,
     GenerationHandlers,
-    StopGenerationError,
+    TransformersGenerationMethods,
     to_transformers_chat_messages,
 )
 from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
@@ -98,11 +97,10 @@ def patched_compile(self) -> None:  # type: ignore[no-untyped-def]    # noqa: AN
 class OpenVINOBackend(BaseBackend):
     _log = logging.getLogger(__name__)
     _ov = openvino.Core()
-    _server_config: ServerConfig
     _models: dict[str, LoadedModel]
 
     def __init__(self, config: ServerConfig) -> None:
-        super().__init__()
+        super().__init__(config)
 
         self._server_config = config
         self._models = {}
@@ -202,12 +200,15 @@ class OpenVINOBackend(BaseBackend):
             completion_tokens=0,
         )
 
+        model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant)
+
         streamer = CustomTextIteratorStreamer(
             cast(AutoTokenizer, loaded_model.tokenizer),
             gen_stats,
             skip_prompt=True,
+            timeout=self._server_config.single_token_generation_timeout / 1000,
             skip_special_tokens=True,
-            model_quirks=MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant),
+            model_quirks=model_quirks,
             generation_handlers=generation_handlers,
         )
 
@@ -220,22 +221,16 @@ class OpenVINOBackend(BaseBackend):
             "top_p": request.top_p,
         }
 
-        def generate_method() -> None:
-            if request.seed is not None:
-                set_seed(request.seed)
-
-            try:
-                loaded_model.model.generate(**generation_kwargs)
-            except StopGenerationError:
-                return
-            except:
-                streamer.set_failed()
-                self._log.exception("An exception occurred in generation thread")
-
-            if request.seed is not None:
-                set_seed(int(datetime.now().timestamp()))
-
-        task = BackendGenerationTask(method=generate_method, device=loaded_model.device)
+        task = BackendGenerationTask(
+            model_id=loaded_model.info.id,
+            model_quirks=model_quirks,
+            backend_id=BACKEND_ID_OPENVINO,
+            methods=TransformersGenerationMethods(
+                model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
+            ),
+            device=loaded_model.device,
+            seed=request.seed,
+        )
 
         return task, streamer, gen_stats
 
