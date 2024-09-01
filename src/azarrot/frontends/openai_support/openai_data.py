@@ -61,7 +61,7 @@ class ChatCompletionStreamOptions(BaseModel):
 class ToolFunctionInfo(BaseModel):
     description: str | None = None
     name: str
-    parameters: list[dict[str, Any]] | None = None
+    parameters: dict[str, Any] | None = None
 
 
 class ToolInfo(BaseModel):
