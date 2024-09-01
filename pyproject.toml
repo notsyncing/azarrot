@@ -56,6 +56,7 @@ test = [
     "pytest==7.4.1",
     "pytest-cov==4.1.0",
     "coverage[toml]==7.3.1",
+    "openai==1.43.0"
 ]
 doc = [
     "sphinx",
@@ -117,6 +118,7 @@ lint.ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
     "S101", # Use of `assert` detected
+    "RUF001",
 ]
 "**/__init__.py" = [
     "D104",
@@ -155,6 +157,8 @@ addopts = """
     --cov-config=pyproject.toml
     --cov-report=
     """
+log_cli = true
+log_cli_level = "INFO"
 
 [tool.coverage.paths]
 # Maps coverage measured in site-packages to source files in src

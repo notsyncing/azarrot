@@ -1,12 +1,13 @@
 import argparse
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import uvicorn
 import yaml
 from fastapi import FastAPI
 
+from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.common_data import WorkingDirectories
@@ -16,9 +17,6 @@ from azarrot.frontends.openai_frontend import OpenAIFrontend
 from azarrot.models.chat_templates import ChatTemplateManager
 from azarrot.models.model_manager import ModelManager
 from azarrot.tools import GLOBAL_TOOL_MANAGER
-
-if TYPE_CHECKING:
-    from azarrot.backends.backend_base import BaseBackend
 
 log = logging.getLogger(__name__)
 
@@ -113,12 +111,29 @@ def __create_working_directories(config: ServerConfig) -> WorkingDirectories:
     return WorkingDirectories(root=config.working_dir, uploaded_images=image_temp_path)
 
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+@dataclass
+class Server:
+    config: ServerConfig
+    model_manager: ModelManager
+    backend_pipe: BackendPipe
+    backends: list[BaseBackend]
+    frontends: list[OpenAIFrontend]
+    api: FastAPI
 
+    def start(self) -> None:
+        log.info("Starting API server...")
+        uvicorn.run(self.api, host=self.config.host, port=self.config.port)
+
+
+def create_server(
+    config: ServerConfig | None = None,
+    enable_backends: list[type[BaseBackend]] | None = None
+) -> Server:
     log.info("Azarrot is initializing...")
 
-    config = __parse_arguments_and_load_config()
+    if config is None:
+        config = __parse_arguments_and_load_config()
+
     log.info("Current config:")
 
     for attr in dir(config):
@@ -129,19 +144,43 @@ def main() -> None:
 
     chat_template_manager = ChatTemplateManager(GLOBAL_TOOL_MANAGER)
 
-    backends: list[BaseBackend] = [
-        IPEXLLMBackend(config),
-        OpenVINOBackend(config),
-    ]
+    backends: list[BaseBackend]
+
+    if enable_backends is not None:
+        backends = [b(config) for b in enable_backends]
+    else:
+        backends = [
+            IPEXLLMBackend(config),
+            OpenVINOBackend(config),
+        ]
+
+    log.info("Enabled backends: %s", backends)
 
     model_manager = ModelManager(config, backends)
 
     backend_pipe = BackendPipe(backends, chat_template_manager, GLOBAL_TOOL_MANAGER)
 
-    log.info("Starting API server...")
     api = FastAPI()
-    OpenAIFrontend(model_manager, backend_pipe, api, working_dirs)
-    uvicorn.run(api, host=config.host, port=config.port)
+
+    frontends = [
+        OpenAIFrontend(model_manager, backend_pipe, api, working_dirs)
+    ]
+
+    return Server(
+        config=config,
+        model_manager=model_manager,
+        backend_pipe=backend_pipe,
+        backends=backends,
+        frontends=frontends,
+        api=api
+    )
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+
+    server = create_server()
+    server.start()
 
 
 if __name__ == "__main__":

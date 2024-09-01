@@ -6,10 +6,10 @@ DEFAULT_MAX_TOKENS = 512
 
 @dataclass
 class ServerConfig:
-    models_dir = Path("./models")
-    working_dir = Path("./working")
-    host = "127.0.0.1"
-    port = 8080
+    models_dir: Path = Path("./models")
+    working_dir: Path = Path("./working")
+    host: str = "127.0.0.1"
+    port: int = 8080
 
     model_device_map: dict[str, str] = field(default_factory=dict)
     single_token_generation_timeout: int = 60000

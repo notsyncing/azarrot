@@ -144,26 +144,27 @@ class ModelManager:
     def get_model(self, model_id: str) -> Model | None:
         return self._models.get(model_id)
 
-    def load_huggingface_model(self, huggingface_id: str, backend_id: str, for_task: str) -> None:
+    def load_huggingface_model(self, huggingface_id: str, backend_id: str, for_task: str, skip_if_loaded=False) -> None:
         backend = self._backends.get(backend_id)
 
         if backend is None:
             raise ValueError(f"Unknown backend {backend_id}")
 
-        if huggingface_id in self._models:
+        if huggingface_id in self._models and not skip_if_loaded:
             raise ValueError(f"Model {huggingface_id} from huggingface is already loaded!")
 
         self._log.info("Downloading model %s from huggingface...", huggingface_id)
 
         model_path = Path(huggingface_hub.snapshot_download(huggingface_id))
+        model_generation_variant = self.__determine_model_generation_variant(model_path)
 
         model = Model(
             id=huggingface_id,
             backend=backend_id,
             path=model_path,
             task=for_task,
-            generation_variant=self.__determine_model_generation_variant(model_path),
-            preset=DEFAULT_MODEL_PRESET,
+            generation_variant=model_generation_variant,
+            preset=DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET),
             ipex_llm=None,
             create_time=datetime.now()
         )
