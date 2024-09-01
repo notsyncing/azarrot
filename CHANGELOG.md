@@ -2,6 +2,13 @@
 
 The following are change log of each versions.
 
+## 0.3.0 (2024-09-??)
+
+- Support auto-batching on chat API
+- Support `top_p`, `temperature` and `seed` parameters in chat API
+- Update OpenVINO to 2024.3.0
+- Update IPEX-LLM to 2.1.0
+
 ## 0.2.0 (2024-08-04)
 
 - Add IPEX-LLM backend
