@@ -70,12 +70,21 @@ class ModelManager:
         with file.open() as f:
             model_info = yaml.safe_load(f)
 
-            raw_model_path = model_info["path"]
+            raw_model_path: str = model_info["path"]
             model_path: Path
 
             if raw_model_path.startswith(MODEL_PATH_HUGGINGFACE):
                 hf_model_id = raw_model_path[len(MODEL_PATH_HUGGINGFACE) :]
-                hf_model_path = huggingface_hub.snapshot_download(hf_model_id)
+                hf_local_dir = self._config.models_dir / Path(f"huggingface/{hf_model_id.replace('/', '_')}")
+
+                if not hf_local_dir.exists():
+                    hf_local_dir.mkdir(parents=True)
+
+                hf_model_path = huggingface_hub.snapshot_download(
+                    hf_model_id,
+                    local_dir=hf_local_dir
+                )
+
                 model_path = Path(hf_model_path)
             else:
                 model_path = self._config.models_dir / Path(model_info["path"])
