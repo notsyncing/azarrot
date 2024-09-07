@@ -25,6 +25,10 @@ class ModelPreset:
     supports_tool_calling: bool
     enable_internal_tools: bool
 
+    def with_enable_internal_tools(self) -> "ModelPreset":
+        self.enable_internal_tools = True
+        return self
+
 
 @dataclass
 class ModelQuirks:
@@ -117,7 +121,7 @@ class TextGenerationRequest:
 @dataclass
 class EmbeddingsGenerationRequest:
     model_id: str
-    text: str
+    text: str | list[str]
 
 
 @dataclass

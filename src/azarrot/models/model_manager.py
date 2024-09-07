@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+import huggingface_hub
 import yaml
 
 from azarrot.backends.backend_base import BaseBackend
@@ -12,12 +13,11 @@ from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.common_data import IPEXLLMModelConfig, Model, ModelPreset
 from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
-import huggingface_hub
 
 DEFAULT_MODEL_PRESET = ModelPreset(
     preferred_locale=DEFAULT_LOCALE,  # type: ignore[arg-type]
     supports_tool_calling=False,
-    enable_internal_tools=True,
+    enable_internal_tools=False,
 )
 
 DEFAULT_MODEL_PRESETS: dict[str, ModelPreset] = {
@@ -74,7 +74,7 @@ class ModelManager:
             model_path: Path
 
             if raw_model_path.startswith(MODEL_PATH_HUGGINGFACE):
-                hf_model_id = raw_model_path[len(MODEL_PATH_HUGGINGFACE):]
+                hf_model_id = raw_model_path[len(MODEL_PATH_HUGGINGFACE) :]
                 hf_model_path = huggingface_hub.snapshot_download(hf_model_id)
                 model_path = Path(hf_model_path)
             else:
@@ -144,19 +144,36 @@ class ModelManager:
     def get_model(self, model_id: str) -> Model | None:
         return self._models.get(model_id)
 
-    def load_huggingface_model(self, huggingface_id: str, backend_id: str, for_task: str, skip_if_loaded=False) -> None:
+    def load_huggingface_model(
+        self,
+        huggingface_id: str,
+        backend_id: str,
+        for_task: str,
+        skip_if_loaded: bool = False,
+        model_preset: ModelPreset | None = None,
+    ) -> None:
         backend = self._backends.get(backend_id)
 
         if backend is None:
             raise ValueError(f"Unknown backend {backend_id}")
 
-        if huggingface_id in self._models and not skip_if_loaded:
-            raise ValueError(f"Model {huggingface_id} from huggingface is already loaded!")
+        if huggingface_id in self._models:
+            if not skip_if_loaded:
+                raise ValueError(f"Model {huggingface_id} from huggingface is already loaded!")
+
+            self._log.warning("Model %s from huggingface is already loaded, skip loading.", huggingface_id)
 
         self._log.info("Downloading model %s from huggingface...", huggingface_id)
 
         model_path = Path(huggingface_hub.snapshot_download(huggingface_id))
         model_generation_variant = self.__determine_model_generation_variant(model_path)
+
+        preset: ModelPreset
+
+        if model_preset is not None:
+            preset = model_preset
+        else:
+            preset = DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET)
 
         model = Model(
             id=huggingface_id,
@@ -164,9 +181,9 @@ class ModelManager:
             path=model_path,
             task=for_task,
             generation_variant=model_generation_variant,
-            preset=DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET),
+            preset=preset,
             ipex_llm=None,
-            create_time=datetime.now()
+            create_time=datetime.now(),
         )
 
         backend.load_model(model)

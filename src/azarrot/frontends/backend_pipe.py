@@ -174,6 +174,6 @@ class BackendPipe:
 
     def generate_embeddings(
         self, model: Model, request: EmbeddingsGenerationRequest
-    ) -> tuple[list[float], GenerationStatistics]:
+    ) -> tuple[list[list[float]], GenerationStatistics]:
         bk = self._backends[model.backend]
         return bk.generate_embeddings(request)

@@ -125,10 +125,7 @@ class Server:
         uvicorn.run(self.api, host=self.config.host, port=self.config.port)
 
 
-def create_server(
-    config: ServerConfig | None = None,
-    enable_backends: list[type[BaseBackend]] | None = None
-) -> Server:
+def create_server(config: ServerConfig | None = None, enable_backends: list[type[BaseBackend]] | None = None) -> Server:
     log.info("Azarrot is initializing...")
 
     if config is None:
@@ -162,9 +159,7 @@ def create_server(
 
     api = FastAPI()
 
-    frontends = [
-        OpenAIFrontend(model_manager, backend_pipe, api, working_dirs)
-    ]
+    frontends = [OpenAIFrontend(model_manager, backend_pipe, api, working_dirs)]
 
     return Server(
         config=config,
@@ -172,7 +167,7 @@ def create_server(
         backend_pipe=backend_pipe,
         backends=backends,
         frontends=frontends,
-        api=api
+        api=api,
     )
 
 

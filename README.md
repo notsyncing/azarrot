@@ -21,23 +21,24 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 ## Supported OpenAI features
 
 - ✅：Fully supported
-- ⭕：Partially supported
+- ☑️：Partially supported
 - ❓：Implemented, but not tested, may work or not
 - 🚧：Working in progress
 - ❌：Not supported yet
 
 |Feature|Subfeature|IPEX-LLM|OpenVINO|Remarks|
 |-------|----------|--------|--------|-------|
-|Chat|Basic chat completion|⭕|⭕|Text generation works, some parameters (like `frequency_penalty`) not implemented yet|
+|Chat|Basic chat completion|☑️|☑️|Text generation works, some parameters (like `frequency_penalty`) not implemented yet|
 |Chat|Seeding|✅|✅||
 |Chat|Streaming response|✅|✅||
 |Chat|Image input|✅|❌|InternVL2 supported|
-|Chat|Tool calling|✅|❓|Qwen2 supported|
-|Embeddings|Create embeddings|❌|⭕|`encoding_format` not implemented yet|
+|Chat|Tool calling|✅|❌|Qwen2 supported|
+|Embeddings|Create embeddings|❌|☑️|`encoding_format` not implemented yet|
 |Models|List models|✅|✅||
 
 ### Other features
 
+- Internal tool calling on OpenAI Chat API without explicit tool calling request
 - Auto-batching on OpenAI Chat API
 - Auto model downloading from huggingface
 

@@ -8,13 +8,13 @@ from typing import Any
 
 import pytest
 
-from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
+from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.config import ServerConfig
 from azarrot.server import Server, create_server
 
 
 @pytest.fixture(scope="module")
-def ipex_llm_server() -> Generator[Server, Any, Any]:
+def openvino_server() -> Generator[Server, Any, Any]:
     logging.basicConfig(level=logging.INFO)
 
     tmp_dir = tempfile.TemporaryDirectory()
@@ -22,7 +22,7 @@ def ipex_llm_server() -> Generator[Server, Any, Any]:
 
     server = create_server(
         config=ServerConfig(models_dir=tmp_path / "models", working_dir=tmp_path / "working"),
-        enable_backends=[IPEXLLMBackend],
+        enable_backends=[OpenVINOBackend],
     )
 
     server.frontends[0].set_test_mode(test_resources_root=Path(__file__).resolve().parent / Path("../resources"))

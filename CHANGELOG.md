@@ -4,6 +4,7 @@ The following are change log of each versions.
 
 ## 0.3.0 (2024-09-??)
 
+- Support list input of text on embeddings API
 - Support downloading model from huggingface
 - Support auto-batching on chat API
 - Support `top_p`, `temperature` and `seed` parameters in chat API

@@ -105,7 +105,7 @@ class ChatCompletionRequest(BaseModel):
 
 
 class CreateEmbeddingsRequest(BaseModel):
-    input: str
+    input: str | list[str]
     model: str
     encoding_format: Literal["float", "base64"] = Field(default="float")
     dimensions: int | None = None

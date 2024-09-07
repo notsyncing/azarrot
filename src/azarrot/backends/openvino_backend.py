@@ -3,6 +3,7 @@ import logging
 import threading
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from types import MethodType
 from typing import Any, cast
 
@@ -98,6 +99,7 @@ class OpenVINOBackend(BaseBackend):
     _log = logging.getLogger(__name__)
     _ov = openvino.Core()
     _models: dict[str, LoadedModel]
+    _default_device: str = "CPU"
 
     def __init__(self, config: ServerConfig) -> None:
         super().__init__(config)
@@ -107,6 +109,15 @@ class OpenVINOBackend(BaseBackend):
 
         self.__print_device_list()
 
+        for device in self._ov.available_devices:
+            device_type = self._ov.get_property(device, "DEVICE_TYPE")
+
+            if device_type == openvino.properties.device.Type.DISCRETE:
+                self._default_device = device
+                break
+
+        self._log.info("Using default device: %s", self._default_device)
+
     def id(self) -> str:
         return BACKEND_ID_OPENVINO
 
@@ -114,7 +125,12 @@ class OpenVINOBackend(BaseBackend):
         self._log.info("OpenVINO Available devices:")
 
         for device in self._ov.available_devices:
-            self._log.info("%s: %s", device, self._ov.get_property(device, "FULL_DEVICE_NAME"))
+            self._log.info(
+                "%s (%s): %s",
+                device,
+                self._ov.get_property(device, "DEVICE_TYPE"),
+                self._ov.get_property(device, "FULL_DEVICE_NAME"),
+            )
 
     def __patch_model(self, original_model: Any) -> Any:
         cast(Any, original_model).compiled_model = None
@@ -133,19 +149,29 @@ class OpenVINOBackend(BaseBackend):
 
         model_class = TASK_MODEL_MAP[model.task]
         model_path = model.path.absolute()
+        openvino_model_file_path = model_path / Path("openvino_model.xml")
+        need_export = not openvino_model_file_path.exists()
+        need_load_in_4bit = need_export
 
-        device = self._server_config.model_device_map.get(model.id, "CPU")
+        device = self._server_config.model_device_map.get(model.id, self._default_device)
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
         ov_config = {"PERFORMANCE_HINT": "THROUGHPUT"}
 
         use_cache = model.task == "text-generation-with-past"
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
 
         ov_model: Any = self.__patch_model(
             model_class.from_pretrained(
-                model_path, device=device, use_cache=use_cache, ov_config=ov_config, compile=False
+                model_path,
+                device=device,
+                use_cache=use_cache,
+                ov_config=ov_config,
+                compile=False,
+                export=need_export,
+                load_in_4bit=need_load_in_4bit,
+                trust_remote_code=True,
             )
         )
 
@@ -234,12 +260,14 @@ class OpenVINOBackend(BaseBackend):
 
         return task, streamer, gen_stats
 
-    def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
+    def generate_embeddings(
+        self, request: EmbeddingsGenerationRequest
+    ) -> tuple[list[list[float]], GenerationStatistics]:
         loaded_model = self.__get_model(request.model_id)
 
         gen_stats = GenerationStatistics(
             start_time=datetime.now(),
-            first_token_time=datetime.max,
+            first_token_time=datetime.now(),
             end_time=datetime.max,
             prompt_tokens=0,
             completion_tokens=0,
@@ -249,13 +277,20 @@ class OpenVINOBackend(BaseBackend):
             "feature-extraction", loaded_model.model, tokenizer=loaded_model.tokenizer, trust_remote_code=True
         )
 
-        outputs = cast(Tensor, pipe(request.text, return_tensors=True))
+        outputs: Any = pipe(request.text, return_tensors=True)
+        result = []
 
-        normalized_embeddings = torch.nn.functional.normalize(outputs, dim=-1)
-        embeddings = normalized_embeddings[0][0]
+        if not isinstance(outputs, list):
+            outputs = [outputs]
 
-        gen_stats.prompt_tokens = outputs.size()[1]
-        gen_stats.completion_tokens = outputs.size()[2]
+        for output in outputs:
+            normalized_embeddings = torch.nn.functional.normalize(output, dim=-1)
+            embeddings = normalized_embeddings[0][0]
+            result.append(embeddings.tolist())
+
+            gen_stats.prompt_tokens = gen_stats.prompt_tokens + output.size()[1]
+            gen_stats.completion_tokens = gen_stats.completion_tokens + output.size()[2]
+
         gen_stats.end_time = datetime.now()
 
-        return cast(Tensor, embeddings).tolist(), gen_stats
+        return result, gen_stats

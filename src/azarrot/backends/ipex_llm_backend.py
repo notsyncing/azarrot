@@ -264,5 +264,7 @@ class IPEXLLMBackend(BaseBackend):
 
         return task, streamer, gen_stats
 
-    def generate_embeddings(self, request: EmbeddingsGenerationRequest) -> tuple[list[float], GenerationStatistics]:
+    def generate_embeddings(
+        self, request: EmbeddingsGenerationRequest
+    ) -> tuple[list[list[float]], GenerationStatistics]:
         raise NotImplementedError

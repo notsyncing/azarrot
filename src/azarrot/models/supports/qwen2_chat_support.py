@@ -94,7 +94,7 @@ QWEN2_MODEL_TOOL_CALL_CONFIG = ModelToolCallConfig(
             ## 你拥有如下工具：
 
             {% for tool in tools %}
-            ### {{tool.display_name or tool.name}}
+            ### {{tool.name}}
 
             {{tool.name}}: {{tool.description}} 输入参数：{{tool.parameters_json()}} 此工具的输入应为JSON对象。
             {% endfor %}

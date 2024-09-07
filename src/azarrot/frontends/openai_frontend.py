@@ -51,6 +51,8 @@ class OpenAIFrontend:
     _model_manager: ModelManager
     _backend_pipe: BackendPipe
     _working_dirs: WorkingDirectories
+    _test_mode: bool = False
+    _test_resources_root: Path | None = None
 
     def __init__(
         self, model_manager: ModelManager, backend_pipe: BackendPipe, api: FastAPI, working_dirs: WorkingDirectories
@@ -72,6 +74,10 @@ class OpenAIFrontend:
         router.add_api_route("/v1/embeddings", self.create_embeddings, methods=["POST"])
 
         api.include_router(router)
+
+    def set_test_mode(self, test_mode: bool = True, test_resources_root: Path | None = None) -> None:
+        self._test_mode = test_mode
+        self._test_resources_root = test_resources_root
 
     def __to_openai_model(self, model: Model) -> dict:
         return {"id": model.id, "object": "model", "created": int(model.create_time.timestamp()), "owned_by": "openai"}
@@ -105,6 +111,11 @@ class OpenAIFrontend:
 
             self._log.info("Downloading image from %s to %s", image_url, local_file)
             urllib.request.urlretrieve(image_url, local_file)  # noqa: S310
+        elif image_url.startswith("test-resources://") and self._test_mode:
+            if self._test_resources_root is None:
+                raise ValueError("Test mode enabled, but test resources root path is not specified!")
+
+            local_file = (self._test_resources_root / Path(image_url[len("test-resources://") :])).resolve()
         else:
             local_file = (self._working_dirs.uploaded_images / image_url).resolve()
             self.__check_path(local_file)
@@ -178,9 +189,7 @@ class OpenAIFrontend:
 
         return result
 
-    def __to_backend_tool_parameters(
-        self, tool_parameters: dict[str, Any] | None
-    ) -> list[LocalizedToolParameter]:
+    def __to_backend_tool_parameters(self, tool_parameters: dict[str, Any] | None) -> list[LocalizedToolParameter]:
         if tool_parameters is None:
             return []
 
@@ -196,10 +205,7 @@ class OpenAIFrontend:
         if "properties" in tool_parameters:
             for k, v in tool_parameters["properties"].items():
                 p = LocalizedToolParameter(
-                    name=k,
-                    description=v.get("description"),
-                    type=v.get("type"),
-                    required=k in required_params
+                    name=k, description=v.get("description"), type=v.get("type"), required=k in required_params
                 )
 
                 params.append(p)
@@ -400,13 +406,15 @@ class OpenAIFrontend:
     def create_embeddings(self, request: CreateEmbeddingsRequest) -> dict:
         model = self.__get_model(request.model)
         gen_req = EmbeddingsGenerationRequest(request.model, request.input)
-        data, gen_stats = self._backend_pipe.generate_embeddings(model, gen_req)
+        data_list, gen_stats = self._backend_pipe.generate_embeddings(model, gen_req)
 
         self.__log_generation_statistics(gen_stats)
 
         return {
             "object": "list",
-            "data": [{"object": "embedding", "embedding": data, "index": 0}],
+            "data": [
+                {"object": "embedding", "embedding": data, "index": index} for index, data in enumerate(data_list)
+            ],
             "model": request.model,
             "usage": {
                 "prompt_tokens": gen_stats.prompt_tokens,
