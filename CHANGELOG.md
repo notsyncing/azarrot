@@ -2,6 +2,10 @@
 
 The following are change log of each versions.
 
+## 0.4.0 (2024-??-??)
+
+- WIP
+
 ## 0.3.0 (2024-09-08)
 
 - Add docker image build
