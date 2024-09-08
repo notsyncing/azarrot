@@ -36,7 +36,7 @@ Install
 With Docker or podman
 ^^^^^^^^^^^^^^^^^^^^^
 
-Image: `ghcr.io/notsyncing/azarrot:latest`
+Image: `ghcr.io/notsyncing/azarrot:main`
 
 See `docker/docker-compose.yml` for example.
 

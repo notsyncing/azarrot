@@ -78,7 +78,7 @@ Azarrot is tested on Ubuntu 22.04 and python 3.10.
 
 ### With Docker or podman
 
-Image: `ghcr.io/notsyncing/azarrot:latest`
+Image: `ghcr.io/notsyncing/azarrot:main`
 
 See `docker/docker-compose.yml` for configuration example.
 
