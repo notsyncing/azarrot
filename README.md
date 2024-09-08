@@ -76,6 +76,14 @@ Azarrot is tested on Ubuntu 22.04 and python 3.10.
 
 > WARNING: This project is still in early stages. Bugs are expected.
 
+### With Docker or podman
+
+Image: `ghcr.io/notsyncing/azarrot:latest`
+
+See `docker/docker-compose.yml` for configuration example.
+
+### Install from PyPI
+
 First, install azarrot from PyPI:
 
 ```bash

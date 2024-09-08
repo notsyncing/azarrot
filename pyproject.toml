@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "setuptools_scm[toml]>=8"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -69,9 +69,6 @@ build = [
 
 [project.scripts]
 azarrot = "azarrot.server:main"
-
-# Enables the usage of setuptools_scm
-[tool.setuptools_scm]
 
 [tool.ruff]
 line-length = 120

@@ -2,8 +2,9 @@
 
 The following are change log of each versions.
 
-## 0.3.0 (2024-09-??)
+## 0.3.0 (2024-09-08)
 
+- Add docker image build
 - Support list input of text on embeddings API
 - Support downloading model from huggingface
 - Support auto-batching on chat API

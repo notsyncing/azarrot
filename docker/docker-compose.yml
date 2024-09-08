@@ -1,0 +1,21 @@
+version: '3.1'
+
+services:
+  azarrot:
+    image: azarrot:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    devices:
+      - /dev/dri
+    volumes:
+      - /mnt/data/ai/azarrot/models:/app/models:Z
+      - /mnt/data/ai/azarrot/working:/app/working:Z
+    group_add:
+      - keep-groups
+    userns_mode: keep-id
+    restart: always
+    ports:
+      - 8080:8080
+    environment:
+      https_proxy: "http://192.168.122.1:8118"

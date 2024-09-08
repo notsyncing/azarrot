@@ -1,0 +1,13 @@
+models_dir: ./models
+working_dir: ./working
+
+host: 127.0.0.1
+port: 8080
+
+model_device_map:
+  Nxcode-CQ-7B-orpo-ov-int4: GPU.1
+  deepseek-coder-1.3b-instruct-ov-int4: CPU
+  Nxcode-CQ-7B-orpo-ipex-llm: xpu:0
+  CodeQwen1.5-7B-ipex-llm: xpu:0
+  InternVL2-8B-ipex-llm: xpu:0
+  Qwen2-7B-Instruct-ipex-llm: xpu:0
