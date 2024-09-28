@@ -120,9 +120,18 @@ class Server:
     frontends: list[OpenAIFrontend]
     api: FastAPI
 
+    _uvicorn_server: uvicorn.Server | None = None
+
     def start(self) -> None:
         log.info("Starting API server...")
-        uvicorn.run(self.api, host=self.config.host, port=self.config.port)
+        uvicorn_config = uvicorn.Config(self.api, host=self.config.host, port=self.config.port)
+        self._uvicorn_server = uvicorn.Server(uvicorn_config)
+        self._uvicorn_server.run()
+
+    def stop(self) -> None:
+        if self._uvicorn_server is not None:
+            self._uvicorn_server.should_exit = True
+            self._uvicorn_server = None
 
 
 def create_server(config: ServerConfig | None = None, enable_backends: list[type[BaseBackend]] | None = None) -> Server:

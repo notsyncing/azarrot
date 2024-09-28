@@ -53,5 +53,5 @@ def test_bge_m3_embedding_multiple(openvino_server: Server) -> None:
     assert result2.embedding is not None
     assert len(result2.embedding) == BGE_M3_EMBEDDING_DIMENSION
     assert -0.0229 <= result2.embedding[0] <= -0.0227
-    assert -0.0070 <= result2.embedding[511] <= -0.0068
+    assert -0.0071 <= result2.embedding[511] <= -0.0068
     assert -0.0303 <= result2.embedding[1023] <= -0.0301

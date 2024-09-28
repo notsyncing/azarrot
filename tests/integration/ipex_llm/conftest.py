@@ -34,4 +34,7 @@ def ipex_llm_server() -> Generator[Server, Any, Any]:
 
     yield server
 
+    server.stop()
     tmp_dir.cleanup()
+
+    time.sleep(5)
