@@ -113,6 +113,8 @@ class IPEXLLMBackend(BaseBackend):
             model_path, load_in_4bit=True, optimize_model=True, trust_remote_code=True, **model_kwargs
         ).to(device)
 
+        ipex_model.eval()
+
         self._models[model.id] = LoadedModel(model, ipex_model, tokenizer, device)
 
         self._log.info("Loaded model %s", model.id)

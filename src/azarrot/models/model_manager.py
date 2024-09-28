@@ -80,10 +80,7 @@ class ModelManager:
                 if not hf_local_dir.exists():
                     hf_local_dir.mkdir(parents=True)
 
-                hf_model_path = huggingface_hub.snapshot_download(
-                    hf_model_id,
-                    local_dir=hf_local_dir
-                )
+                hf_model_path = huggingface_hub.snapshot_download(hf_model_id, local_dir=hf_local_dir)
 
                 model_path = Path(hf_model_path)
             else:

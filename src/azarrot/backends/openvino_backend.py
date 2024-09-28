@@ -175,6 +175,7 @@ class OpenVINOBackend(BaseBackend):
             )
         )
 
+        ov_model.eval()
         ov_model.compile()
 
         self._models[model.id] = LoadedModel(model, ov_model, tokenizer, device)

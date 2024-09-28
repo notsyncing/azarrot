@@ -210,7 +210,7 @@ class DeviceWorker:
                 self._log.info(f"Device worker {self._config.device} has done a batch of {fetched_count} tasks.")
 
     def put(self, task: TaskReference) -> None:
-        self._log.info(f"Device worker {self._config.device} has received task {task}")
+        self._log.debug(f"Device worker {self._config.device} has received task {task}")
         self._queue.put(task)
 
     def stop(self) -> None:

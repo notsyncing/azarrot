@@ -7,7 +7,6 @@ from queue import Queue
 from typing import Any, Generic, TypeVar, cast
 
 import torch
-from torch import Tensor
 from transformers import AutoTokenizer, PreTrainedModel, TextIteratorStreamer, set_seed
 
 from azarrot.common_data import GenerationMessage, GenerationStatistics, ModelQuirks, TextGenerationMessageContent
@@ -74,7 +73,7 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     def get_completion_tokens(self) -> int:
         return self._generation_statistics.completion_tokens
 
-    def put(self, value: Tensor) -> None:
+    def put(self, value: torch.Tensor) -> None:
         if self._cut_text:
             return
 
@@ -224,7 +223,7 @@ class BatchedCustomTextIteratorStreamer(CustomTextIteratorStreamer):
             **first_streamer.decode_kwargs,
         )
 
-    def put(self, value: Tensor) -> None:
+    def put(self, value: torch.Tensor) -> None:
         size = value.shape[0]
 
         for i in range(size):
@@ -313,7 +312,8 @@ class TransformersGenerationMethods(GenerationMethods):
         failed = False
 
         try:
-            self.model.generate(**self.generation_kwargs)
+            with torch.inference_mode():
+                self.model.generate(**self.generation_kwargs)
         except StopGenerationError:
             pass
         except:
