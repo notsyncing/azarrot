@@ -13,14 +13,13 @@ readme = "README.md"
 requires-python = "<= 3.11.99"
 version = "0.4.0"
 dependencies = [
-    "openvino==2024.3",
-    "optimum[openvino]==1.20.0",
-    "ipex-llm[xpu]==2.1.0",
-    "fastapi==0.111.0",
-    "pyyaml==6.0.1",
-    "decord==0.6.0",
+    "openvino==2024.4",
+    "optimum[openvino]==1.22.0",
+    "ipex-llm[xpu]==2.2.0b20240927",
+    "fastapi==0.115.0",
+    "pyyaml==6.0.2",
     "jinja2==3.1.4",
-    "huggingface_hub==0.24.6"
+    "huggingface_hub==0.25.0",
 ]
 classifiers = [
   # How mature is this project? Common values are
@@ -47,6 +46,7 @@ dev = [
     "azarrot[test]",
     "azarrot[doc]",
     "azarrot[build]",
+    "azarrot[model_supports]",
 ]
 lint = [
     "mypy",
@@ -65,6 +65,11 @@ doc = [
 ]
 build = [
     "build[virtualenv]==1.0.3",
+]
+model_supports = [
+    "decord==0.6.0",
+    "einops==0.8.0",
+    "timm==1.0.9",
 ]
 
 [project.scripts]
