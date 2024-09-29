@@ -12,6 +12,7 @@ from azarrot.tools.tool import LocalizedToolDescription
 class WorkingDirectories:
     root: Path
     uploaded_images: Path
+    file_store: Path
 
 
 @dataclass

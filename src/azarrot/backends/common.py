@@ -177,7 +177,7 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
             self._failed = True
             self.text_queue.put(self.stop_signal)
 
-    def __next__(self) -> Any:  # noqa: D105
+    def __next__(self) -> Any:
         if self._failed:
             raise ValueError("TextStreamer is forced to fail")
 

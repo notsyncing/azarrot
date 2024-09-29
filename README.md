@@ -35,6 +35,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Chat|Tool calling|✅|❌|Qwen2 supported|
 |Embeddings|Create embeddings|❌|☑️|`encoding_format` not implemented yet|
 |Models|List models|✅|✅||
+|Files|Upload, list, retrieve, delete, retrieve content|✅|✅||
 
 ### Other features
 
@@ -50,6 +51,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |InternVL2-8B|https://huggingface.co/OpenGVLab/InternVL2-8B|Intel GPU|IPEX-LLM|Image input supported|
 |bge-m3|https://huggingface.co/BAAI/bge-m3|Intel GPU, CPU|OpenVINO|Accuracy may decrease if quantized to int8|
 |Qwen2-7B-Instruct|https://huggingface.co/Qwen/Qwen2-7B-Instruct|Intel GPU|IPEX-LLM|Tool calling supported|
+|Qwen2.5-Coder-7B-Instruct|https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct|Intel GPU|IPEX-LLM||
 
 Other untested models may work or not.
 

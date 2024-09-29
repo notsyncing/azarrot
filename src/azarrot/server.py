@@ -3,15 +3,20 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+import alembic
+import alembic.command
+import alembic.config
 import uvicorn
 import yaml
 from fastapi import FastAPI
+from sqlalchemy import Engine, create_engine
 
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.common_data import WorkingDirectories
 from azarrot.config import ServerConfig
+from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.openai_frontend import OpenAIFrontend
 from azarrot.models.chat_templates import ChatTemplateManager
@@ -99,17 +104,40 @@ def __parse_arguments_and_load_config() -> ServerConfig:
     return config
 
 
+def __create_directory(base_dir: Path, target_dir_name: str) -> Path:
+    path = base_dir / target_dir_name
+
+    if not path.exists():
+        path.mkdir(parents=True)
+
+    return path
+
+
 def __create_working_directories(config: ServerConfig) -> WorkingDirectories:
     if not config.working_dir.exists():
         config.working_dir.mkdir(parents=True)
 
-    image_temp_path = config.working_dir / "uploaded_images"
+    image_temp_path = __create_directory(config.working_dir, "upload_images")
+    file_store_path = __create_directory(config.working_dir, "uploaded_files")
 
-    if not image_temp_path.exists():
-        image_temp_path.mkdir(parents=True)
+    return WorkingDirectories(
+        root=config.working_dir,
+        uploaded_images=image_temp_path,
+        file_store=file_store_path
+    )
 
-    return WorkingDirectories(root=config.working_dir, uploaded_images=image_temp_path)
 
+def __init_database(database_path: Path) -> Engine:
+    url = f"sqlite:///{database_path.absolute()}"
+    migration_script_path = str(Path(__file__).absolute().parent / Path("alembic"))
+    log.info("Database url: %s, migration scripts at: %s", url, migration_script_path)
+
+    alembic_cfg = alembic.config.Config()
+    alembic_cfg.set_main_option("script_location", migration_script_path)
+    alembic_cfg.set_main_option("sqlalchemy.url", url)
+    alembic.command.upgrade(alembic_cfg, "head")
+
+    return create_engine(url)
 
 @dataclass
 class Server:
@@ -148,6 +176,9 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
 
     working_dirs = __create_working_directories(config)
 
+    db = __init_database(working_dirs.root / "azarrot.db")
+    file_store = FileStore(config, working_dirs.file_store, db)
+
     chat_template_manager = ChatTemplateManager(GLOBAL_TOOL_MANAGER)
 
     backends: list[BaseBackend]
@@ -168,7 +199,7 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
 
     api = FastAPI()
 
-    frontends = [OpenAIFrontend(model_manager, backend_pipe, api, working_dirs)]
+    frontends = [OpenAIFrontend(model_manager, backend_pipe, file_store, api, working_dirs)]
 
     return Server(
         config=config,

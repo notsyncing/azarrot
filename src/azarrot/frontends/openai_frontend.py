@@ -28,6 +28,7 @@ from azarrot.common_data import (
     WorkingDirectories,
 )
 from azarrot.config import DEFAULT_MAX_TOKENS
+from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.openai_support.openai_data import (
     AssistantChatCompletionMessage,
@@ -42,6 +43,7 @@ from azarrot.frontends.openai_support.openai_data import (
     UserChatImageUrl,
     UserChatTextContentItem,
 )
+from azarrot.frontends.openai_support.openai_files import OpenAIFiles
 from azarrot.models.model_manager import ModelManager
 from azarrot.tools.tool import LocalizedToolDescription, LocalizedToolParameter
 
@@ -51,15 +53,22 @@ class OpenAIFrontend:
     _model_manager: ModelManager
     _backend_pipe: BackendPipe
     _working_dirs: WorkingDirectories
+    _openai_files: OpenAIFiles
     _test_mode: bool = False
     _test_resources_root: Path | None = None
 
     def __init__(
-        self, model_manager: ModelManager, backend_pipe: BackendPipe, api: FastAPI, working_dirs: WorkingDirectories
+        self,
+        model_manager: ModelManager,
+        backend_pipe: BackendPipe,
+        file_store: FileStore,
+        api: FastAPI,
+        working_dirs: WorkingDirectories
     ) -> None:
         self._model_manager = model_manager
         self._working_dirs = working_dirs
         self._backend_pipe = backend_pipe
+        self._openai_files = OpenAIFiles(file_store)
 
         router = APIRouter()
 
@@ -72,6 +81,13 @@ class OpenAIFrontend:
 
         # Embeddings API
         router.add_api_route("/v1/embeddings", self.create_embeddings, methods=["POST"])
+
+        # Files API
+        router.add_api_route("/v1/files", self._openai_files.upload_file, methods=["POST"])
+        router.add_api_route("/v1/files", self._openai_files.get_file_list, methods=["GET"])
+        router.add_api_route("/v1/files/{file_id}", self._openai_files.get_file_info, methods=["GET"])
+        router.add_api_route("/v1/files/{file_id}", self._openai_files.delete_file, methods=["DELETE"])
+        router.add_api_route("/v1/files/{file_id}/content", self._openai_files.get_file_content, methods=["GET"])
 
         api.include_router(router)
 
