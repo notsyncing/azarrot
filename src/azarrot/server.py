@@ -89,6 +89,9 @@ def __parse_arguments_and_load_config() -> ServerConfig:
             if "auto_batch_max_size" in config_yaml:
                 config.auto_batch_max_size = config_yaml["auto_batch_max_size"]
 
+            if "partial_file_expire_time" in config_yaml:
+                config.partial_file_expire_time = config_yaml["partial_file_expire_time"]
+
     if args.models_dir is not None:
         config.models_dir = Path(args.models_dir).resolve()
 
@@ -120,11 +123,7 @@ def __create_working_directories(config: ServerConfig) -> WorkingDirectories:
     image_temp_path = __create_directory(config.working_dir, "upload_images")
     file_store_path = __create_directory(config.working_dir, "uploaded_files")
 
-    return WorkingDirectories(
-        root=config.working_dir,
-        uploaded_images=image_temp_path,
-        file_store=file_store_path
-    )
+    return WorkingDirectories(root=config.working_dir, uploaded_images=image_temp_path, file_store=file_store_path)
 
 
 def __init_database(database_path: Path) -> Engine:
@@ -138,6 +137,7 @@ def __init_database(database_path: Path) -> Engine:
     alembic.command.upgrade(alembic_cfg, "head")
 
     return create_engine(url)
+
 
 @dataclass
 class Server:

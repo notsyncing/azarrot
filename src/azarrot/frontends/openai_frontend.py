@@ -63,7 +63,7 @@ class OpenAIFrontend:
         backend_pipe: BackendPipe,
         file_store: FileStore,
         api: FastAPI,
-        working_dirs: WorkingDirectories
+        working_dirs: WorkingDirectories,
     ) -> None:
         self._model_manager = model_manager
         self._working_dirs = working_dirs
@@ -88,6 +88,12 @@ class OpenAIFrontend:
         router.add_api_route("/v1/files/{file_id}", self._openai_files.get_file_info, methods=["GET"])
         router.add_api_route("/v1/files/{file_id}", self._openai_files.delete_file, methods=["DELETE"])
         router.add_api_route("/v1/files/{file_id}/content", self._openai_files.get_file_content, methods=["GET"])
+
+        # Uploads API
+        router.add_api_route("/v1/uploads", self._openai_files.create_upload, methods=["POST"])
+        router.add_api_route("/v1/uploads/{upload_id}/parts", self._openai_files.add_upload_part, methods=["POST"])
+        router.add_api_route("/v1/uploads/{upload_id}/complete", self._openai_files.complete_upload, methods=["POST"])
+        router.add_api_route("/v1/uploads/{upload_id}/cancel", self._openai_files.cancel_upload, methods=["POST"])
 
         api.include_router(router)
 

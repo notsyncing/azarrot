@@ -15,3 +15,5 @@ class ServerConfig:
     single_token_generation_timeout: int = 60000
     auto_batch_threshold: int = 100
     auto_batch_max_size: int = 8
+
+    partial_file_expire_time: int = 3600 * 1000

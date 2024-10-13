@@ -10,6 +10,7 @@ import pytest
 
 from azarrot.config import ServerConfig
 from azarrot.server import Server, create_server
+from tests.integration.utils import get_file_store
 
 
 @pytest.fixture(scope="module")
@@ -37,3 +38,8 @@ def no_backend_server() -> Generator[Server, Any, Any]:
     tmp_dir.cleanup()
 
     time.sleep(5)
+
+@pytest.fixture(autouse=True)
+def clear_database(no_backend_server: Server) -> None:
+    file_store = get_file_store(no_backend_server)
+    file_store.clear_database()

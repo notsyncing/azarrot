@@ -4,10 +4,13 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
+
+
 @dataclass
 class OpenAIList(Generic[T]):
     data: list[T]
     object: str = "list"
+
 
 class UserChatImageUrl(BaseModel):
     url: str

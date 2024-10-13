@@ -36,6 +36,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Embeddings|Create embeddings|❌|☑️|`encoding_format` not implemented yet|
 |Models|List models|✅|✅||
 |Files|Upload, list, retrieve, delete, retrieve content|✅|✅||
+|Uploads|Create, upload, complete, cancel|✅|✅||
 
 ### Other features
 
