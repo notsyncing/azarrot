@@ -26,7 +26,7 @@ class OpenAIFile:
             bytes=store_file.size,
             created_at=int(store_file.create_time.timestamp()),
             filename=store_file.filename if store_file.filename is not None else "",
-            purpose=store_file.purpose if store_file.purpose is not None else ""
+            purpose=store_file.purpose if store_file.purpose is not None else "",
         )
 
 
@@ -62,8 +62,9 @@ class OpenAIUpload:
             filename=store_partial_file.filename,
             purpose=store_partial_file.purpose if store_partial_file.purpose is not None else "",
             status=status,
-            expires_at=int(store_partial_file.expire_time.timestamp())
+            expires_at=int(store_partial_file.expire_time.timestamp()),
         )
+
 
 class OpenAIFiles:
     _log = logging.getLogger(__name__)
@@ -79,9 +80,7 @@ class OpenAIFiles:
     def get_file_list(self) -> OpenAIList[OpenAIFile]:
         files = self._file_store.get_all_file_list()
 
-        return OpenAIList(
-            data=[OpenAIFile.from_store_file(f) for f in files]
-        )
+        return OpenAIList(data=[OpenAIFile.from_store_file(f) for f in files])
 
     def get_file_info(self, file_id: str) -> OpenAIFile:
         info = self._file_store.get_file_info(file_id)
@@ -101,11 +100,7 @@ class OpenAIFiles:
             self._log.error("Failed to delete file %s", file_id, exc_info=True)
             success = False
 
-        return {
-            "id": file_id,
-            "object": "file",
-            "deleted": success
-        }
+        return {"id": file_id, "object": "file", "deleted": success}
 
     def get_file_content(self, file_id: str) -> StreamingResponse:
         file_info, file_handle = self._file_store.get_file_content(file_id)
@@ -134,7 +129,7 @@ class OpenAIFiles:
             "id": part_info.id,
             "object": "upload.part",
             "created_at": int(part_info.create_time.timestamp()),
-            "upload_id": part_info.partial_file_id
+            "upload_id": part_info.partial_file_id,
         }
 
     def complete_upload(self, upload_id: str, request: OpenAICompleteUploadRequest) -> dict[str, Any]:
@@ -151,7 +146,7 @@ class OpenAIFiles:
             "purpose": partial_file_info.purpose,
             "status": "completed",
             "expires_at": int(partial_file_info.expire_time.timestamp()),
-            "file": OpenAIFile.from_store_file(file_info)
+            "file": OpenAIFile.from_store_file(file_info),
         }
 
     def cancel_upload(self, upload_id: str) -> OpenAIUpload:

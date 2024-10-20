@@ -17,9 +17,7 @@ def test_read_from_multiple_files() -> None:
     base_file2 = create_temp_file("content2")
     base_file3 = create_temp_file("content3")
 
-    merged_file = MergedReadOnlyBinaryFile(
-        [Path(base_file1.name), Path(base_file2.name), Path(base_file3.name)]
-    )
+    merged_file = MergedReadOnlyBinaryFile([Path(base_file1.name), Path(base_file2.name), Path(base_file3.name)])
 
     with merged_file:
         assert merged_file.read() == b"content1content2content3"
@@ -30,9 +28,7 @@ def test_read_from_multiple_files_another_order() -> None:
     base_file2 = create_temp_file("content2")
     base_file3 = create_temp_file("content3")
 
-    merged_file = MergedReadOnlyBinaryFile(
-        [Path(base_file2.name), Path(base_file1.name), Path(base_file3.name)]
-    )
+    merged_file = MergedReadOnlyBinaryFile([Path(base_file2.name), Path(base_file1.name), Path(base_file3.name)])
 
     with merged_file:
         assert merged_file.read() == b"content2content1content3"

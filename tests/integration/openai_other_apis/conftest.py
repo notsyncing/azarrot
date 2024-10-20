@@ -39,6 +39,7 @@ def no_backend_server() -> Generator[Server, Any, Any]:
 
     time.sleep(5)
 
+
 @pytest.fixture(autouse=True)
 def clear_database(no_backend_server: Server) -> None:
     file_store = get_file_store(no_backend_server)

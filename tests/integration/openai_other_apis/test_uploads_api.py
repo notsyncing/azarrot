@@ -7,12 +7,7 @@ from tests.integration.utils import create_openai_client, create_temp_file, get_
 def test_create_upload(no_backend_server: Server) -> None:
     client = create_openai_client(no_backend_server)
 
-    r = client.uploads.create(
-        bytes=100,
-        filename="test.txt",
-        mime_type="text/plain",
-        purpose="assistants"
-    )
+    r = client.uploads.create(bytes=100, filename="test.txt", mime_type="text/plain", purpose="assistants")
 
     assert r is not None
     assert r.filename == "test.txt"
@@ -104,4 +99,3 @@ def test_cancel_upload(no_backend_server: Server) -> None:
 
     file = file_store._make_store_file_part_path(part1_info.id)
     assert file.exists() is False
-

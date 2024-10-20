@@ -1,7 +1,12 @@
 import io
-from collections.abc import Iterator
+import typing
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from types import TracebackType
 from typing import BinaryIO
+
+if typing.TYPE_CHECKING:
+    from _typeshed import ReadableBuffer
 
 
 class MergedReadOnlyBinaryFile(BinaryIO):
@@ -117,3 +122,35 @@ class MergedReadOnlyBinaryFile(BinaryIO):
             raise StopIteration
 
         return b
+
+    def __enter__(self) -> BinaryIO:
+        return self
+
+    def __exit__(
+        self, t: type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None, /
+    ) -> None:
+        self.close()
+
+    def fileno(self) -> int:
+        raise io.UnsupportedOperation
+
+    def flush(self) -> None:
+        raise io.UnsupportedOperation
+
+    def isatty(self) -> bool:
+        return False
+
+    def readline(self, limit: int = -1, /) -> bytes:
+        raise NotImplementedError
+
+    def readlines(self, hint: int = -1, /) -> list[bytes]:
+        raise NotImplementedError
+
+    def truncate(self, size: int | None = None, /) -> int:  # noqa: ARG002
+        raise io.UnsupportedOperation
+
+    def write(self, s: "ReadableBuffer") -> int:  # noqa: ARG002
+        raise io.UnsupportedOperation
+
+    def writelines(self, s: Iterable["ReadableBuffer"]) -> None:  # noqa: ARG002
+        raise io.UnsupportedOperation

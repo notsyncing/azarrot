@@ -1,12 +1,12 @@
 import errno
 import hashlib
 import logging
-from mimetypes import guess_type
 import shutil
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from mimetypes import guess_type
 from pathlib import Path
 from typing import BinaryIO
 
@@ -37,7 +37,7 @@ class FileInfo:
             filename=db_file.filename,
             purpose=db_file.purpose,
             mime_type=db_file.mime_type,
-            is_partial=db_file.is_partial
+            is_partial=db_file.is_partial,
         )
 
 
@@ -77,7 +77,7 @@ class PartialFilePartInfo:
             id=str(db_obj.id),
             partial_file_id=str(db_obj.partial_file_id),
             size=db_obj.size,
-            create_time=db_obj.create_time
+            create_time=db_obj.create_time,
         )
 
 
@@ -341,16 +341,14 @@ class FileStore:
         return part_info
 
     def get_partial_file_part_info(
-        self,
-        partial_file_id: str | uuid.UUID,
-        part_id: str | uuid.UUID
+        self, partial_file_id: str | uuid.UUID, part_id: str | uuid.UUID
     ) -> PartialFilePartInfo | None:
         with Session(self._database) as db_session:
             part = db_session.scalar(
                 select(PartialFilePart).where(
                     and_(
                         PartialFilePart.id == self.__sanitize_uuid(part_id),
-                        PartialFilePart.partial_file_id == self.__sanitize_uuid(partial_file_id)
+                        PartialFilePart.partial_file_id == self.__sanitize_uuid(partial_file_id),
                     )
                 )
             )
@@ -380,7 +378,7 @@ class FileStore:
 
             file_parts: list[PartialFilePart] = []
             total_part_size = 0
-            file_part_id_list = [self.__sanitize_uuid(id) for id in ordered_file_parts]
+            file_part_id_list = [self.__sanitize_uuid(fid) for fid in ordered_file_parts]
 
             for index, file_part_id in enumerate(file_part_id_list):
                 file_part = db_session.execute(
@@ -417,14 +415,16 @@ class FileStore:
                 if md5_checksum != expected_checksum_md5:
                     raise ValueError(
                         "Merged file from partial file id %s has different md5 checksum (%s) as expected (%s)",
-                        md5_checksum, expected_checksum_md5
+                        md5_checksum,
+                        expected_checksum_md5,
                     )
 
             if expected_checksum_sha256 is not None:
                 if checksum != expected_checksum_sha256:
                     raise ValueError(
                         "Merged file from partial file id %s has different sha256 checksum (%s) as expected (%s)",
-                        checksum, expected_checksum_sha256
+                        checksum,
+                        expected_checksum_sha256,
                     )
 
             merged_db_file = File()
@@ -445,12 +445,14 @@ class FileStore:
                 merged_db_file.filename,
                 merged_db_file.id,
                 merged_db_file.checksum,
-                ", ".join([str(id) for id in file_part_id_list])
+                ", ".join([str(fid) for fid in file_part_id_list]),
             )
 
             return PartialFileInfo.from_db_partial_file(partial_file), FileInfo.from_db_file(merged_db_file)
 
-    def delete_partial_file(self, partial_file_id: str | uuid.UUID, delete_merged_file = False) -> PartialFileInfo:
+    def delete_partial_file(
+        self, partial_file_id: str | uuid.UUID, delete_merged_file: bool = False
+    ) -> PartialFileInfo:
         partial_file_id = self.__sanitize_uuid(partial_file_id)
 
         with Session(self._database) as db_session:
@@ -461,9 +463,7 @@ class FileStore:
             if partial_file is None:
                 raise FileNotFoundError
 
-            merged_file = db_session.execute(
-                select(File).where(File.id == partial_file_id)
-            ).scalar_one_or_none()
+            merged_file = db_session.execute(select(File).where(File.id == partial_file_id)).scalar_one_or_none()
 
             if merged_file is not None:
                 if delete_merged_file:
