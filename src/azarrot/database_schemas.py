@@ -44,7 +44,7 @@ class PartialFile(Base):
     size: Mapped[int]
     purpose: Mapped[str | None]
     create_time: Mapped[datetime]
-    expire_time: Mapped[datetime]
+    expire_time: Mapped[datetime | None]
 
     def __repr__(self) -> str:
         return (

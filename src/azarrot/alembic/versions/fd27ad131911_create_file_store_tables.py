@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column("size", sa.Integer, nullable=False),
         sa.Column("purpose", sa.String(128)),
         sa.Column("create_time", sa.DateTime, nullable=False),
-        sa.Column("expire_time", sa.DateTime, nullable=False),
+        sa.Column("expire_time", sa.DateTime),
     )
 
     op.create_table(

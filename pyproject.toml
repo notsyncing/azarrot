@@ -23,6 +23,7 @@ dependencies = [
     "huggingface_hub==0.25.0",
     "SQLAlchemy==2.0.19",
     "alembic==1.13.3",
+    "schedule==1.2.2"
 ]
 classifiers = [
   # How mature is this project? Common values are

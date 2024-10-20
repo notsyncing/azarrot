@@ -10,6 +10,7 @@ from mimetypes import guess_type
 from pathlib import Path
 from typing import BinaryIO
 
+import schedule
 from sqlalchemy import Engine, and_, delete, select
 from sqlalchemy.orm import Session
 
@@ -46,7 +47,7 @@ class PartialFileInfo:
     id: str
     size: int
     create_time: datetime
-    expire_time: datetime
+    expire_time: datetime | None
     filename: str
     mime_type: str
     purpose: str | None
@@ -91,6 +92,50 @@ class FileStore:
         self._config = config
         self._store_path = store_path
         self._database = database
+
+        schedule.every(1).minutes.do(self._clean_expired_partial_files)
+
+    def _clean_expired_partial_files(self, specify_time_now: datetime | None = None) -> None:
+        current_time = datetime.now() if specify_time_now is None else specify_time_now
+
+        with Session(self._database) as db_session:
+            expired_partial_files = (
+                db_session.execute(
+                    select(PartialFile).where(
+                        and_(PartialFile.expire_time.is_not(None), PartialFile.expire_time < current_time)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            if len(expired_partial_files) <= 0:
+                return
+
+            for f in expired_partial_files:
+                r = db_session.execute(
+                    delete(PartialFile).where(and_(PartialFile.id == f.id, PartialFile.expire_time.is_not(None)))
+                ).rowcount
+
+                if r <= 0:
+                    continue
+
+                file_parts = (
+                    db_session.execute(select(PartialFilePart).where(PartialFilePart.partial_file_id == f.id))
+                    .scalars()
+                    .all()
+                )
+
+                for p in file_parts:
+                    path = self._make_store_file_part_path(p.id)
+                    path.unlink(missing_ok=True)
+                    db_session.delete(p)
+
+                db_session.commit()
+
+                self._log.info(
+                    "Removed expired partial file %s (name %s) created at %s", f.id, f.filename, f.create_time
+                )
 
     def _make_store_file_path(self, file_id: str | uuid.UUID) -> Path:
         return self._store_path / f"{file_id}.file"
@@ -426,6 +471,8 @@ class FileStore:
                         checksum,
                         expected_checksum_sha256,
                     )
+
+            partial_file.expire_time = None
 
             merged_db_file = File()
             merged_db_file.id = partial_file.id

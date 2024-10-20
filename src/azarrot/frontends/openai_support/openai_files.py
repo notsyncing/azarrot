@@ -55,6 +55,13 @@ class OpenAIUpload:
 
     @staticmethod
     def from_store_partial_file(store_partial_file: PartialFileInfo, status: str) -> "OpenAIUpload":
+        expires_at: int
+
+        if store_partial_file.expire_time is not None:
+            expires_at = int(store_partial_file.expire_time.timestamp())
+        else:
+            expires_at = -1
+
         return OpenAIUpload(
             id=str(store_partial_file.id),
             bytes=store_partial_file.size,
@@ -62,7 +69,7 @@ class OpenAIUpload:
             filename=store_partial_file.filename,
             purpose=store_partial_file.purpose if store_partial_file.purpose is not None else "",
             status=status,
-            expires_at=int(store_partial_file.expire_time.timestamp()),
+            expires_at=expires_at,
         )
 
 
@@ -137,6 +144,8 @@ class OpenAIFiles:
             upload_id, request.part_ids, expected_checksum_md5=request.md5
         )
 
+        expires_at = int(partial_file_info.expire_time.timestamp()) if partial_file_info.expire_time is not None else -1
+
         return {
             "id": partial_file_info.id,
             "object": "upload",
@@ -145,7 +154,7 @@ class OpenAIFiles:
             "filename": partial_file_info.filename,
             "purpose": partial_file_info.purpose,
             "status": "completed",
-            "expires_at": int(partial_file_info.expire_time.timestamp()),
+            "expires_at": expires_at,
             "file": OpenAIFile.from_store_file(file_info),
         }
 

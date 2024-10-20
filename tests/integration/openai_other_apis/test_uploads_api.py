@@ -1,3 +1,4 @@
+from datetime import datetime
 from io import BytesIO
 
 from azarrot.server import Server
@@ -23,6 +24,7 @@ def test_create_upload(no_backend_server: Server) -> None:
     assert stored_partial_file_info.purpose == r.purpose
     assert stored_partial_file_info.mime_type == "text/plain"
     assert int(stored_partial_file_info.create_time.timestamp()) == r.created_at
+    assert stored_partial_file_info.expire_time is not None
     assert int(stored_partial_file_info.expire_time.timestamp()) == r.expires_at
 
 
@@ -95,6 +97,23 @@ def test_cancel_upload(no_backend_server: Server) -> None:
     assert r.filename == stored_partial_file_info.filename
 
     file_part = file_store.get_partial_file_part_info(stored_partial_file_info.id, r.id)
+    assert file_part is None
+
+    file = file_store._make_store_file_part_path(part1_info.id)
+    assert file.exists() is False
+
+
+def test_cleanup_expired_uploads(no_backend_server: Server) -> None:
+    file_store = get_file_store(no_backend_server)
+    stored_partial_file_info = file_store.create_partial_file("test.txt", 24, "text/plain", "assistant")
+    part1_info = file_store.add_part_to_partial_file(stored_partial_file_info.id, BytesIO(b"content1"))
+
+    file_store._clean_expired_partial_files(datetime(2099, 1, 1, 0, 0, 0))  # noqa: DTZ001
+
+    file_info = file_store.get_partial_file_info(stored_partial_file_info.id)
+    assert file_info is None
+
+    file_part = file_store.get_partial_file_part_info(stored_partial_file_info.id, part1_info.id)
     assert file_part is None
 
     file = file_store._make_store_file_part_path(part1_info.id)
