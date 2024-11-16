@@ -163,7 +163,7 @@ class OpenVINOBackend(BaseBackend):
         model_path = model.path.absolute()
         openvino_model_file_path = model_path / Path("openvino_model.xml")
         need_export = not openvino_model_file_path.exists()
-        need_load_in_4bit = need_export
+        need_load_in_4bit = need_export and not model.use_original_precision
 
         device = self._server_config.model_device_map.get(model.id, self._default_device)
 

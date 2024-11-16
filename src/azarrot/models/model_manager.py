@@ -123,6 +123,7 @@ class ModelManager:
                 task=model_info["task"],
                 generation_variant=model_generation_variant,
                 preset=model_preset,
+                use_original_precision=model_info.get("use_original_precision", False),
                 ipex_llm=ipex_llm,
                 info=None,
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
@@ -162,6 +163,7 @@ class ModelManager:
         for_task: str,
         skip_if_loaded: bool = False,
         model_preset: ModelPreset | None = None,
+        use_original_precision: bool = False
     ) -> None:
         backend = self._backends.get(backend_id)
 
@@ -194,6 +196,7 @@ class ModelManager:
             task=for_task,
             generation_variant=model_generation_variant,
             preset=preset,
+            use_original_precision=use_original_precision,
             ipex_llm=None,
             info=None,
             create_time=datetime.now(),

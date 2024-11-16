@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from queue import Queue
+from queue import Empty, Queue
 from typing import Any, Generic, TypeVar, cast
 
 import torch
@@ -184,7 +184,7 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
         if not self._current_ended:
             try:
                 return super().__next__()
-            except StopIteration:
+            except (StopIteration, Empty):
                 self._current_ended = True
 
         if self._current_ended:

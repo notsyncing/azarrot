@@ -59,13 +59,14 @@ class Model:
 
     generation_variant: Literal["normal", "internvl2", "qwen2"]
     preset: ModelPreset
+    use_original_precision: bool
 
     ipex_llm: IPEXLLMModelConfig | None
 
     # The following properties are computed at runtime
 
-    info: ModelInfo | None
-    create_time: datetime
+    info: ModelInfo | None = None
+    create_time: datetime = datetime.min
 
 
 @dataclass
