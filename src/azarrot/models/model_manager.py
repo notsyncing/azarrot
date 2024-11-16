@@ -124,6 +124,7 @@ class ModelManager:
                 generation_variant=model_generation_variant,
                 preset=model_preset,
                 ipex_llm=ipex_llm,
+                info=None,
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
             )
 
@@ -141,7 +142,8 @@ class ModelManager:
             backend = self._backends[model.backend]
 
             if model.id not in self._models:
-                backend.load_model(model)
+                model_info = backend.load_model(model)
+                model.info = model_info
                 self._models[model.id] = model
 
     def get_models(self) -> list[Model]:
@@ -149,6 +151,9 @@ class ModelManager:
 
     def get_model(self, model_id: str) -> Model | None:
         return self._models.get(model_id)
+
+    def add_model(self, model: Model) -> None:
+        self._models[model.id] = model
 
     def load_huggingface_model(
         self,
@@ -168,6 +173,7 @@ class ModelManager:
                 raise ValueError(f"Model {huggingface_id} from huggingface is already loaded!")
 
             self._log.warning("Model %s from huggingface is already loaded, skip loading.", huggingface_id)
+            return
 
         self._log.info("Downloading model %s from huggingface...", huggingface_id)
 
@@ -189,10 +195,12 @@ class ModelManager:
             generation_variant=model_generation_variant,
             preset=preset,
             ipex_llm=None,
+            info=None,
             create_time=datetime.now(),
         )
 
-        backend.load_model(model)
+        model_info = backend.load_model(model)
+        model.info = model_info
 
         self._models[model.id] = model
         self._dynamic_loaded_models[model.id] = model

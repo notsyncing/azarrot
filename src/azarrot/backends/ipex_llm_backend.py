@@ -22,7 +22,14 @@ from azarrot.backends.ipex_llm_support.internvl2_processor import (
     internvl2_apply_chat_template,
     internvl2_patch_model,
 )
-from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
+from azarrot.common_data import (
+    EmbeddingModelInfo,
+    EmbeddingsGenerationRequest,
+    GenerationStatistics,
+    Model,
+    ModelInfo,
+    TextGenerationRequest,
+)
 from azarrot.config import ServerConfig
 from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
@@ -77,15 +84,20 @@ class IPEXLLMBackend(BaseBackend):
         for i in range(torch.xpu.device_count()):
             self._log.info("XPU #%s: %s", i, str(torch.xpu.get_device_properties(i)))
 
-    def load_model(self, model: Model) -> None:
-        if model.task not in TASK_MODEL_MAP:
-            self._log.error("Model %s (%s) wants task %s, which is not supported!", model.id, model.path, model.task)
+    def __extract_model_info(self, ipex_model: PreTrainedModel, task: str) -> ModelInfo:
+        if task == "feature-extraction":
+            return EmbeddingModelInfo(dimension=ipex_model.config.hidden_size)
+        else:
+            return ModelInfo()
 
-            return
+    def load_model(self, model: Model) -> ModelInfo:
+        if model.task not in TASK_MODEL_MAP:
+            raise ValueError(f"Model {model.id} ({model.path}) wants task {model.task}, which is not supported!")
 
         if model.id in self._models:
             self._log.warning("Model %s is already loaded, will skip it.", model.id)
-            return
+            assert model.info is not None
+            return model.info
 
         model_class = TASK_MODEL_MAP[model.task]
         model_path = model.path.absolute()
@@ -118,6 +130,8 @@ class IPEXLLMBackend(BaseBackend):
         self._models[model.id] = LoadedModel(model, ipex_model, tokenizer, device)
 
         self._log.info("Loaded model %s", model.id)
+
+        return self.__extract_model_info(ipex_model, model.task)
 
     def unload_model(self, model_id: str) -> None:
         if model_id not in self._models:

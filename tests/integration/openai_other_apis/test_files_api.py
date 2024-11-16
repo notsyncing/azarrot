@@ -1,8 +1,23 @@
+from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from azarrot.server import Server
+from tests.integration.openai_other_apis.fixture_utils import do_clear_database, make_no_backend_server
 from tests.integration.utils import create_openai_client, create_temp_file, get_file_store
+
+
+@pytest.fixture(scope="module")
+def no_backend_server() -> Generator[Server, Any, Any]:
+    yield from make_no_backend_server()
+
+
+@pytest.fixture(autouse=True)
+def cleanup_database(no_backend_server: Server) -> Generator[None, Any, Any]:
+    yield from do_clear_database(no_backend_server)
 
 
 def test_upload_file(no_backend_server: Server) -> None:
@@ -23,7 +38,7 @@ def test_upload_file(no_backend_server: Server) -> None:
 
     file_store = get_file_store(no_backend_server)
     stored_file_info = file_store.get_file_info(fo.id)
-    stored_file_path = file_store._make_store_file_path(fo.id)
+    stored_file_path = file_store.make_store_file_path(fo.id)
 
     assert stored_file_path is not None
     assert stored_file_path.read_text() == file_content
@@ -83,7 +98,7 @@ def test_delete_file(no_backend_server: Server) -> None:
     filename = "test.txt"
     file_content = b"Hello, World!"
     file_info = file_store.store_file(filename, "assistants", "text/plain", BytesIO(file_content))
-    file_path = file_store._make_store_file_path(file_info.id)
+    file_path = file_store.make_store_file_path(file_info.id)
 
     assert file_path is not None
 

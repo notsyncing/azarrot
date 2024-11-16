@@ -32,11 +32,14 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Chat|Seeding|✅|✅||
 |Chat|Streaming response|✅|✅||
 |Chat|Image input|✅|❌|InternVL2 supported|
-|Chat|Tool calling|✅|❌|Qwen2 supported|
+|Chat|Tool calling|✅|❓|Qwen2 supported|
 |Embeddings|Create embeddings|❌|☑️|`encoding_format` not implemented yet|
 |Models|List models|✅|✅||
 |Files|Upload, list, retrieve, delete, retrieve content|✅|✅||
 |Uploads|Create, upload, complete, cancel|✅|✅||
+|Assistants|Vector stores|✅|✅|Vector store bytes used is estimated|
+|Assistants|Vector store files|✅|✅|Vector store bytes used is estimated|
+|Assistants|Vector store file batches|✅|✅|Vector store bytes used is estimated|
 
 ### Other features
 

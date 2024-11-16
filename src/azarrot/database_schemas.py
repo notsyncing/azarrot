@@ -3,6 +3,8 @@ from datetime import datetime
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from azarrot.common_types import VectorStoreExpireBaseline, VectorStoreFileFailedReason, VectorStoreFileState
+
 
 class Base(DeclarativeBase):
     pass
@@ -79,5 +81,69 @@ class PartialFilePart(Base):
             f"checksum={self.checksum}, "
             f"merged_order={self.merged_order}, "
             f"create_time={self.create_time}"
+            ")"
+        )
+
+
+class VectorStore(Base):
+    __tablename__ = "vector_stores"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    name: Mapped[str | None]
+    embedding_model: Mapped[str]
+    embedding_dimension: Mapped[int]
+    expire_baseline: Mapped[VectorStoreExpireBaseline | None]
+    expire_interval: Mapped[int]
+    expired: Mapped[bool]
+    additional_data: Mapped[str | None]
+    create_time: Mapped[datetime]
+    access_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"id={self.id}, "
+            f"name={self.name}, "
+            f"embedding_model={self.embedding_model}, "
+            f"embedding_dimension={self.embedding_dimension}, "
+            f"expire_baseline={self.expire_baseline}, "
+            f"expire_interval={self.expire_interval}, "
+            f"expired={self.expired}, "
+            f"additional_data={self.additional_data}, "
+            f"create_time={self.create_time}, "
+            f"access_time={self.access_time}, "
+            f"update_time={self.update_time}"
+            ")"
+        )
+
+
+class VectorStoreFile(Base):
+    __tablename__ = "vector_store_files"
+
+    vector_store_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    file_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    batch_id: Mapped[str]
+    chunking_strategy: Mapped[str | None]
+    state: Mapped[VectorStoreFileState]
+    vector_count: Mapped[int]
+    failed_reason: Mapped[VectorStoreFileFailedReason | None]
+    failed_message: Mapped[str | None]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"vector_store_id={self.vector_store_id}, "
+            f"file_id={self.file_id}, "
+            f"batch_id={self.batch_id}, "
+            f"chunking_strategy={self.chunking_strategy}, "
+            f"state={self.state}, "
+            f"vector_count={self.vector_count}, "
+            f"failed_reason={self.failed_reason}, "
+            f"failed_message={self.failed_message}, "
+            f"create_time={self.create_time}, "
+            f"update_time={self.update_time}"
             ")"
         )

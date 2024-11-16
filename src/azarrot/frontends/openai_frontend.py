@@ -27,7 +27,7 @@ from azarrot.common_data import (
     ToolCallResponseMessageContent,
     WorkingDirectories,
 )
-from azarrot.config import DEFAULT_MAX_TOKENS
+from azarrot.config import DEFAULT_MAX_TOKENS, OpenAIFrontendConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.openai_support.openai_data import (
@@ -44,31 +44,39 @@ from azarrot.frontends.openai_support.openai_data import (
     UserChatTextContentItem,
 )
 from azarrot.frontends.openai_support.openai_files import OpenAIFiles
+from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorStores
 from azarrot.models.model_manager import ModelManager
 from azarrot.tools.tool import LocalizedToolDescription, LocalizedToolParameter
+from azarrot.vector_store import VectorStoreManager
 
 
 class OpenAIFrontend:
     _log = logging.getLogger(__name__)
+    _openai_config: OpenAIFrontendConfig
     _model_manager: ModelManager
     _backend_pipe: BackendPipe
     _working_dirs: WorkingDirectories
     _openai_files: OpenAIFiles
+    _vstores: OpenAIVectorStores
     _test_mode: bool = False
     _test_resources_root: Path | None = None
 
     def __init__(
         self,
+        openai_config: OpenAIFrontendConfig,
         model_manager: ModelManager,
         backend_pipe: BackendPipe,
         file_store: FileStore,
+        vector_store: VectorStoreManager,
         api: FastAPI,
         working_dirs: WorkingDirectories,
     ) -> None:
+        self._openai_config = openai_config
         self._model_manager = model_manager
         self._working_dirs = working_dirs
         self._backend_pipe = backend_pipe
         self._openai_files = OpenAIFiles(file_store)
+        self._vstores = OpenAIVectorStores(openai_config, model_manager, vector_store)
 
         router = APIRouter()
 
@@ -94,6 +102,27 @@ class OpenAIFrontend:
         router.add_api_route("/v1/uploads/{upload_id}/parts", self._openai_files.add_upload_part, methods=["POST"])
         router.add_api_route("/v1/uploads/{upload_id}/complete", self._openai_files.complete_upload, methods=["POST"])
         router.add_api_route("/v1/uploads/{upload_id}/cancel", self._openai_files.cancel_upload, methods=["POST"])
+
+        vs_url = "/v1/vector_stores"
+
+        # Assistants - Vector stores API
+        router.add_api_route(vs_url, self._vstores.create, methods=["POST"])
+        router.add_api_route(vs_url, self._vstores.get_list, methods=["GET"])
+        router.add_api_route(vs_url + "/{vector_store_id}", self._vstores.get, methods=["GET"])
+        router.add_api_route(vs_url + "/{vector_store_id}", self._vstores.update, methods=["POST"])
+        router.add_api_route(vs_url + "/{vstore_id}", self._vstores.delete, methods=["DELETE"])
+
+        # Assistants - Vector store files API
+        router.add_api_route(vs_url + "/{vid}/files", self._vstores.create_file, methods=["POST"])
+        router.add_api_route(vs_url + "/{vid}/files", self._vstores.get_file_list, methods=["GET"])
+        router.add_api_route(vs_url + "/{vid}/files/{fid}", self._vstores.get_file, methods=["GET"])
+        router.add_api_route(vs_url + "/{vid}/files/{f}", self._vstores.delete_file, methods=["DELETE"])
+
+        # Assistants - Vector store file batches API
+        router.add_api_route(vs_url + "/{vid}/file_batches", self._vstores.create_batch, methods=["POST"])
+        router.add_api_route(vs_url + "/{vid}/file_batches/{bid}", self._vstores.get_batch, methods=["GET"])
+        router.add_api_route(vs_url + "/{vid}/file_batches/{bid}/cancel", self._vstores.cancel_batch, methods=["POST"])
+        router.add_api_route(vs_url + "/{vid}/file_batches/{bid}/files", self._vstores.get_batch_files, methods=["GET"])
 
         api.include_router(router)
 

@@ -1,7 +1,10 @@
 import tempfile
+from datetime import datetime
+from pathlib import Path
 
 from openai import OpenAI
 
+from azarrot.common_data import EmbeddingModelInfo, Model, ModelPreset
 from azarrot.file_store import FileStore
 from azarrot.server import Server
 
@@ -18,3 +21,17 @@ def create_temp_file(content: str):  # type: ignore[no-untyped-def]    # noqa: A
 
 def get_file_store(server: Server) -> FileStore:
     return server.frontends[0]._openai_files._file_store
+
+
+def create_fake_embedding_model(model_id: str) -> Model:
+    return Model(
+        id=model_id,
+        backend="openvino",
+        path=Path("./"),
+        task="feature-extraction",
+        generation_variant="normal",
+        preset=ModelPreset(preferred_locale=None, supports_tool_calling=False, enable_internal_tools=False),
+        ipex_llm=None,
+        info=EmbeddingModelInfo(1024),
+        create_time=datetime.now(),
+    )

@@ -91,8 +91,8 @@ def test_qwen2_tool_calling(openvino_server: Server) -> None:
 
     completion = client.chat.completions.create(
         model=QWEN2_CHAT_MODEL,
-        messages=messages,  # pyright: ignore[reportArgumentType]
-        tools=tools,  # pyright: ignore[reportArgumentType]
+        messages=messages,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        tools=tools,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
         seed=100,
     )
 
@@ -123,8 +123,8 @@ def test_qwen2_tool_calling(openvino_server: Server) -> None:
 
     completion = client.chat.completions.create(
         model=QWEN2_CHAT_MODEL,
-        messages=messages,  # pyright: ignore[reportArgumentType]
-        tools=tools,  # pyright: ignore[reportArgumentType]
+        messages=messages,  # type: ignore[arg-type]   # pyright: ignore[reportArgumentType]
+        tools=tools,  # type: ignore[arg-type]   # pyright: ignore[reportArgumentType]
         seed=100,
     )
 

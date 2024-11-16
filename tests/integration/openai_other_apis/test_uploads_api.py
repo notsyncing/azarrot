@@ -1,8 +1,23 @@
+from collections.abc import Generator
 from datetime import datetime
 from io import BytesIO
+from typing import Any
+
+import pytest
 
 from azarrot.server import Server
+from tests.integration.openai_other_apis.fixture_utils import do_clear_database, make_no_backend_server
 from tests.integration.utils import create_openai_client, create_temp_file, get_file_store
+
+
+@pytest.fixture(scope="module")
+def no_backend_server() -> Generator[Server, Any, Any]:
+    yield from make_no_backend_server()
+
+
+@pytest.fixture(autouse=True)
+def cleanup_database(no_backend_server: Server) -> Generator[None, Any, Any]:
+    yield from do_clear_database(no_backend_server)
 
 
 def test_create_upload(no_backend_server: Server) -> None:

@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Generic, Literal, TypeVar
 
 from azarrot.config import DEFAULT_MAX_TOKENS
 from azarrot.tools.tool import LocalizedToolDescription
@@ -39,6 +39,15 @@ class ModelQuirks:
     does_not_support_batching = False
 
 
+class ModelInfo:
+    pass
+
+
+@dataclass
+class EmbeddingModelInfo(ModelInfo):
+    dimension: int
+
+
 @dataclass
 class Model:
     # The following properties are from the content of model file
@@ -55,6 +64,7 @@ class Model:
 
     # The following properties are computed at runtime
 
+    info: ModelInfo | None
     create_time: datetime
 
 
@@ -147,3 +157,12 @@ class ModelToolCallConfig:
     request_parsing_method: Callable[[str], list[ToolCallRequestMessageContent]]
     request_formatting_method: Callable[[list[ToolCallRequestMessageContent]], str]
     response_formatting_method: Callable[[list[ToolCallResponseMessageContent]], str]
+
+
+PR_T = TypeVar("PR_T")
+
+
+@dataclass
+class PageResult(Generic[PR_T]):
+    data: list[PR_T]
+    is_last_page: bool

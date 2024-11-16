@@ -13,6 +13,7 @@ from azarrot.common_data import (
     EmbeddingsGenerationRequest,
     GenerationStatistics,
     Model,
+    ModelInfo,
     ModelQuirks,
     TextGenerationRequest,
 )
@@ -231,7 +232,7 @@ class BaseBackend(ABC):
         pass
 
     @abstractmethod
-    def load_model(self, model: Model) -> None:
+    def load_model(self, model: Model) -> ModelInfo:
         pass
 
     @abstractmethod

@@ -1,5 +1,4 @@
 import errno
-import hashlib
 import logging
 import shutil
 import uuid
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from azarrot.config import ServerConfig
 from azarrot.database_schemas import File, PartialFile, PartialFilePart
+from azarrot.utils import compute_md5, compute_sha256, sanitize_uuid
 from azarrot.utils.merged_file import MergedReadOnlyBinaryFile
 
 
@@ -137,41 +137,11 @@ class FileStore:
                     "Removed expired partial file %s (name %s) created at %s", f.id, f.filename, f.create_time
                 )
 
-    def _make_store_file_path(self, file_id: str | uuid.UUID) -> Path:
+    def make_store_file_path(self, file_id: str | uuid.UUID) -> Path:
         return self._store_path / f"{file_id}.file"
 
     def _make_store_file_part_path(self, part_id: str | uuid.UUID) -> Path:
         return self._store_path / f"{part_id}.filepart"
-
-    def __compute_sha256(self, data: BinaryIO) -> str:
-        hasher = hashlib.sha256()
-
-        while True:
-            chunk = data.read(4096)
-
-            if not chunk:
-                break
-
-            hasher.update(chunk)
-
-        data.seek(0)
-
-        return hasher.hexdigest()
-
-    def __compute_md5(self, data: BinaryIO) -> str:
-        hasher = hashlib.md5()  # noqa: S324
-
-        while True:
-            chunk = data.read(4096)
-
-            if not chunk:
-                break
-
-            hasher.update(chunk)
-
-        data.seek(0)
-
-        return hasher.hexdigest()
 
     def __guess_file_mime_type(self, url: str | None) -> str | None:
         if url is None:
@@ -185,11 +155,20 @@ class FileStore:
 
         return r
 
-    def store_file(self, filename: str | None, purpose: str | None, mime_type: str | None, data: BinaryIO) -> FileInfo:
-        file_id = uuid.uuid4()
+    def store_file(
+        self,
+        filename: str | None,
+        purpose: str | None,
+        mime_type: str | None,
+        data: BinaryIO,
+        file_id: uuid.UUID | None = None,
+    ) -> FileInfo:
+        if file_id is None:
+            file_id = uuid.uuid4()
+
         create_time = datetime.now()
 
-        checksum = self.__compute_sha256(data)
+        checksum = compute_sha256(data)
 
         with Session(self._database) as db_session:
             same_file = db_session.execute(
@@ -203,7 +182,7 @@ class FileStore:
 
                 return FileInfo.from_db_file(same_file)
 
-            store_file_path = self._make_store_file_path(file_id)
+            store_file_path = self.make_store_file_path(file_id)
 
             with store_file_path.open("wb") as store_file:
                 shutil.copyfileobj(data, store_file)
@@ -239,15 +218,9 @@ class FileStore:
         with Session(self._database) as db_session:
             return [FileInfo.from_db_file(f) for f in db_session.execute(select(File)).scalars().all()]
 
-    def __sanitize_uuid(self, value: str | uuid.UUID) -> uuid.UUID:
-        if isinstance(value, uuid.UUID):
-            return value
-
-        return uuid.UUID(value)
-
     def get_file_info(self, file_id: str | uuid.UUID) -> FileInfo | None:
         with Session(self._database) as db_session:
-            f = db_session.execute(select(File).where(File.id == self.__sanitize_uuid(file_id))).scalar_one_or_none()
+            f = db_session.execute(select(File).where(File.id == sanitize_uuid(file_id))).scalar_one_or_none()
 
             if f is not None:
                 return FileInfo.from_db_file(f)
@@ -256,7 +229,7 @@ class FileStore:
 
     def delete_file(self, file_id: str | uuid.UUID) -> None:
         with Session(self._database) as db_session:
-            f = db_session.execute(select(File).where(File.id == self.__sanitize_uuid(file_id))).scalar_one_or_none()
+            f = db_session.execute(select(File).where(File.id == sanitize_uuid(file_id))).scalar_one_or_none()
 
             if f is None:
                 raise FileNotFoundError
@@ -267,7 +240,7 @@ class FileStore:
 
             db_session.delete(f)
 
-            file_path = self._make_store_file_path(f.id)
+            file_path = self.make_store_file_path(f.id)
             file_path.unlink(missing_ok=True)
 
             db_session.commit()
@@ -284,7 +257,7 @@ class FileStore:
 
             return file_info, MergedReadOnlyBinaryFile(file_part_paths)
         else:
-            return file_info, self._make_store_file_path(file_info.id).open("rb")
+            return file_info, self.make_store_file_path(file_info.id).open("rb")
 
     def create_partial_file(
         self, filename: str, final_size: int, mime_type: str, purpose: str | None
@@ -309,7 +282,7 @@ class FileStore:
     def get_partial_file_info(self, partial_file_id: str | uuid.UUID) -> PartialFileInfo | None:
         with Session(self._database) as db_session:
             pf = db_session.execute(
-                select(PartialFile).where(PartialFile.id == self.__sanitize_uuid(partial_file_id))
+                select(PartialFile).where(PartialFile.id == sanitize_uuid(partial_file_id))
             ).scalar_one_or_none()
 
         return PartialFileInfo.from_db_partial_file(pf) if pf is not None else None
@@ -318,7 +291,7 @@ class FileStore:
         with Session(self._database) as db_session:
             pf = db_session.execute(
                 select(PartialFilePart)
-                .where(PartialFilePart.partial_file_id == self.__sanitize_uuid(partial_file_id))
+                .where(PartialFilePart.partial_file_id == sanitize_uuid(partial_file_id))
                 .order_by(PartialFilePart.merged_order)
             ).scalars()
 
@@ -339,7 +312,7 @@ class FileStore:
             if partial_file is None:
                 raise FileNotFoundError
 
-        checksum = self.__compute_sha256(data)
+        checksum = compute_sha256(data)
 
         with Session(self._database) as db_session:
             same_part = db_session.execute(
@@ -392,8 +365,8 @@ class FileStore:
             part = db_session.scalar(
                 select(PartialFilePart).where(
                     and_(
-                        PartialFilePart.id == self.__sanitize_uuid(part_id),
-                        PartialFilePart.partial_file_id == self.__sanitize_uuid(partial_file_id),
+                        PartialFilePart.id == sanitize_uuid(part_id),
+                        PartialFilePart.partial_file_id == sanitize_uuid(partial_file_id),
                     )
                 )
             )
@@ -423,7 +396,7 @@ class FileStore:
 
             file_parts: list[PartialFilePart] = []
             total_part_size = 0
-            file_part_id_list = [self.__sanitize_uuid(fid) for fid in ordered_file_parts]
+            file_part_id_list = [sanitize_uuid(fid) for fid in ordered_file_parts]
 
             for index, file_part_id in enumerate(file_part_id_list):
                 file_part = db_session.execute(
@@ -452,10 +425,10 @@ class FileStore:
 
             file_part_paths = [self._make_store_file_part_path(p.id) for p in file_parts]
             merged_file = MergedReadOnlyBinaryFile(file_part_paths)
-            checksum = self.__compute_sha256(merged_file)
+            checksum = compute_sha256(merged_file)
 
             if expected_checksum_md5 is not None:
-                md5_checksum = self.__compute_md5(merged_file)
+                md5_checksum = compute_md5(merged_file)
 
                 if md5_checksum != expected_checksum_md5:
                     raise ValueError(
@@ -500,7 +473,7 @@ class FileStore:
     def delete_partial_file(
         self, partial_file_id: str | uuid.UUID, delete_merged_file: bool = False
     ) -> PartialFileInfo:
-        partial_file_id = self.__sanitize_uuid(partial_file_id)
+        partial_file_id = sanitize_uuid(partial_file_id)
 
         with Session(self._database) as db_session:
             partial_file = db_session.execute(

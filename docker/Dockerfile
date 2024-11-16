@@ -1,6 +1,6 @@
 FROM docker.io/intel/oneapi-basekit:2024.2.1-0-devel-ubuntu22.04
 
-RUN apt update && apt -y upgrade && apt -y install python3 python3-pip
+RUN apt update && apt -y upgrade && apt -y install python3 python3-pip libmagic1
 
 RUN mkdir /app && mkdir /app/src && mkdir /app/models && mkdir /app/working
 WORKDIR /app/working

@@ -15,15 +15,22 @@ version = "0.4.0"
 dependencies = [
     "openvino==2024.4",
     "optimum[openvino]==1.22.0",
-    "ipex-llm[xpu]==2.2.0b20240927",
+    "ipex-llm[xpu]==2.2.0b20241109",
     "fastapi==0.115.0",
     "pyyaml==6.0.2",
     "jinja2==3.1.4",
     "python-multipart==0.0.10",
     "huggingface_hub==0.25.0",
     "SQLAlchemy==2.0.19",
+    "sqlakeyset==2.0.1726021475",
     "alembic==1.13.3",
-    "schedule==1.2.2"
+    "schedule==1.2.2",
+    "pycron==3.1.1",
+    "pymilvus==2.4.8",
+    "langchain==0.3.4",
+    "langchain-community==0.3.3",
+    "langchain-milvus==0.1.6",
+    "langchain-unstructured[local]==0.1.5"
 ]
 classifiers = [
   # How mature is this project? Common values are

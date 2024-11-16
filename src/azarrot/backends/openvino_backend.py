@@ -25,7 +25,14 @@ from azarrot.backends.common import (
     TransformersGenerationMethods,
     to_transformers_chat_messages,
 )
-from azarrot.common_data import EmbeddingsGenerationRequest, GenerationStatistics, Model, TextGenerationRequest
+from azarrot.common_data import (
+    EmbeddingModelInfo,
+    EmbeddingsGenerationRequest,
+    GenerationStatistics,
+    Model,
+    ModelInfo,
+    TextGenerationRequest,
+)
 from azarrot.config import ServerConfig
 from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
@@ -137,15 +144,20 @@ class OpenVINOBackend(BaseBackend):
         original_model.compile = MethodType(patched_compile, original_model)
         return original_model
 
-    def load_model(self, model: Model) -> None:
-        if model.task not in TASK_MODEL_MAP:
-            self._log.error("Model %s (%s) wants task %s, which is not supported!", model.id, model.path, model.task)
+    def __extract_model_info(self, ov_model: PreTrainedModel, task: str) -> ModelInfo:
+        if task == "feature-extraction":
+            return EmbeddingModelInfo(dimension=ov_model.config.hidden_size)
+        else:
+            return ModelInfo()
 
-            return
+    def load_model(self, model: Model) -> ModelInfo:
+        if model.task not in TASK_MODEL_MAP:
+            raise ValueError(f"Model {model.id} ({model.path}) wants task {model.task}, which is not supported!")
 
         if model.id in self._models:
             self._log.warning("Model %s is already loaded, will skip it.", model.id)
-            return
+            assert model.info is not None
+            return model.info
 
         model_class = TASK_MODEL_MAP[model.task]
         model_path = model.path.absolute()
@@ -181,6 +193,8 @@ class OpenVINOBackend(BaseBackend):
         self._models[model.id] = LoadedModel(model, ov_model, tokenizer, device)
 
         self._log.info("Loaded model %s", model.id)
+
+        return self.__extract_model_info(ov_model, model.task)
 
     def unload_model(self, model_id: str) -> None:
         if model_id not in self._models:

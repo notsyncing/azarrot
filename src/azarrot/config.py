@@ -5,6 +5,18 @@ DEFAULT_MAX_TOKENS = 512
 
 
 @dataclass
+class OpenAIFrontendConfig:
+    vector_store_default_embedding_model_id: str | None = None
+
+
+@dataclass
+class VectorStoreConfig:
+    worker_file_process_scan_interval: int = 60  # Seconds
+    worker_max_file_count_per_scan: int = 10
+    worker_store_cleanup_scan_interval: int = 60  # Seconds
+
+
+@dataclass
 class ServerConfig:
     models_dir: Path = Path("./models")
     working_dir: Path = Path("./working")
@@ -17,3 +29,7 @@ class ServerConfig:
     auto_batch_max_size: int = 8
 
     partial_file_expire_time: int = 3600 * 1000
+
+    vector_store_configs: VectorStoreConfig = field(default=VectorStoreConfig())
+
+    openai_configs: OpenAIFrontendConfig = field(default=OpenAIFrontendConfig())

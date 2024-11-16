@@ -1,27 +1,32 @@
 import argparse
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Thread
 
 import alembic
 import alembic.command
 import alembic.config
+import schedule
 import uvicorn
 import yaml
 from fastapi import FastAPI
+from pymilvus import MilvusClient
 from sqlalchemy import Engine, create_engine
 
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.common_data import WorkingDirectories
-from azarrot.config import ServerConfig
+from azarrot.config import OpenAIFrontendConfig, ServerConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.openai_frontend import OpenAIFrontend
 from azarrot.models.chat_templates import ChatTemplateManager
 from azarrot.models.model_manager import ModelManager
 from azarrot.tools import GLOBAL_TOOL_MANAGER
+from azarrot.vector_store import VectorStoreManager, VectorStoreWorker
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +97,9 @@ def __parse_arguments_and_load_config() -> ServerConfig:
             if "partial_file_expire_time" in config_yaml:
                 config.partial_file_expire_time = config_yaml["partial_file_expire_time"]
 
+            if "openai_configs" in config_yaml:
+                config.openai_configs = OpenAIFrontendConfig(**config_yaml["openai_configs"])
+
     if args.models_dir is not None:
         config.models_dir = Path(args.models_dir).resolve()
 
@@ -139,6 +147,13 @@ def __init_database(database_path: Path) -> Engine:
     return create_engine(url)
 
 
+def __init_vector_database(database_path: Path) -> tuple[MilvusClient, str]:
+    p = str(database_path.absolute())
+    client = MilvusClient(p)
+    log.info("Vector database path: %s", p)
+    return client, p
+
+
 @dataclass
 class Server:
     config: ServerConfig
@@ -146,20 +161,55 @@ class Server:
     backend_pipe: BackendPipe
     backends: list[BaseBackend]
     frontends: list[OpenAIFrontend]
+    file_store: FileStore
+    vector_store: VectorStoreManager
+    vector_store_worker: VectorStoreWorker
     api: FastAPI
 
     _uvicorn_server: uvicorn.Server | None = None
+    _running: bool = False
+    _schedule_thread: Thread | None = None
 
     def start(self) -> None:
+        if self._running:
+            return
+
+        self._running = True
+
+        self._schedule_thread = Thread(target=self.__schedule_loop)
+        self._schedule_thread.start()
+
+        self.vector_store_worker.start()
+
         log.info("Starting API server...")
         uvicorn_config = uvicorn.Config(self.api, host=self.config.host, port=self.config.port)
         self._uvicorn_server = uvicorn.Server(uvicorn_config)
         self._uvicorn_server.run()
 
     def stop(self) -> None:
+        if not self._running:
+            return
+
+        self._running = False
+
+        if self._schedule_thread is not None:
+            self._schedule_thread.join(20)
+            self._schedule_thread = None
+
         if self._uvicorn_server is not None:
             self._uvicorn_server.should_exit = True
             self._uvicorn_server = None
+
+        self.vector_store_worker.stop()
+
+    def __schedule_loop(self) -> None:
+        while self._running:
+            try:
+                schedule.run_pending()
+            except:
+                log.exception("An exception occurred in schedule loop")
+
+            time.sleep(1)
 
 
 def create_server(config: ServerConfig | None = None, enable_backends: list[type[BaseBackend]] | None = None) -> Server:
@@ -179,6 +229,9 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
     db = __init_database(working_dirs.root / "azarrot.db")
     file_store = FileStore(config, working_dirs.file_store, db)
 
+    vec_db, vec_db_uri = __init_vector_database(working_dirs.root / "azarrot-vec.db")
+    vector_store = VectorStoreManager(config, db, vec_db)
+
     chat_template_manager = ChatTemplateManager(GLOBAL_TOOL_MANAGER)
 
     backends: list[BaseBackend]
@@ -197,9 +250,15 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
 
     backend_pipe = BackendPipe(backends, chat_template_manager, GLOBAL_TOOL_MANAGER)
 
+    vector_store_worker = VectorStoreWorker(
+        config.vector_store_configs, vector_store, model_manager, file_store, backend_pipe, db, vec_db_uri
+    )
+
     api = FastAPI()
 
-    frontends = [OpenAIFrontend(model_manager, backend_pipe, file_store, api, working_dirs)]
+    frontends = [
+        OpenAIFrontend(config.openai_configs, model_manager, backend_pipe, file_store, vector_store, api, working_dirs)
+    ]
 
     return Server(
         config=config,
@@ -207,6 +266,9 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
         backend_pipe=backend_pipe,
         backends=backends,
         frontends=frontends,
+        file_store=file_store,
+        vector_store=vector_store,
+        vector_store_worker=vector_store_worker,
         api=api,
     )
 
