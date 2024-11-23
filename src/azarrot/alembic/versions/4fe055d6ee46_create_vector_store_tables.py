@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("expire_baseline", sa.String(64)),
         sa.Column("expire_interval", sa.Integer, nullable=False),  # Days, non-positive value means never expire
         sa.Column("expired", sa.Boolean, nullable=False),
-        sa.Column("additional_data", sa.String),
+        sa.Column("additional_data", sa.Text),
         sa.Column("create_time", sa.DateTime, nullable=False),
         sa.Column("access_time", sa.DateTime, nullable=False),
         sa.Column("update_time", sa.DateTime, nullable=False),  # Won't consider files changed in this store
@@ -39,10 +39,10 @@ def upgrade() -> None:
         sa.Column("vector_store_id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("file_id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("batch_id", sa.String(64), nullable=False),
-        sa.Column("chunking_strategy", sa.String),
+        sa.Column("chunking_strategy", sa.Text),
         sa.Column("state", sa.String(32), nullable=False),
         sa.Column("failed_reason", sa.String(32)),
-        sa.Column("failed_message", sa.String),
+        sa.Column("failed_message", sa.Text),
         sa.Column("vector_count", sa.Integer, nullable=False),
         sa.Column("create_time", sa.DateTime, nullable=False),
         sa.Column("update_time", sa.DateTime, nullable=False),
