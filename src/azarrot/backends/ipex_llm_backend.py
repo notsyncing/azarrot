@@ -176,9 +176,14 @@ class IPEXLLMBackend(BaseBackend):
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
-        inputs = loaded_model.tokenizer.apply_chat_template(
-            to_transformers_chat_messages(request.messages), return_tensors="pt"
+        result = loaded_model.tokenizer.apply_chat_template(
+            to_transformers_chat_messages(request.messages), return_tensors="pt", return_dict=True
         )
+
+        result = cast(dict[str, Any], result)
+
+        inputs = result["input_ids"]
+        attention_mask = result.get("attention_mask")
 
         gen_stats.prompt_tokens = len(cast(torch.Tensor, inputs[0]))
 
@@ -186,7 +191,8 @@ class IPEXLLMBackend(BaseBackend):
 
         generation_kwargs.update(
             {
-                "inputs": cast(torch.Tensor, inputs).to(loaded_model.device),
+                "input_ids": inputs.to(loaded_model.device),
+                "attention_mask": attention_mask.to(loaded_model.device) if attention_mask is not None else None,
                 "streamer": streamer,
                 "max_new_tokens": request.max_tokens,
             }
