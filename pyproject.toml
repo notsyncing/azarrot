@@ -113,11 +113,8 @@ lint.ignore = [
     "ERA001",
     "COM812",   # Conflicts with the formatter
     "ISC001",   # Conflicts with the formatter
-    "ANN101",   # "missing-type-self"
     "ANN401",
     "PT001",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
-    "PT004",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
-    "PT005",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
     "PT023",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
     "PLR0912",
     "PLR0913",

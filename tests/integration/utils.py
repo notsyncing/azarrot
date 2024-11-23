@@ -14,7 +14,7 @@ def create_openai_client(server: Server) -> OpenAI:
 
 
 def create_temp_file(content: str):  # type: ignore[no-untyped-def]    # noqa: ANN201
-    file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".txt")
+    file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".txt")  # noqa: SIM115
     file.write(content.encode("utf-8"))
     return file
 
@@ -30,6 +30,7 @@ def create_fake_embedding_model(model_id: str) -> Model:
         path=Path("./"),
         task="feature-extraction",
         generation_variant="normal",
+        use_original_precision=True,
         preset=ModelPreset(preferred_locale=None, supports_tool_calling=False, enable_internal_tools=False),
         ipex_llm=None,
         info=EmbeddingModelInfo(1024),
