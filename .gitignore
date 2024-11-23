@@ -13,3 +13,4 @@ reports/
 .coverage
 .mypy_cache/
 .pytest_cache/
+http-requests/

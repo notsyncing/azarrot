@@ -16,7 +16,7 @@ RUN cd /app && python3 -m pip install -U pip && python3 -m pip install . && pyth
     python3 -m pip cache purge && \
     python3 -m pip install torch==2.1.0.post3 torchvision==0.16.0.post3 torchaudio==2.1.0.post3 intel-extension-for-pytorch==2.1.40+xpu oneccl_bind_pt==2.1.400+xpu && \
     python3 -m pip install numpy==1.26.4 && \
-    python3 -m pip install transformers==4.44.2 trl
+    python3 -m pip install transformers==4.46.3 trl
 
 VOLUME /app/models
 VOLUME /app/working
