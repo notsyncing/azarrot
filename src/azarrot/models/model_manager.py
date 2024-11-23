@@ -97,7 +97,10 @@ class ModelManager:
             if model_backend == BACKEND_ID_IPEX_LLM:
                 ipex_llm_config = model_info.get("ipex_llm", {})
 
-                ipex_llm = IPEXLLMModelConfig(use_cache=ipex_llm_config.get("use_cache", False))
+                ipex_llm = IPEXLLMModelConfig(
+                    use_cache=ipex_llm_config.get("use_cache", False),
+                    quantization_mode=ipex_llm_config.get("quantization_mode", "default"),
+                )
 
             default_model_preset = DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET)
             model_preset_data = model_info.get("preset", None)
@@ -163,7 +166,7 @@ class ModelManager:
         for_task: str,
         skip_if_loaded: bool = False,
         model_preset: ModelPreset | None = None,
-        use_original_precision: bool = False
+        use_original_precision: bool = False,
     ) -> None:
         backend = self._backends.get(backend_id)
 

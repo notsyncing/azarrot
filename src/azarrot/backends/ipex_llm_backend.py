@@ -121,12 +121,25 @@ class IPEXLLMBackend(BaseBackend):
         if "use_cache" in model_kwargs and not model_kwargs.get("use_cache"):
             del model_kwargs["use_cache"]
 
+        load_in_4bit = False
+        load_in_low_bit = None
+
+        if not model.use_original_precision:
+            if model.ipex_llm is not None:
+                if model.ipex_llm.quantization_mode == "default":
+                    load_in_4bit = True
+                else:
+                    load_in_low_bit = model.ipex_llm.quantization_mode
+            else:
+                load_in_4bit = True
+
         ipex_model: Any = model_class.from_pretrained(
             model_path,
-            load_in_4bit=not model.use_original_precision,
+            load_in_4bit=load_in_4bit,
+            load_in_low_bit=load_in_low_bit,
             optimize_model=True,
             trust_remote_code=True,
-            **model_kwargs
+            **model_kwargs,
         ).to(device)
 
         ipex_model.eval()

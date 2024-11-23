@@ -19,6 +19,30 @@ class WorkingDirectories:
 class IPEXLLMModelConfig:
     use_cache: bool
 
+    quantization_mode: Literal[
+        "default",
+        "sym_int4",
+        "asym_int4",
+        "sym_int5",
+        "asym_int5",
+        "sym_int8",
+        "nf3",
+        "nf4",
+        "fp4",
+        "fp8",
+        "fp8_e4m3",
+        "fp8_e5m2",
+        "fp6",
+        "gguf_iq2_xxs",
+        "gguf_iq2_xs",
+        "gguf_iq1_s",
+        "gguf_q4k_m",
+        "gguf_q4k_s",
+        "fp16",
+        "bf16",
+        "fp6_k",
+    ]
+
 
 @dataclass
 class ModelPreset:
