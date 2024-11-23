@@ -82,8 +82,7 @@ build = [
 model_supports = [
     "decord==0.6.0",
     "einops==0.8.0",
-    "timm==1.0.9",
-    "auto-gptq==0.7.1",
+    "timm==1.0.9"
 ]
 
 [project.scripts]
