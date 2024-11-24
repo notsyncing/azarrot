@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import torch
 from ipex_llm.transformers import AutoModelForCausalLM
-from transformers import AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
+from transformers import AutoConfig, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
@@ -106,9 +106,22 @@ class IPEXLLMBackend(BaseBackend):
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
+        model_kwargs = {}
+
+        model_config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+
+        if "quantization_config" in model_config:
+            quantization_config = model_config.quantization_config
+
+            if "quant_method" in quantization_config:
+                quantization_method = quantization_config["quant_method"]
+
+                if quantization_method == "gptq":
+                    self._log.info("GPTQ model detected. Will use torch_dtype=torch.float to load this model.")
+                    model_kwargs["torch_dtype"] = torch.float
+
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
 
-        model_kwargs = {}
         generation_variant = model.generation_variant
 
         if model.ipex_llm is not None:
