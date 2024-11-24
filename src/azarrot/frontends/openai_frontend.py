@@ -11,6 +11,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, FastAPI
 from starlette.responses import StreamingResponse
 
+from azarrot.agents.manager import AgentManager
 from azarrot.backends.common import CTIS_HAS_OBJECT, CustomTextIteratorStreamer
 from azarrot.common_data import (
     CallableToolsInfo,
@@ -30,6 +31,7 @@ from azarrot.common_data import (
 from azarrot.config import DEFAULT_MAX_TOKENS, OpenAIFrontendConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.openai_support.openai_assistants import OpenAIAssistants
 from azarrot.frontends.openai_support.openai_data import (
     AssistantChatCompletionMessage,
     ChatCompletionRequest,
@@ -45,8 +47,9 @@ from azarrot.frontends.openai_support.openai_data import (
 )
 from azarrot.frontends.openai_support.openai_files import OpenAIFiles
 from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorStores
+from azarrot.frontends.utils import to_backend_tool_parameters
 from azarrot.models.model_manager import ModelManager
-from azarrot.tools.tool import LocalizedToolDescription, LocalizedToolParameter
+from azarrot.tools.tool import LocalizedToolDescription
 from azarrot.vector_store import VectorStoreManager
 
 
@@ -57,6 +60,7 @@ class OpenAIFrontend:
     _backend_pipe: BackendPipe
     _working_dirs: WorkingDirectories
     _openai_files: OpenAIFiles
+    _assistants: OpenAIAssistants
     _vstores: OpenAIVectorStores
     _test_mode: bool = False
     _test_resources_root: Path | None = None
@@ -67,6 +71,7 @@ class OpenAIFrontend:
         model_manager: ModelManager,
         backend_pipe: BackendPipe,
         file_store: FileStore,
+        agent_manager: AgentManager,
         vector_store: VectorStoreManager,
         api: FastAPI,
         working_dirs: WorkingDirectories,
@@ -76,6 +81,7 @@ class OpenAIFrontend:
         self._working_dirs = working_dirs
         self._backend_pipe = backend_pipe
         self._openai_files = OpenAIFiles(file_store)
+        self._assistants = OpenAIAssistants(openai_config, agent_manager, vector_store, model_manager)
         self._vstores = OpenAIVectorStores(openai_config, model_manager, vector_store)
 
         router = APIRouter()
@@ -102,6 +108,13 @@ class OpenAIFrontend:
         router.add_api_route("/v1/uploads/{upload_id}/parts", self._openai_files.add_upload_part, methods=["POST"])
         router.add_api_route("/v1/uploads/{upload_id}/complete", self._openai_files.complete_upload, methods=["POST"])
         router.add_api_route("/v1/uploads/{upload_id}/cancel", self._openai_files.cancel_upload, methods=["POST"])
+
+        # Assistants - Assistants API
+        router.add_api_route("/v1/assistants", self._assistants.create_assistant, methods=["POST"])
+        router.add_api_route("/v1/assistants", self._assistants.get_assistant_list, methods=["GET"])
+        router.add_api_route("/v1/assistants/{assistant_id}", self._assistants.get_assistant, methods=["GET"])
+        router.add_api_route("/v1/assistants/{assistant_id}", self._assistants.update_assistant, methods=["POST"])
+        router.add_api_route("/v1/assistants/{assistant_id}", self._assistants.delete_assistant, methods=["DELETE"])
 
         vs_url = "/v1/vector_stores"
 
@@ -240,29 +253,6 @@ class OpenAIFrontend:
 
         return result
 
-    def __to_backend_tool_parameters(self, tool_parameters: dict[str, Any] | None) -> list[LocalizedToolParameter]:
-        if tool_parameters is None:
-            return []
-
-        param_type = tool_parameters["type"]
-
-        if param_type != "object":
-            raise ValueError(f"Unsupported tool parameter type {param_type}")
-
-        required_params = tool_parameters.get("required", [])
-
-        params = []
-
-        if "properties" in tool_parameters:
-            for k, v in tool_parameters["properties"].items():
-                p = LocalizedToolParameter(
-                    name=k, description=v.get("description"), type=v.get("type"), required=k in required_params
-                )
-
-                params.append(p)
-
-        return params
-
     def __to_backend_tools_info(
         self, tools_info: list[ToolInfo] | None, tools_choice: Literal["none", "auto", "required"] | ToolChoice | None
     ) -> CallableToolsInfo | None:
@@ -274,7 +264,7 @@ class OpenAIFrontend:
                 name=tool_info.function.name,
                 display_name=None,
                 description=tool_info.function.description,
-                parameters=self.__to_backend_tool_parameters(tool_info.function.parameters),
+                parameters=to_backend_tool_parameters(tool_info.function.parameters),
             )
             for tool_info in tools_info
         ]

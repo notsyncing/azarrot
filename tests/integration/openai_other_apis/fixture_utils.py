@@ -85,3 +85,4 @@ def do_clear_database(server: Server) -> Generator[None, Any, Any]:
     file_store.clear_database()
 
     server.vector_store.clear_database()
+    server.agent_manager.clear_database()

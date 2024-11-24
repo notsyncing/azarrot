@@ -1,0 +1,2 @@
+INTERNAL_TOOL_CODE_INTERPRETER = "code_interpreter"
+INTERNAL_TOOL_FILE_SEARCH = "rag_search"

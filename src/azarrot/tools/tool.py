@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import dataclass_wizard
+
 
 @dataclass
 class LocalizedToolParameter:
@@ -22,6 +24,9 @@ class LocalizedToolDescription:
     def parameters_json(self) -> str:
         return json.dumps([p.__dict__ for p in self.parameters])
 
+    def parameters_dict(self) -> dict[str, Any]:
+        return dataclass_wizard.asdict(self.parameters)
+
 
 @dataclass
 class ToolParameter:
@@ -29,9 +34,10 @@ class ToolParameter:
     type: Literal["string", "integer", "number", "object", "array", "boolean", "null"]
     description: dict[str, str]
     required: bool
+    should_preset: bool = False
 
     def get_description(self, locale: str) -> str:
-        return self.description[locale]
+        return self.description.get(locale, "")
 
     def to_localized(self, locale: str) -> LocalizedToolParameter:
         return LocalizedToolParameter(
@@ -48,10 +54,10 @@ class ToolDescription:
     parameters: list[ToolParameter]
 
     def get_display_name(self, locale: str | None = None) -> str:
-        return self.display_name[locale if locale is not None else self.default_locale]
+        return self.display_name.get(locale if locale is not None else self.default_locale, "")
 
     def get_description(self, locale: str | None = None) -> str:
-        return self.description[locale if locale is not None else self.default_locale]
+        return self.description.get(locale if locale is not None else self.default_locale, "")
 
     def to_localized(self, locale: str | None) -> LocalizedToolDescription:
         if locale is None:

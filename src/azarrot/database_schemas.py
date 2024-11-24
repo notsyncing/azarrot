@@ -147,3 +147,44 @@ class VectorStoreFile(Base):
             f"update_time={self.update_time}"
             ")"
         )
+
+
+class Agent(Base):
+    __tablename__ = "agents"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    description: Mapped[str | None]
+    model_id: Mapped[str]
+    model_instruction: Mapped[str | None]
+    default_generation_parameters: Mapped[str | None]
+    additional_data: Mapped[str | None]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(id={self.id}, name={self.name}, description={self.description}, "
+            f"model_id={self.model_id}, model_instruction={self.model_instruction}, "
+            f"default_generation_parameters={self.default_generation_parameters}, "
+            f"additional_data={self.additional_data}, "
+            f"create_time={self.create_time}, update_time={self.update_time})"
+        )
+
+
+class AgentTool(Base):
+    __tablename__ = "agent_tools"
+
+    agent_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    tool_name: Mapped[str] = mapped_column(primary_key=True)
+    is_internal_tool: Mapped[bool]
+    tool_preset_parameters: Mapped[str | None]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(agent_id={self.agent_id}, tool_name={self.tool_name}, "
+            f"is_internal_tool={self.is_internal_tool}, tool_preset_parameters={self.tool_preset_parameters}, "
+            f"create_time={self.create_time}, update_time={self.update_time})"
+        )

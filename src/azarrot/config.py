@@ -7,6 +7,7 @@ DEFAULT_MAX_TOKENS = 512
 @dataclass
 class OpenAIFrontendConfig:
     vector_store_default_embedding_model_id: str | None = None
+    assistant_file_search_reranker_default_model_id: str | None = None
 
 
 @dataclass
