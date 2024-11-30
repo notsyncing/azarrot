@@ -232,7 +232,7 @@ class ChatThreadToolPresetParams(Base):
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)    
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     thread_id: Mapped[uuid.UUID]
     role: Mapped[str]
     order: Mapped[int]

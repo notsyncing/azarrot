@@ -34,8 +34,7 @@ class ChatThreadAgentToolPresetParams:
     @staticmethod
     def from_db(dbo: ChatThreadToolPresetParams) -> "ChatThreadAgentToolPresetParams":
         return ChatThreadAgentToolPresetParams(
-            tool_name=dbo.tool_name,
-            tool_additional_preset_params=json.loads(dbo.tool_preset_parameters)
+            tool_name=dbo.tool_name, tool_additional_preset_params=json.loads(dbo.tool_preset_parameters)
         )
 
 
@@ -50,7 +49,7 @@ class ChatThreadInfo:
         return ChatThreadInfo(
             id=str(dbo.id),
             additional_data=json.loads(dbo.additional_data) if dbo.additional_data is not None else None,
-            create_time=dbo.create_time
+            create_time=dbo.create_time,
         )
 
 
@@ -65,7 +64,7 @@ class ChatThreadManager:
         db: Session,
         thread_id: uuid.UUID,
         now: datetime,
-        additional_tool_preset_parameters: list[ChatThreadAgentToolPresetParams] | None
+        additional_tool_preset_parameters: list[ChatThreadAgentToolPresetParams] | None,
     ) -> None:
         if additional_tool_preset_parameters is None:
             return
@@ -76,7 +75,7 @@ class ChatThreadManager:
                 tool_name=params.tool_name,
                 tool_preset_parameters=json.dumps(params.tool_additional_preset_params),
                 create_time=now,
-                update_time=now
+                update_time=now,
             )
 
             db.add(tool)
@@ -84,7 +83,7 @@ class ChatThreadManager:
     def create(
         self,
         additional_data: dict[str, Any] | None = None,
-        additional_tool_preset_parameters: list[ChatThreadAgentToolPresetParams] | None = None
+        additional_tool_preset_parameters: list[ChatThreadAgentToolPresetParams] | None = None,
     ) -> ChatThreadInfo:
         thread_id = uuid.uuid4()
         now = datetime.now()
@@ -95,7 +94,7 @@ class ChatThreadManager:
                 additional_data=json.dumps(additional_data) if additional_data is not None else None,
                 deleted=False,
                 create_time=now,
-                update_time=now
+                update_time=now,
             )
 
             db.add(thread)
@@ -107,9 +106,7 @@ class ChatThreadManager:
             return ChatThreadInfo.from_db(thread)
 
     def __is_thread_not_exist(self, db: Session, thread_id: uuid.UUID) -> bool:
-        thread_deleted = db.execute(
-            select(ChatThread.deleted).where(ChatThread.id == thread_id)
-        ).scalar_one_or_none()
+        thread_deleted = db.execute(select(ChatThread.deleted).where(ChatThread.id == thread_id)).scalar_one_or_none()
 
         return thread_deleted is True or thread_deleted is None
 
@@ -121,7 +118,7 @@ class ChatThreadManager:
                 select(ChatThread).where(
                     and_(
                         ChatThread.id == thread_id,
-                        ChatThread.deleted == False     # noqa: E712
+                        ChatThread.deleted == False,  # noqa: E712
                     )
                 )
             ).scalar_one_or_none()
@@ -138,9 +135,11 @@ class ChatThreadManager:
             if self.__is_thread_not_exist(db, thread_id):
                 return []
 
-            params = db.execute(
-                select(ChatThreadToolPresetParams).where(ChatThreadToolPresetParams.thread_id == thread_id)
-            ).scalars().all()
+            params = (
+                db.execute(select(ChatThreadToolPresetParams).where(ChatThreadToolPresetParams.thread_id == thread_id))
+                .scalars()
+                .all()
+            )
 
             return [ChatThreadAgentToolPresetParams.from_db(p) for p in params]
 
@@ -148,7 +147,7 @@ class ChatThreadManager:
         self,
         thread_id: str | uuid.UUID,
         new_metadata: dict[str, Any] | None = None,
-        new_tool_preset_params: list[ChatThreadAgentToolPresetParams] | None = None
+        new_tool_preset_params: list[ChatThreadAgentToolPresetParams] | None = None,
     ) -> ChatThreadInfo | None:
         thread_id = sanitize_uuid(thread_id)
         now = datetime.now()
@@ -158,7 +157,7 @@ class ChatThreadManager:
                 select(ChatThread).where(
                     and_(
                         ChatThread.id == thread_id,
-                        ChatThread.deleted == False     # noqa: E712
+                        ChatThread.deleted == False,  # noqa: E712
                     )
                 )
             ).scalar_one_or_none()
@@ -176,9 +175,7 @@ class ChatThreadManager:
                 updated = True
 
             if new_tool_preset_params is not None:
-                db.execute(
-                    delete(ChatThreadToolPresetParams).where(ChatThreadToolPresetParams.thread_id == thread_id)
-                )
+                db.execute(delete(ChatThreadToolPresetParams).where(ChatThreadToolPresetParams.thread_id == thread_id))
 
                 self.__insert_tool_preset_params(db, thread_id, now, new_tool_preset_params)
 
@@ -194,10 +191,12 @@ class ChatThreadManager:
 
         with Session(self._database) as db:
             r = db.execute(
-                update(ChatThread).values(deleted=True).where(
+                update(ChatThread)
+                .values(deleted=True)
+                .where(
                     and_(
                         ChatThread.id == thread_id,
-                        ChatThread.deleted == False      # noqa: E712
+                        ChatThread.deleted == False,  # noqa: E712
                     )
                 )
             )
@@ -233,10 +232,11 @@ class ChatThreadManager:
                     thread_id=thread_id,
                     role=message.role,
                     order=i,
-                    additional_data=json.dumps(message.additional_data) \
-                        if message.additional_data is not None else None,
+                    additional_data=json.dumps(message.additional_data)
+                    if message.additional_data is not None
+                    else None,
                     create_time=now,
-                    update_time=now
+                    update_time=now,
                 )
 
                 db.add(db_msg)
@@ -252,7 +252,7 @@ class ChatThreadManager:
                         extra_content=None,
                         order=j,
                         create_time=now,
-                        update_time=now
+                        update_time=now,
                     )
 
                     db.add(db_msg_content)
@@ -261,10 +261,7 @@ class ChatThreadManager:
                     attachment_id = uuid.uuid4()
 
                     db_attachment = ChatMessageAttachment(
-                        id=attachment_id,
-                        message_id=message_id,
-                        file_id=attachment.file_id,
-                        create_time=now
+                        id=attachment_id, message_id=message_id, file_id=attachment.file_id, create_time=now
                     )
 
                     db.add(db_attachment)
@@ -272,9 +269,7 @@ class ChatThreadManager:
                     if attachment.exposed_to_tools is not None:
                         for tool_name in attachment.exposed_to_tools:
                             db_aet = ChatMessageAttachmentToolExposure(
-                                attachment_id=attachment_id,
-                                tool_name=tool_name,
-                                create_time=now
+                                attachment_id=attachment_id, tool_name=tool_name, create_time=now
                             )
 
                             db.add(db_aet)
@@ -291,37 +286,43 @@ class ChatThreadManager:
             if self.__is_thread_not_exist(db, thread_id):
                 return []
 
-            db_msgs = db.execute(
-                select(ChatMessage).where(
-                    ChatMessage.thread_id == thread_id
-                ).order_by(
-                    ChatMessage.create_time, ChatMessage.order
+            db_msgs = (
+                db.execute(
+                    select(ChatMessage)
+                    .where(ChatMessage.thread_id == thread_id)
+                    .order_by(ChatMessage.create_time, ChatMessage.order)
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             result = []
 
             for db_msg in db_msgs:
-                db_msg_contents = db.execute(
-                    select(ChatMessageContent).where(ChatMessageContent.message_id == db_msg.id)
-                ).scalars().all()
+                db_msg_contents = (
+                    db.execute(select(ChatMessageContent).where(ChatMessageContent.message_id == db_msg.id))
+                    .scalars()
+                    .all()
+                )
 
-                db_msg_attachments = db.execute(
-                    select(ChatMessageAttachment).where(ChatMessageAttachment.message_id == db_msg.id)
-                ).scalars().all()
+                db_msg_attachments = (
+                    db.execute(select(ChatMessageAttachment).where(ChatMessageAttachment.message_id == db_msg.id))
+                    .scalars()
+                    .all()
+                )
 
-                db_msg_attachment_tools = db.execute(
-                    select(ChatMessageAttachmentToolExposure).where(
-                        ChatMessageAttachmentToolExposure.attachment_id.in_(
-                            [a.id for a in db_msg_attachments]
+                db_msg_attachment_tools = (
+                    db.execute(
+                        select(ChatMessageAttachmentToolExposure).where(
+                            ChatMessageAttachmentToolExposure.attachment_id.in_([a.id for a in db_msg_attachments])
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
 
                 result.append(
-                    ChatMessageItem.from_db(
-                        db_msg, db_msg_contents, db_msg_attachments, db_msg_attachment_tools
-                    )
+                    ChatMessageItem.from_db(db_msg, db_msg_contents, db_msg_attachments, db_msg_attachment_tools)
                 )
 
             return result

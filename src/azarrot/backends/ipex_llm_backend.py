@@ -106,7 +106,7 @@ class IPEXLLMBackend(BaseBackend):
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
-        model_kwargs = {}
+        model_kwargs: dict[str, Any] = {}
 
         model_config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
 

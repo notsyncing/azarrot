@@ -18,10 +18,7 @@ def __check_path(path: Path, base: Path) -> None:
 
 
 def download_file_to_store(
-    url: str,
-    target_directory: Path,
-    target_directory_is_full_path: bool = False,
-    file_extension: str = ".file"
+    url: str, target_directory: Path, target_directory_is_full_path: bool = False, file_extension: str = ".file"
 ) -> Path:
     is_test_mode = environ.get(ENV_AZARROT_TEST_MODE) == "True"
     test_resources_root = environ.get(ENV_AZARROT_TEST_RESOURCES_ROOT)

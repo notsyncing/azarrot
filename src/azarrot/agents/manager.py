@@ -29,17 +29,17 @@ class AgentInfo:
 
     @classmethod
     def from_db_agent(cls, agent: Agent) -> "AgentInfo":
-       return cls(
-           id=str(agent.id),
-           name=agent.name,
-           description=agent.description,
-           model_id=agent.model_id,
-           model_instruction=agent.model_instruction,
-           default_generation_parameters=agent.default_generation_parameters,
-           additional_data=agent.additional_data,
-           create_time=agent.create_time,
-           update_time=agent.update_time,
-       )
+        return cls(
+            id=str(agent.id),
+            name=agent.name,
+            description=agent.description,
+            model_id=agent.model_id,
+            model_instruction=agent.model_instruction,
+            default_generation_parameters=agent.default_generation_parameters,
+            additional_data=agent.additional_data,
+            create_time=agent.create_time,
+            update_time=agent.update_time,
+        )
 
 
 @dataclass
@@ -91,11 +91,7 @@ class AgentManager:
         self._database = database
 
     def __convert_tool_request_to_database(
-        self,
-        agent_id: uuid.UUID,
-        tool_requests: list[AgentToolRequest],
-        create_time: datetime,
-        update_time: datetime
+        self, agent_id: uuid.UUID, tool_requests: list[AgentToolRequest], create_time: datetime, update_time: datetime
     ) -> list[AgentTool]:
         agent_tools = []
 
@@ -111,7 +107,7 @@ class AgentManager:
                 tool_preset_parameters=tool_param_text,
                 is_internal_tool=tool.is_internal_tool,
                 create_time=create_time,
-                update_time=update_time
+                update_time=update_time,
             )
 
             agent_tools.append(agent_tool)
@@ -146,7 +142,7 @@ class AgentManager:
                 default_generation_parameters=default_gen_param_text,
                 additional_data=json.dumps(additional_data) if additional_data is not None else None,
                 create_time=now,
-                update_time=now
+                update_time=now,
             )
 
             db.add(agent)
@@ -165,9 +161,7 @@ class AgentManager:
         agent_id = sanitize_uuid(agent_id)
 
         with Session(self._database) as db:
-            agent_tools = db.query(AgentTool).filter(
-                AgentTool.agent_id == agent_id
-            ).all()
+            agent_tools = db.query(AgentTool).filter(AgentTool.agent_id == agent_id).all()
 
             return [AgentToolInfo.from_db_agent_tool(tool) for tool in agent_tools]
 
@@ -208,7 +202,7 @@ class AgentManager:
             data = select_page(db_session, q, per_page=query.page_size, before=before, after=after)
 
             return PageResult(
-                data=[AgentInfo.from_db_agent(r._tuple()[0]) for r in data],
+                data=[AgentInfo.from_db_agent(r._tuple()[0]) for r in data],  # noqa: SLF001
                 is_last_page=not data.paging.has_next,
             )
 
@@ -217,7 +211,7 @@ class AgentManager:
 
         with Session(self._database) as db:
             agent = db.query(Agent).filter(Agent.id == agent_id).first()
-            
+
             if agent is None:
                 return None
 
@@ -232,14 +226,14 @@ class AgentManager:
         instructions: str | None = None,
         default_generation_parameters: AgentGenerationParameters | None = None,
         tools: list[AgentToolRequest] | None = None,
-        additional_data: dict[str, Any] | None = None
+        additional_data: dict[str, Any] | None = None,
     ) -> AgentInfo:
         agent_id = sanitize_uuid(agent_id)
         now = datetime.now()
 
         with Session(self._database) as db:
             agent = db.query(Agent).filter(Agent.id == agent_id).first()
-            
+
             if agent is None:
                 raise ValueError(f"Agent {agent_id} does not exist!")
 
@@ -269,7 +263,9 @@ class AgentManager:
 
                     agent.default_generation_parameters = json.dumps(dataclass_wizard.asdict(original_gen_params))
                 else:
-                    agent.default_generation_parameters = json.dumps(dataclass_wizard.asdict(default_generation_parameters))
+                    agent.default_generation_parameters = json.dumps(
+                        dataclass_wizard.asdict(default_generation_parameters)
+                    )
 
             if tools is not None:
                 db.execute(delete(AgentTool).where(AgentTool.agent_id == agent.id))

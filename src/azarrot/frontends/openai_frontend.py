@@ -294,7 +294,7 @@ class OpenAIFrontend:
         else:
             message = {}
 
-        resp = {
+        resp: dict[str, Any] = {
             "id": str(uuid.uuid4()),
             "object": "chat.completion.chunk" if is_delta else "chat.completion",
             "created": int(datetime.now().timestamp()),

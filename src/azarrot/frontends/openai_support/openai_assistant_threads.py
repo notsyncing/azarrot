@@ -51,8 +51,7 @@ class OpenAIAssistantUpdateThreadRequest(BaseModel):
 
 
 def to_chat_thread_tool_preset_params(
-    openai_tool_resources: OpenAIToolResources | None,
-    reranker_model_id: str | None = None
+    openai_tool_resources: OpenAIToolResources | None, reranker_model_id: str | None = None
 ) -> tuple[list[ChatThreadAgentToolPresetParams] | None, list[OpenAIFileSearchToolVectorStoreCreationRequest] | None]:
     if openai_tool_resources is None:
         return None, None
@@ -63,20 +62,20 @@ def to_chat_thread_tool_preset_params(
     if openai_tool_resources.code_interpreter is not None:
         code_interpreter_params = ChatThreadAgentToolPresetParams(
             tool_name=INTERNAL_TOOL_CODE_INTERPRETER,
-            tool_additional_preset_params=dataclass_wizard.asdict(to_agent_code_interpreter_tool_options(openai_tool_resources))
+            tool_additional_preset_params=dataclass_wizard.asdict(
+                to_agent_code_interpreter_tool_options(openai_tool_resources)
+            ),
         )
 
         agent_tool_params.append(code_interpreter_params)
 
     if openai_tool_resources.file_search is not None:
         tool_params, new_vector_stores = to_agent_file_search_tool_options(
-                None, openai_tool_resources,
-                reranker_model_id=reranker_model_id
-            )
+            None, openai_tool_resources, reranker_model_id=reranker_model_id
+        )
 
         file_search_params = ChatThreadAgentToolPresetParams(
-            tool_name=INTERNAL_TOOL_FILE_SEARCH,
-            tool_additional_preset_params=dataclass_wizard.asdict(tool_params)
+            tool_name=INTERNAL_TOOL_FILE_SEARCH, tool_additional_preset_params=dataclass_wizard.asdict(tool_params)
         )
 
         agent_tool_params.append(file_search_params)
@@ -97,7 +96,7 @@ class OpenAIAssistantThreads:
         chat_thread_manager: ChatThreadManager,
         vector_stores: VectorStoreManager,
         model_manager: ModelManager,
-        file_store: FileStore
+        file_store: FileStore,
     ) -> None:
         self._config = config
         self._chat_thread_manager = chat_thread_manager
@@ -107,21 +106,17 @@ class OpenAIAssistantThreads:
 
     def create_thread(self, request: OpenAIAssistantCreateThreadRequest) -> OpenAIAssistantThread:
         tool_params, new_vector_stores = to_chat_thread_tool_preset_params(
-            request.tool_resources,
-            reranker_model_id=self._config.assistant_file_search_reranker_default_model_id
+            request.tool_resources, reranker_model_id=self._config.assistant_file_search_reranker_default_model_id
         )
 
         thread_info = self._chat_thread_manager.create(
-            additional_data=request.metadata,
-            additional_tool_preset_parameters=tool_params
+            additional_data=request.metadata, additional_tool_preset_parameters=tool_params
         )
 
         if request.messages is not None:
             message_items, image_upload_requests = to_chat_message_input_items(request.messages)
 
-            self._chat_thread_manager.add_messages(
-                thread_info.id, message_items
-            )
+            self._chat_thread_manager.add_messages(thread_info.id, message_items)
 
             for req in image_upload_requests:
                 self._file_store.download_file(req.image_url, to_file_id=req.to_file_id)
@@ -135,7 +130,7 @@ class OpenAIAssistantThreads:
             id=thread_info.id,
             created_at=int(thread_info.create_time.timestamp()),
             tool_resources=request.tool_resources,
-            metadata=request.metadata
+            metadata=request.metadata,
         )
 
     def __to_openai_tool_resources(
@@ -153,8 +148,9 @@ class OpenAIAssistantThreads:
                 )
 
                 res.code_interpreter = OpenAICodeInterpreterToolResource(
-                    file_ids=[str(f) for f in code_interpreter_params.exposed_files] \
-                        if code_interpreter_params.exposed_files is not None else []
+                    file_ids=[str(f) for f in code_interpreter_params.exposed_files]
+                    if code_interpreter_params.exposed_files is not None
+                    else []
                 )
             elif params.tool_name == INTERNAL_TOOL_FILE_SEARCH:
                 file_search_params = dataclass_wizard.fromdict(
@@ -162,8 +158,9 @@ class OpenAIAssistantThreads:
                 )
 
                 res.file_search = OpenAIFileSearchToolResource(
-                    vector_store_ids=[str(f) for f in file_search_params.vector_stores] \
-                        if file_search_params.vector_stores is not None else []
+                    vector_store_ids=[str(f) for f in file_search_params.vector_stores]
+                    if file_search_params.vector_stores is not None
+                    else []
                 )
 
         return res
@@ -180,16 +177,14 @@ class OpenAIAssistantThreads:
             id=thread_info.id,
             created_at=int(thread_info.create_time.timestamp()),
             tool_resources=self.__to_openai_tool_resources(thread_tool_preset_params),
-            metadata=thread_info.additional_data
+            metadata=thread_info.additional_data,
         )
 
     def update_thread(self, thread_id: str, request: OpenAIAssistantUpdateThreadRequest) -> OpenAIAssistantThread:
         params, new_vector_stores = to_chat_thread_tool_preset_params(request.tool_resources)
 
         thread_info = self._chat_thread_manager.update(
-            thread_id,
-            new_metadata=request.metadata,
-            new_tool_preset_params=params
+            thread_id, new_metadata=request.metadata, new_tool_preset_params=params
         )
 
         if thread_info is None:
@@ -206,14 +201,10 @@ class OpenAIAssistantThreads:
             id=thread_info.id,
             created_at=int(thread_info.create_time.timestamp()),
             tool_resources=self.__to_openai_tool_resources(thread_tool_preset_params),
-            metadata=thread_info.additional_data
+            metadata=thread_info.additional_data,
         )
 
     def delete_thread(self, thread_id: str) -> dict[str, Any]:
         r = self._chat_thread_manager.delete(thread_id)
 
-        return {
-            "id": thread_id,
-            "object": "thread.deleted",
-            "deleted": r
-        }
+        return {"id": thread_id, "object": "thread.deleted", "deleted": r}

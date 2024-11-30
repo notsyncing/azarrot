@@ -44,14 +44,8 @@ def test_create_message_thread(no_backend_server: Server) -> None:
 
     message_thread = client.beta.threads.create(
         messages=[
-            {
-                "role": "user",
-                "content": "Hello, what is AI?"
-            },
-            {
-                "role": "user",
-                "content": "How does AI work? Explain it in simple terms."
-            },
+            {"role": "user", "content": "Hello, what is AI?"},
+            {"role": "user", "content": "How does AI work? Explain it in simple terms."},
         ]
     )
 
@@ -82,12 +76,10 @@ def test_retrieve_thread(no_backend_server: Server) -> None:
             ChatThreadAgentToolPresetParams(
                 tool_name=INTERNAL_TOOL_FILE_SEARCH,
                 tool_additional_preset_params=dataclass_wizard.asdict(
-                    FileSearchToolConfigs(
-                        vector_stores=[str(vs_id1), str(vs_id2)]
-                    )
-                )
+                    FileSearchToolConfigs(vector_stores=[str(vs_id1), str(vs_id2)])
+                ),
             )
-        ]
+        ],
     )
 
     client = create_openai_client(no_backend_server)
@@ -117,27 +109,20 @@ def test_modify_thread(no_backend_server: Server) -> None:
             ChatThreadAgentToolPresetParams(
                 tool_name=INTERNAL_TOOL_FILE_SEARCH,
                 tool_additional_preset_params=dataclass_wizard.asdict(
-                    FileSearchToolConfigs(
-                        vector_stores=[str(vs_id1), str(vs_id2)]
-                    )
-                )
+                    FileSearchToolConfigs(vector_stores=[str(vs_id1), str(vs_id2)])
+                ),
             )
-        ]
+        ],
     )
 
     client = create_openai_client(no_backend_server)
 
     t = client.beta.threads.update(
         str(thread_info.id),
-        metadata={
-            "modified": True,
-            "user": "abc123"
-        },
+        metadata={"modified": True, "user": "abc123"},
         tool_resources=ToolResources(
-            code_interpreter=ToolResourcesCodeInterpreter(
-                file_ids=[str(vs_id1), str(vs_id2)]
-            )
-        )
+            code_interpreter=ToolResourcesCodeInterpreter(file_ids=[str(vs_id1), str(vs_id2)])
+        ),
     )
 
     assert isinstance(t.metadata, dict)

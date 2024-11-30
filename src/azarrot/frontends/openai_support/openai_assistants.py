@@ -26,12 +26,12 @@ from azarrot.tools.internal.tool_code_interpreter import CodeInterpreterToolConf
 from azarrot.tools.tool import LocalizedToolDescription
 from azarrot.vector_store.manager import VectorStoreManager
 
-OPENAI_TOOL_CODE_INTERPRETER = "code_interpreter"
-OPENAI_TOOL_FILE_SEARCH = "file_search"
-OPENAI_TOOL_FUNCTION = "function"
+OPENAI_TOOL_CODE_INTERPRETER: Literal["code_interpreter"] = "code_interpreter"
+OPENAI_TOOL_FILE_SEARCH: Literal["file_search"] = "file_search"
+OPENAI_TOOL_FUNCTION: Literal["function"] = "function"
 
 OPENAI_FILE_SEARCH_MAX_RESULT_COUNT = 20
-OPENAI_FILE_SEARCH_RERANKER_SCORE_THRESHOLD = 0
+OPENAI_FILE_SEARCH_RERANKER_SCORE_THRESHOLD = 0.0
 
 OpenAIAssistantToolType = Literal["code_interpreter", "file_search", "function"]
 
@@ -97,9 +97,7 @@ class OpenAICreateAssistantRequest(BaseModel):
     description: str | None = None
     instructions: str | None = None
 
-    tools: list[
-        Annotated[OpenAIAssistantTool, Field(discriminator="type")]
-    ] | None = None
+    tools: list[Annotated[OpenAIAssistantTool, Field(discriminator="type")]] | None = None
 
     tool_resources: OpenAIToolResources
     metadata: dict[str, Any] | None = None
@@ -126,9 +124,7 @@ class OpenAIUpdateAssistantRequest(BaseModel):
     description: str | None = None
     instructions: str | None = None
 
-    tools: list[
-        Annotated[OpenAIAssistantTool, Field(discriminator="type")]
-    ] | None = None
+    tools: list[Annotated[OpenAIAssistantTool, Field(discriminator="type")]] | None = None
 
     tool_resources: OpenAIUpdateToolResources | None = None
     metadata: dict[str, Any] | None = None
@@ -137,7 +133,7 @@ class OpenAIUpdateAssistantRequest(BaseModel):
 
 
 def to_agent_code_interpreter_tool_options(
-    openai_tool_resources: OpenAIToolResources | OpenAIUpdateToolResources | None
+    openai_tool_resources: OpenAIToolResources | OpenAIUpdateToolResources | None,
 ) -> CodeInterpreterToolConfigs:
     options = CodeInterpreterToolConfigs()
 
@@ -146,10 +142,11 @@ def to_agent_code_interpreter_tool_options(
 
     return options
 
+
 def to_agent_file_search_tool_options(
     openai_tool_file_search: OpenAIFileSearchToolOptions | None,
     openai_tool_resources: OpenAIToolResources | OpenAIUpdateToolResources | None,
-    reranker_model_id: str | None = None
+    reranker_model_id: str | None = None,
 ) -> tuple[FileSearchToolConfigs, list[OpenAIFileSearchToolVectorStoreCreationRequest] | None]:
     if openai_tool_resources is None:
         raise ValueError("You have added file search tool, but no resource was configured!")
@@ -193,22 +190,23 @@ def to_agent_file_search_tool_options(
         vector_stores=vector_stores,
         max_result_count=max_result_count,
         reranker_model_id=reranker_model_id,
-        reranker_score_threshold=reranker_score_threshold
+        reranker_score_threshold=reranker_score_threshold,
     ), new_vector_stores
+
 
 def to_agent_function_call_options(openai_function: OpenAIFunctionToolOptions) -> LocalizedToolDescription:
     return LocalizedToolDescription(
         name=openai_function.name,
         display_name=None,
         description=openai_function.description,
-        parameters=to_backend_tool_parameters(openai_function.parameters)
+        parameters=to_backend_tool_parameters(openai_function.parameters),
     )
 
 
 def to_agent_tool_requests(
     openai_tools: list[OpenAIAssistantTool] | None,
     openai_tool_resources: OpenAIToolResources | OpenAIUpdateToolResources | None,
-    reranker_model_id: str | None = None
+    reranker_model_id: str | None = None,
 ) -> tuple[list[AgentToolRequest] | None, list[OpenAIFileSearchToolVectorStoreCreationRequest] | None]:
     if openai_tools is None:
         return None, None
@@ -219,28 +217,29 @@ def to_agent_tool_requests(
     for openai_tool in openai_tools:
         agent_tool: AgentToolRequest
 
-        if openai_tool.type == OPENAI_TOOL_CODE_INTERPRETER:
+        if isinstance(openai_tool, OpenAICodeInterpreterTool):
             agent_tool = AgentToolRequest(
                 tool_name=INTERNAL_TOOL_CODE_INTERPRETER,
-                tool_preset_parameters=dataclass_wizard.asdict(to_agent_code_interpreter_tool_options(openai_tool_resources)),
-                is_internal_tool=True
+                tool_preset_parameters=dataclass_wizard.asdict(
+                    to_agent_code_interpreter_tool_options(openai_tool_resources)
+                ),
+                is_internal_tool=True,
             )
-        elif openai_tool.type == OPENAI_TOOL_FILE_SEARCH:
+        elif isinstance(openai_tool, OpenAIFileSearchTool):
             agent_tool_params, new_vector_stores = to_agent_file_search_tool_options(
-                openai_tool.file_search, openai_tool_resources,
-                reranker_model_id=reranker_model_id
+                openai_tool.file_search, openai_tool_resources, reranker_model_id=reranker_model_id
             )
 
             agent_tool = AgentToolRequest(
                 tool_name=INTERNAL_TOOL_FILE_SEARCH,
                 tool_preset_parameters=dataclass_wizard.asdict(agent_tool_params),
-                is_internal_tool=True
+                is_internal_tool=True,
             )
-        elif openai_tool.type == OPENAI_TOOL_FUNCTION:
+        elif isinstance(openai_tool, OpenAIFunctionTool):
             agent_tool = AgentToolRequest(
                 tool_name=openai_tool.function.name,
                 tool_preset_parameters=dataclass_wizard.asdict(to_agent_function_call_options(openai_tool.function)),
-                is_internal_tool=False
+                is_internal_tool=False,
             )
         else:
             raise ValueError(f"Unsupported OpenAI tool type {openai_tool.type}")
@@ -268,12 +267,13 @@ class OpenAIAssistantInfo:
 
     @staticmethod
     def from_agent_info(agent: AgentInfo, agent_tools: list[AgentToolInfo]) -> "OpenAIAssistantInfo":
-        tools = []
+        tools: list[OpenAIAssistantTool] = []
 
         tool_resources = OpenAIToolResources()
 
         for agent_tool in agent_tools:
             tool_params_dict = agent_tool.tool_preset_parameters
+            tool: OpenAIAssistantTool
 
             if agent_tool.tool_name == INTERNAL_TOOL_CODE_INTERPRETER:
                 tool = OpenAICodeInterpreterTool()
@@ -295,8 +295,8 @@ class OpenAIAssistantInfo:
                         max_num_results=rag_search_params.max_result_count,
                         ranking_options=OpenAIFileSearchToolRankingOptions(
                             ranker=rag_search_params.reranker_model_id,
-                            score_threshold=rag_search_params.reranker_score_threshold
-                        )
+                            score_threshold=rag_search_params.reranker_score_threshold,
+                        ),
                     )
                 )
 
@@ -317,7 +317,7 @@ class OpenAIAssistantInfo:
                         name=function_params.name,
                         description=function_params.description,
                         parameters=function_params.parameters_dict(),
-                        strict=False
+                        strict=False,
                     )
                 )
 
@@ -347,15 +347,13 @@ def create_openai_requested_vector_stores(
     openai_config: OpenAIFrontendConfig,
     model_manager: ModelManager,
     vector_stores: VectorStoreManager,
-    new_vector_stores: list[OpenAIFileSearchToolVectorStoreCreationRequest]
+    new_vector_stores: list[OpenAIFileSearchToolVectorStoreCreationRequest],
 ) -> None:
     if openai_config.vector_store_default_embedding_model_id is None:
         raise ValueError("OpenAI vector store default embedding model is not configured!")
 
     for new_vector_store in new_vector_stores:
-        embedding_model = model_manager.get_model(
-            openai_config.vector_store_default_embedding_model_id
-        )
+        embedding_model = model_manager.get_model(openai_config.vector_store_default_embedding_model_id)
 
         if embedding_model is None:
             raise ValueError(
@@ -367,7 +365,7 @@ def create_openai_requested_vector_stores(
             name=None,
             store_id=new_vector_store.vs_id,
             embedding_model=embedding_model,
-            additional_data=new_vector_store.metadata
+            additional_data=new_vector_store.metadata,
         )
 
         if new_vector_store.file_ids is not None and len(new_vector_store.file_ids) > 0:
@@ -385,7 +383,7 @@ class OpenAIAssistants:
         openai_config: OpenAIFrontendConfig,
         agent_manager: AgentManager,
         vector_store: VectorStoreManager,
-        model_manager: ModelManager
+        model_manager: ModelManager,
     ) -> None:
         self._openai_config = openai_config
         self._agent_manager = agent_manager
@@ -394,8 +392,9 @@ class OpenAIAssistants:
 
     def create_assistant(self, request: OpenAICreateAssistantRequest) -> OpenAIAssistantInfo:
         agent_tools_request, new_vector_stores = to_agent_tool_requests(
-            request.tools, request.tool_resources,
-            reranker_model_id=self._openai_config.assistant_file_search_reranker_default_model_id
+            request.tools,
+            request.tool_resources,
+            reranker_model_id=self._openai_config.assistant_file_search_reranker_default_model_id,
         )
 
         if new_vector_stores is not None:
@@ -409,11 +408,10 @@ class OpenAIAssistants:
             description=request.description,
             instructions=request.instructions,
             default_generation_parameters=AgentGenerationParameters(
-                temperature=request.temperature,
-                top_p=request.top_p
+                temperature=request.temperature, top_p=request.top_p
             ),
             tools=agent_tools_request,
-            additional_data=request.metadata
+            additional_data=request.metadata,
         )
 
         agent_tools_info = self._agent_manager.get_enabled_tools(agent_info.id)
@@ -459,20 +457,21 @@ class OpenAIAssistants:
         return OpenAIAssistantInfo.from_agent_info(agent, agent_tools_info)
 
     def update_assistant(self, assistant_id: str, request: OpenAIUpdateAssistantRequest) -> OpenAIAssistantInfo:
-        updated_agent = self._agent_manager.update(assistant_id,
+        updated_agent = self._agent_manager.update(
+            assistant_id,
             model_id=request.model,
             name=request.name,
             description=request.description,
             instructions=request.instructions,
             default_generation_parameters=AgentGenerationParameters(
-                temperature=request.temperature,
-                top_p=request.top_p
+                temperature=request.temperature, top_p=request.top_p
             ),
             tools=to_agent_tool_requests(
-                request.tools, request.tool_resources,
-                reranker_model_id=self._openai_config.assistant_file_search_reranker_default_model_id
+                request.tools,
+                request.tool_resources,
+                reranker_model_id=self._openai_config.assistant_file_search_reranker_default_model_id,
             )[0],
-            additional_data=request.metadata
+            additional_data=request.metadata,
         )
 
         updated_agent_tools = self._agent_manager.get_enabled_tools(updated_agent.id)
@@ -481,8 +480,4 @@ class OpenAIAssistants:
     def delete_assistant(self, assistant_id: str) -> dict[str, Any]:
         self._agent_manager.delete(assistant_id)
 
-        return {
-            "id": assistant_id,
-            "object": "assistant.deleted",
-            "deleted": True
-        }
+        return {"id": assistant_id, "object": "assistant.deleted", "deleted": True}

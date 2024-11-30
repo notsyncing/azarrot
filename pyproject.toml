@@ -60,6 +60,7 @@ dev = [
     "azarrot[doc]",
     "azarrot[build]",
     "azarrot[model_supports]",
+    "types-PyYAML==6.0.12.20240917"
 ]
 lint = [
     "mypy",
@@ -165,6 +166,7 @@ exclude = [
     "dist/",
     "docs/",
     "models/",
+    "tests/"
 ]
 
 [tool.pytest.ini_options]

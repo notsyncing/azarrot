@@ -163,7 +163,7 @@ class FileStore:
         mime_type: str | None,
         data: BinaryIO,
         file_id: uuid.UUID | None = None,
-        file_already_in_store_path: bool = False
+        file_already_in_store_path: bool = False,
     ) -> FileInfo:
         if file_id is None:
             file_id = uuid.uuid4()
@@ -225,19 +225,12 @@ class FileStore:
         file_id = sanitize_uuid(to_file_id) if to_file_id is not None else uuid.uuid4()
 
         file_path = download_file_to_store(
-            url,
-            target_directory=self.make_store_file_path(file_id),
-            target_directory_is_full_path=True
+            url, target_directory=self.make_store_file_path(file_id), target_directory_is_full_path=True
         )
 
         with file_path.open("rb") as data:
             file_info = self.store_file(
-                filename=None,
-                purpose=None,
-                mime_type=None,
-                data=data,
-                file_id=file_id,
-                file_already_in_store_path=True
+                filename=None, purpose=None, mime_type=None, data=data, file_id=file_id, file_already_in_store_path=True
             )
 
         self._log.info("Downloaded file from URL %s to %s", url, file_path)

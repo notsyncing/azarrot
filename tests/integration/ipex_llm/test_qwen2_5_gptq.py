@@ -25,4 +25,3 @@ def test_qwen2_5_gptq_hello(ipex_llm_server: Server) -> None:
     assert result is not None
     assert result.content is not None
     assert result.content.find("你好！") >= 0
-

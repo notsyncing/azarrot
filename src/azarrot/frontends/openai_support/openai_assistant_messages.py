@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from azarrot.chats.common_data import (
     ChatMessageAttachmentItem,
     ChatMessageContentImagePart,
+    ChatMessageContentPart,
     ChatMessageContentTextPart,
     ChatMessageInputItem,
 )
@@ -41,8 +42,9 @@ class OpenAIAssistantMessagePartText(BaseModel):
     text: str
 
 
-OpenAIAssistantMessageParts = \
+OpenAIAssistantMessageParts = (
     OpenAIAssistantMessagePartImageFile | OpenAIAssistantMessagePartImageUrl | OpenAIAssistantMessagePartText
+)
 
 
 class OpenAIAssistantMessageAttachmentTool(BaseModel):
@@ -68,11 +70,12 @@ class OpenAIAssistantMessageContentImageUploadRequest:
 
 
 def to_chat_message_input_item(
-    openai_assistant_message: OpenAIAssistantMessage
+    openai_assistant_message: OpenAIAssistantMessage,
 ) -> tuple[ChatMessageInputItem, OpenAIAssistantMessageContentImageUploadRequest | None]:
     openai_msg_contents = openai_assistant_message.content
 
     image_upload_request = None
+    contents: list[ChatMessageContentPart]
 
     if isinstance(openai_msg_contents, str):
         contents = [ChatMessageContentTextPart(openai_msg_contents)]
@@ -80,21 +83,20 @@ def to_chat_message_input_item(
         contents = []
 
         for openai_msg_content in openai_msg_contents:
+            part: ChatMessageContentPart
+
             if isinstance(openai_msg_content, OpenAIAssistantMessagePartText):
                 part = ChatMessageContentTextPart(openai_msg_content.text)
             elif isinstance(openai_msg_content, OpenAIAssistantMessagePartImageUrl):
                 to_file_id = uuid.uuid4()
 
                 image_upload_request = OpenAIAssistantMessageContentImageUploadRequest(
-                    image_url=openai_msg_content.image_url.url,
-                    to_file_id=to_file_id
+                    image_url=openai_msg_content.image_url.url, to_file_id=to_file_id
                 )
 
                 part = ChatMessageContentImagePart(to_file_id)
             elif isinstance(openai_msg_content, OpenAIAssistantMessagePartImageFile):
-                part = ChatMessageContentImagePart(
-                    uuid.UUID(openai_msg_content.image_file.file_id)
-                )
+                part = ChatMessageContentImagePart(uuid.UUID(openai_msg_content.image_file.file_id))
             else:
                 raise ValueError(f"Unsupported openai message content {openai_msg_content}")
 
@@ -114,8 +116,7 @@ def to_chat_message_input_item(
                         exposed_to_tools.append(INTERNAL_TOOL_FILE_SEARCH)
 
             attachment = ChatMessageAttachmentItem(
-                file_id=uuid.UUID(openai_attachment.file_id),
-                exposed_to_tools=exposed_to_tools
+                file_id=uuid.UUID(openai_attachment.file_id), exposed_to_tools=exposed_to_tools
             )
 
             attachments.append(attachment)
@@ -124,12 +125,12 @@ def to_chat_message_input_item(
         role=openai_assistant_message.role,
         contents=contents,
         attachments=attachments,
-        additional_data=openai_assistant_message.metadata
+        additional_data=openai_assistant_message.metadata,
     ), image_upload_request
 
 
 def to_chat_message_input_items(
-    openai_assistant_messages: list[OpenAIAssistantMessage]
+    openai_assistant_messages: list[OpenAIAssistantMessage],
 ) -> tuple[list[ChatMessageInputItem], list[OpenAIAssistantMessageContentImageUploadRequest]]:
     message_items = []
     upload_reqs = []

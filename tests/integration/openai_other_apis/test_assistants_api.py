@@ -26,7 +26,7 @@ def test_create_asssistant(no_backend_server: Server) -> None:
         name="HR Helper",
         tools=[{"type": "file_search"}],
         tool_resources={"file_search": {"vector_store_ids": ["vs_123"]}},
-        model="dummy_model"
+        model="dummy_model",
     )
 
     assert assistant.name == "HR Helper"
@@ -89,11 +89,7 @@ def test_modify_assistant(no_backend_server: Server) -> None:
 
     client = create_openai_client(no_backend_server)
 
-    new_agent = client.beta.assistants.update(
-        agent.id,
-        name="agent1-new",
-        instructions="you are new agent 1"
-    )
+    new_agent = client.beta.assistants.update(agent.id, name="agent1-new", instructions="you are new agent 1")
 
     assert new_agent.name == "agent1-new"
     assert new_agent.description == "test agent 1"

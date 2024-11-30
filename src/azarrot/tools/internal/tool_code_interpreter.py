@@ -19,12 +19,13 @@ class CodeInterpreterTool(Tool):
             description={"zh-cn": "用于解释执行Python代码的工具"},
             parameters=[
                 ToolParameter(
-                    name="configs", type="string", description={"zh-cn": "代码解释器的配置参数"}, required=True,
-                    should_preset=True
+                    name="configs",
+                    type="string",
+                    description={"zh-cn": "代码解释器的配置参数"},
+                    required=True,
+                    should_preset=True,
                 ),
-                ToolParameter(
-                    name="code", type="string", description={"zh-cn": "要执行的Python代码"}, required=True
-                ),
+                ToolParameter(name="code", type="string", description={"zh-cn": "要执行的Python代码"}, required=True),
             ],
         )
 

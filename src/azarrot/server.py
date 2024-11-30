@@ -265,8 +265,15 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
 
     frontends = [
         OpenAIFrontend(
-            config.openai_configs, model_manager, backend_pipe, file_store, agent_manager,
-            chat_thread_manager, vector_store, api, working_dirs
+            config.openai_configs,
+            model_manager,
+            backend_pipe,
+            file_store,
+            agent_manager,
+            chat_thread_manager,
+            vector_store,
+            api,
+            working_dirs,
         )
     ]
 

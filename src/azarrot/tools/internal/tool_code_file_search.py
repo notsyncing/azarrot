@@ -10,7 +10,7 @@ class FileSearchToolConfigs:
     vector_stores: list[str]
     max_result_count: int = 20
     reranker_model_id: str | None = None
-    reranker_score_threshold: float = 0
+    reranker_score_threshold: float = 0.0
 
 
 class FileSearchTool(Tool):
@@ -22,12 +22,13 @@ class FileSearchTool(Tool):
             description={"zh-cn": "用于在一系列文件中搜索与特定句子相关的内容的工具"},
             parameters=[
                 ToolParameter(
-                    name="search_configs", type="object", description={"zh-cn": "搜索配置参数"}, required=True,
-                    should_preset=True
+                    name="search_configs",
+                    type="object",
+                    description={"zh-cn": "搜索配置参数"},
+                    required=True,
+                    should_preset=True,
                 ),
-                ToolParameter(
-                    name="query", type="string", description={"zh-cn": "要搜索的句子"}, required=True
-                ),
+                ToolParameter(name="query", type="string", description={"zh-cn": "要搜索的句子"}, required=True),
             ],
         )
 
