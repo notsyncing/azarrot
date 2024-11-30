@@ -37,10 +37,11 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Models|List models|✅|✅||
 |Files|Upload, list, retrieve, delete, retrieve content|✅|✅||
 |Uploads|Create, upload, complete, cancel|✅|✅||
-|Assistants|Assistants|☑️|☑️|`response_format` not implemented yet|
-|Assistants|Vector stores|✅|✅|Vector store bytes used is estimated|
-|Assistants|Vector store files|✅|✅|Vector store bytes used is estimated|
-|Assistants|Vector store file batches|✅|✅|Vector store bytes used is estimated|
+|Assistants (v2)|Assistants|☑️|☑️|`response_format` not implemented yet|
+|Assistants (v2)|Threads|✅|✅||
+|Assistants (v2)|Vector stores|✅|✅|Vector store bytes used is estimated|
+|Assistants (v2)|Vector store files|✅|✅|Vector store bytes used is estimated|
+|Assistants (v2)|Vector store file batches|✅|✅|Vector store bytes used is estimated|
 
 ### Other features
 

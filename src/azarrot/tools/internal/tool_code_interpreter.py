@@ -1,13 +1,13 @@
-import uuid
-from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
 
+@dataclass
 class CodeInterpreterToolConfigs:
-    exposed_files: Sequence[str | uuid.UUID] | None = None
+    exposed_files: list[str] | None = None
 
 
 class CodeInterpreterTool(Tool):

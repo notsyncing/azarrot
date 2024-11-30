@@ -3,7 +3,12 @@ from datetime import datetime
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from azarrot.common_types import VectorStoreExpireBaseline, VectorStoreFileFailedReason, VectorStoreFileState
+from azarrot.common_types import (
+    MessageContentType,
+    VectorStoreExpireBaseline,
+    VectorStoreFileFailedReason,
+    VectorStoreFileState,
+)
 
 
 class Base(DeclarativeBase):
@@ -187,4 +192,110 @@ class AgentTool(Base):
             f"{self.__class__.__name__}(agent_id={self.agent_id}, tool_name={self.tool_name}, "
             f"is_internal_tool={self.is_internal_tool}, tool_preset_parameters={self.tool_preset_parameters}, "
             f"create_time={self.create_time}, update_time={self.update_time})"
+        )
+
+
+class ChatThread(Base):
+    __tablename__ = "chat_threads"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    additional_data: Mapped[str | None]
+    deleted: Mapped[bool]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(id={self.id}, additional_data={self.additional_data}, "
+            f"deleted={self.deleted}, "
+            f"create_time={self.create_time}, update_time={self.update_time})"
+        )
+
+
+class ChatThreadToolPresetParams(Base):
+    __tablename__ = "chat_thread_tool_preset_params"
+
+    thread_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    tool_name: Mapped[str] = mapped_column(primary_key=True)
+    tool_preset_parameters: Mapped[str]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(thread_id={self.thread_id}, tool_name={self.tool_name}, "
+            f"tool_preset_parameters={self.tool_preset_parameters}, "
+            f"create_time={self.create_time}, update_time={self.update_time})"
+        )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)    
+    thread_id: Mapped[uuid.UUID]
+    role: Mapped[str]
+    order: Mapped[int]
+    additional_data: Mapped[str | None]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(id={self.id}, "
+            f"thread_id={self.thread_id}, "
+            f"role={self.role}, "
+            f"order={self.order}, "
+            f"additional_data={self.additional_data}, create_time={self.create_time}, "
+            f"update_time={self.update_time})"
+        )
+
+
+class ChatMessageContent(Base):
+    __tablename__ = "chat_message_contents"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    message_id: Mapped[uuid.UUID]
+    type: Mapped[MessageContentType]
+    content: Mapped[str | None]
+    extra_content: Mapped[str | None]
+    order: Mapped[int]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(id={self.id}, message_id={self.message_id}, "
+            f"type={self.type}, content={self.content}, extra_content={self.extra_content}, "
+            f"order={self.order}, "
+            f"create_time={self.create_time}, update_time={self.update_time})"
+        )
+
+
+class ChatMessageAttachment(Base):
+    __tablename__ = "chat_message_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    message_id: Mapped[uuid.UUID]
+    file_id: Mapped[uuid.UUID]
+    create_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(id={self.id}, message_id={self.message_id}, "
+            f"file_id={self.file_id}, create_time={self.create_time})"
+        )
+
+
+class ChatMessageAttachmentToolExposure(Base):
+    __tablename__ = "chat_message_attachment_tool_exposures"
+
+    attachment_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    tool_name: Mapped[str] = mapped_column(primary_key=True)
+    create_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(attachment_id={self.attachment_id}, tool_name={self.tool_name}, "
+            f"create_time={self.create_time})"
         )

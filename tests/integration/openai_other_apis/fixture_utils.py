@@ -2,12 +2,19 @@ import logging
 import tempfile
 import time
 from collections.abc import Generator
+from os import environ
 from pathlib import Path
 from threading import Thread
 from typing import Any
 
 from azarrot.backends.openvino_backend import OpenVINOBackend
-from azarrot.config import OpenAIFrontendConfig, ServerConfig, VectorStoreConfig
+from azarrot.config import (
+    ENV_AZARROT_TEST_MODE,
+    ENV_AZARROT_TEST_RESOURCES_ROOT,
+    OpenAIFrontendConfig,
+    ServerConfig,
+    VectorStoreConfig,
+)
 from azarrot.server import Server, create_server
 from tests.integration.utils import get_file_store
 
@@ -27,7 +34,8 @@ def make_no_backend_server() -> Generator[Server, Any, Any]:
         enable_backends=[],
     )
 
-    server.frontends[0].set_test_mode(test_resources_root=Path(__file__).resolve().parent / Path("../resources"))
+    environ[ENV_AZARROT_TEST_MODE] = "True"
+    environ[ENV_AZARROT_TEST_RESOURCES_ROOT] = str(Path(__file__).resolve().parent / Path("../resources"))
 
     thread = Thread(target=server.start, daemon=True)
     thread.start()
@@ -63,7 +71,8 @@ def make_openvino_server(
         enable_backends=[OpenVINOBackend],
     )
 
-    server.frontends[0].set_test_mode(test_resources_root=Path(__file__).resolve().parent / Path("../resources"))
+    environ[ENV_AZARROT_TEST_MODE] = "True"
+    environ[ENV_AZARROT_TEST_RESOURCES_ROOT] = str(Path(__file__).resolve().parent / Path("../resources"))
 
     thread = Thread(target=server.start, daemon=True)
     thread.start()
@@ -86,3 +95,4 @@ def do_clear_database(server: Server) -> Generator[None, Any, Any]:
 
     server.vector_store.clear_database()
     server.agent_manager.clear_database()
+    server.chat_thread_manager.clear_database()

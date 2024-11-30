@@ -3,6 +3,9 @@ from pathlib import Path
 
 DEFAULT_MAX_TOKENS = 512
 
+ENV_AZARROT_TEST_MODE = "AZARROT_TEST_MODE"
+ENV_AZARROT_TEST_RESOURCES_ROOT = "AZARROT_TEST_RESOURCES_ROOT"
+
 
 @dataclass
 class OpenAIFrontendConfig:

@@ -41,7 +41,69 @@ def upgrade() -> None:
         sa.Column("update_time", sa.DateTime, nullable=False),
     )
 
+    op.create_table(
+        "chat_threads",
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("additional_data", sa.Text),
+        sa.Column("deleted", sa.Boolean, nullable=False),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+        sa.Column("update_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
+        "chat_thread_tool_preset_params",
+        sa.Column("thread_id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("tool_name", sa.String(256), primary_key=True),
+        sa.Column("tool_preset_parameters", sa.Text, nullable=False),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+        sa.Column("update_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
+        "chat_messages",
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("thread_id", sa.Uuid(as_uuid=True), index=True),
+        sa.Column("role", sa.String(64), nullable=False),
+        sa.Column("order", sa.Integer, nullable=False),
+        sa.Column("additional_data", sa.Text),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+        sa.Column("update_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
+        "chat_message_contents",
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("message_id", sa.Uuid(as_uuid=True), nullable=False),
+        sa.Column("type", sa.String(32), nullable=False),
+        sa.Column("content", sa.Text),
+        sa.Column("extra_content", sa.Text),
+        sa.Column("order", sa.Integer, nullable=False),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+        sa.Column("update_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
+        "chat_message_attachments",
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("message_id", sa.Uuid(as_uuid=True), nullable=False),
+        sa.Column("file_id", sa.Uuid(as_uuid=True), nullable=False),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
+        "chat_message_attachment_tool_exposures",
+        sa.Column("attachment_id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("tool_name", sa.String(256), primary_key=True),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+    )
+
 
 def downgrade() -> None:
     op.drop_table("agents")
     op.drop_table("agent_tools")
+    op.drop_table("chat_threads")
+    op.drop_table("chat_thread_tool_preset_params")
+    op.drop_table("chat_messages")
+    op.drop_table("chat_message_contents")
+    op.drop_table("chat_message_attachments")
+    op.drop_table("chat_message_attachment_tool_exposures")

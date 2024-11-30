@@ -1,11 +1,8 @@
 import json
 import logging
-import os
-import urllib.request
 import uuid
 from collections.abc import Generator
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI
@@ -13,6 +10,7 @@ from starlette.responses import StreamingResponse
 
 from azarrot.agents.manager import AgentManager
 from azarrot.backends.common import CTIS_HAS_OBJECT, CustomTextIteratorStreamer
+from azarrot.chats.thread_manager import ChatThreadManager
 from azarrot.common_data import (
     CallableToolsInfo,
     EmbeddingsGenerationRequest,
@@ -31,6 +29,7 @@ from azarrot.common_data import (
 from azarrot.config import DEFAULT_MAX_TOKENS, OpenAIFrontendConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.openai_support.openai_assistant_threads import OpenAIAssistantThreads
 from azarrot.frontends.openai_support.openai_assistants import OpenAIAssistants
 from azarrot.frontends.openai_support.openai_data import (
     AssistantChatCompletionMessage,
@@ -50,6 +49,7 @@ from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorSt
 from azarrot.frontends.utils import to_backend_tool_parameters
 from azarrot.models.model_manager import ModelManager
 from azarrot.tools.tool import LocalizedToolDescription
+from azarrot.utils.downloader import download_file_to_store
 from azarrot.vector_store import VectorStoreManager
 
 
@@ -61,9 +61,8 @@ class OpenAIFrontend:
     _working_dirs: WorkingDirectories
     _openai_files: OpenAIFiles
     _assistants: OpenAIAssistants
+    _threads: OpenAIAssistantThreads
     _vstores: OpenAIVectorStores
-    _test_mode: bool = False
-    _test_resources_root: Path | None = None
 
     def __init__(
         self,
@@ -72,6 +71,7 @@ class OpenAIFrontend:
         backend_pipe: BackendPipe,
         file_store: FileStore,
         agent_manager: AgentManager,
+        chat_thread_manager: ChatThreadManager,
         vector_store: VectorStoreManager,
         api: FastAPI,
         working_dirs: WorkingDirectories,
@@ -82,6 +82,11 @@ class OpenAIFrontend:
         self._backend_pipe = backend_pipe
         self._openai_files = OpenAIFiles(file_store)
         self._assistants = OpenAIAssistants(openai_config, agent_manager, vector_store, model_manager)
+
+        self._threads = OpenAIAssistantThreads(
+            openai_config, chat_thread_manager, vector_store, model_manager, file_store
+        )
+
         self._vstores = OpenAIVectorStores(openai_config, model_manager, vector_store)
 
         router = APIRouter()
@@ -116,6 +121,12 @@ class OpenAIFrontend:
         router.add_api_route("/v1/assistants/{assistant_id}", self._assistants.update_assistant, methods=["POST"])
         router.add_api_route("/v1/assistants/{assistant_id}", self._assistants.delete_assistant, methods=["DELETE"])
 
+        # Assistants - Threads API
+        router.add_api_route("/v1/threads", self._threads.create_thread, methods=["POST"])
+        router.add_api_route("/v1/threads/{thread_id}", self._threads.get_thread, methods=["GET"])
+        router.add_api_route("/v1/threads/{thread_id}", self._threads.update_thread, methods=["POST"])
+        router.add_api_route("/v1/threads/{thread_id}", self._threads.delete_thread, methods=["DELETE"])
+
         vs_url = "/v1/vector_stores"
 
         # Assistants - Vector stores API
@@ -139,10 +150,6 @@ class OpenAIFrontend:
 
         api.include_router(router)
 
-    def set_test_mode(self, test_mode: bool = True, test_resources_root: Path | None = None) -> None:
-        self._test_mode = test_mode
-        self._test_resources_root = test_resources_root
-
     def __to_openai_model(self, model: Model) -> dict:
         return {"id": model.id, "object": "model", "created": int(model.create_time.timestamp()), "owned_by": "openai"}
 
@@ -159,32 +166,6 @@ class OpenAIFrontend:
             return {}
 
         return self.__to_openai_model(model)
-
-    def __check_path(self, path: Path) -> None:
-        prefix = Path(os.path.commonpath([path, self._working_dirs.uploaded_images]))
-
-        if prefix != self._working_dirs.uploaded_images:
-            raise ValueError("Target path %s is out of working directory %s", path, self._working_dirs.uploaded_images)
-
-    def __store_uploaded_image(self, image_url: str) -> str:
-        local_file: Path
-
-        if image_url.startswith(("http://", "https://")):
-            local_file = (self._working_dirs.uploaded_images / (str(uuid.uuid4()) + ".image")).resolve()
-            self.__check_path(local_file)
-
-            self._log.info("Downloading image from %s to %s", image_url, local_file)
-            urllib.request.urlretrieve(image_url, local_file)  # noqa: S310
-        elif image_url.startswith("test-resources://") and self._test_mode:
-            if self._test_resources_root is None:
-                raise ValueError("Test mode enabled, but test resources root path is not specified!")
-
-            local_file = (self._test_resources_root / Path(image_url[len("test-resources://") :])).resolve()
-        else:
-            local_file = (self._working_dirs.uploaded_images / image_url).resolve()
-            self.__check_path(local_file)
-
-        return str(local_file)
 
     def __to_backend_generation_messages(
         self,
@@ -219,8 +200,11 @@ class OpenAIFrontend:
                             else:
                                 raise ValueError("Invalid image url %s", str(c.image_url))
 
-                            image_path = self.__store_uploaded_image(url)
-                            content.append(ImageGenerationMessageContent(image_path))
+                            image_path = download_file_to_store(
+                                url, self._working_dirs.uploaded_images, file_extension=".image"
+                            )
+
+                            content.append(ImageGenerationMessageContent(str(image_path)))
                         else:
                             raise ValueError("Invalid content %s", str(c))
                 else:

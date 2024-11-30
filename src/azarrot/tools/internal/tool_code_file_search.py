@@ -1,4 +1,3 @@
-import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,7 +7,7 @@ from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
 @dataclass
 class FileSearchToolConfigs:
-    vector_stores: list[str | uuid.UUID]
+    vector_stores: list[str]
     max_result_count: int = 20
     reranker_model_id: str | None = None
     reranker_score_threshold: float = 0

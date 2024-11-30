@@ -2,6 +2,7 @@ import logging
 import tempfile
 import time
 from collections.abc import Generator
+from os import environ
 from pathlib import Path
 from threading import Thread
 from typing import Any
@@ -9,7 +10,7 @@ from typing import Any
 import pytest
 
 from azarrot.backends.openvino_backend import OpenVINOBackend
-from azarrot.config import ServerConfig
+from azarrot.config import ENV_AZARROT_TEST_MODE, ENV_AZARROT_TEST_RESOURCES_ROOT, ServerConfig
 from azarrot.server import Server, create_server
 
 
@@ -25,7 +26,8 @@ def openvino_server() -> Generator[Server, Any, Any]:
         enable_backends=[OpenVINOBackend],
     )
 
-    server.frontends[0].set_test_mode(test_resources_root=Path(__file__).resolve().parent / Path("../resources"))
+    environ[ENV_AZARROT_TEST_MODE] = "True"
+    environ[ENV_AZARROT_TEST_RESOURCES_ROOT] = str(Path(__file__).resolve().parent / Path("../resources"))
 
     thread = Thread(target=server.start, daemon=True)
     thread.start()

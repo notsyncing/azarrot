@@ -19,6 +19,7 @@ from azarrot.agents.manager import AgentManager
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
+from azarrot.chats.thread_manager import ChatThreadManager
 from azarrot.common_data import WorkingDirectories
 from azarrot.config import OpenAIFrontendConfig, ServerConfig
 from azarrot.file_store import FileStore
@@ -166,6 +167,7 @@ class Server:
     agent_manager: AgentManager
     vector_store: VectorStoreManager
     vector_store_worker: VectorStoreWorker
+    chat_thread_manager: ChatThreadManager
     api: FastAPI
 
     _uvicorn_server: uvicorn.Server | None = None
@@ -253,6 +255,7 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
     backend_pipe = BackendPipe(backends, chat_template_manager, GLOBAL_TOOL_MANAGER)
 
     agent_manager = AgentManager(db)
+    chat_thread_manager = ChatThreadManager(db)
 
     vector_store_worker = VectorStoreWorker(
         config.vector_store_configs, vector_store, model_manager, file_store, backend_pipe, db, vec_db_uri
@@ -262,8 +265,8 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
 
     frontends = [
         OpenAIFrontend(
-            config.openai_configs, model_manager, backend_pipe, file_store, agent_manager, vector_store, api,
-            working_dirs
+            config.openai_configs, model_manager, backend_pipe, file_store, agent_manager,
+            chat_thread_manager, vector_store, api, working_dirs
         )
     ]
 
@@ -277,6 +280,7 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
         agent_manager=agent_manager,
         vector_store=vector_store,
         vector_store_worker=vector_store_worker,
+        chat_thread_manager=chat_thread_manager,
         api=api,
     )
 

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from azarrot.config import ServerConfig
 from azarrot.database_schemas import File, PartialFile, PartialFilePart
 from azarrot.utils import compute_md5, compute_sha256, sanitize_uuid
+from azarrot.utils.downloader import download_file_to_store
 from azarrot.utils.merged_file import MergedReadOnlyBinaryFile
 
 
@@ -162,6 +163,7 @@ class FileStore:
         mime_type: str | None,
         data: BinaryIO,
         file_id: uuid.UUID | None = None,
+        file_already_in_store_path: bool = False
     ) -> FileInfo:
         if file_id is None:
             file_id = uuid.uuid4()
@@ -184,8 +186,13 @@ class FileStore:
 
             store_file_path = self.make_store_file_path(file_id)
 
-            with store_file_path.open("wb") as store_file:
-                shutil.copyfileobj(data, store_file)
+            if not file_already_in_store_path:
+                with store_file_path.open("wb") as store_file:
+                    shutil.copyfileobj(data, store_file)
+            elif not store_file_path.exists():
+                raise ValueError(
+                    f"You have enabled file_already_in_store_path, but it does not exist at {store_file_path}"
+                )
 
             db_file = File()
             db_file.id = file_id
@@ -212,6 +219,28 @@ class FileStore:
             checksum,
         )
 
+        return file_info
+
+    def download_file(self, url: str, to_file_id: str | uuid.UUID | None = None) -> FileInfo:
+        file_id = sanitize_uuid(to_file_id) if to_file_id is not None else uuid.uuid4()
+
+        file_path = download_file_to_store(
+            url,
+            target_directory=self.make_store_file_path(file_id),
+            target_directory_is_full_path=True
+        )
+
+        with file_path.open("rb") as data:
+            file_info = self.store_file(
+                filename=None,
+                purpose=None,
+                mime_type=None,
+                data=data,
+                file_id=file_id,
+                file_already_in_store_path=True
+            )
+
+        self._log.info("Downloaded file from URL %s to %s", url, file_path)
         return file_info
 
     def get_all_file_list(self) -> list[FileInfo]:

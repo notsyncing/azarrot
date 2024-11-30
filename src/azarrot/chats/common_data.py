@@ -1,0 +1,107 @@
+from datetime import datetime
+import json
+import uuid
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
+
+from typing_extensions import override
+
+from azarrot.database_schemas import ChatMessage, ChatMessageAttachment, ChatMessageAttachmentToolExposure, ChatMessageContent
+
+
+class ChatMessageContentPart(ABC):
+    @abstractmethod
+    def to_persist_content(self) -> str:
+        pass
+
+
+@dataclass
+class ChatMessageContentTextPart(ChatMessageContentPart):
+    text: str
+
+    @override
+    def to_persist_content(self) -> str:
+        return self.text
+
+
+@dataclass
+class ChatMessageContentImagePart(ChatMessageContentPart):
+    image_file_id: uuid.UUID
+
+    @override
+    def to_persist_content(self) -> str:
+        return str(self.image_file_id)
+
+
+@dataclass
+class ChatMessageAttachmentItem:
+    file_id: uuid.UUID
+    exposed_to_tools: list[str] | None = None
+
+    @staticmethod
+    def from_db(
+        dbo: ChatMessageAttachment,
+        db_tool_exposures: Sequence[ChatMessageAttachmentToolExposure]
+    ) -> "ChatMessageAttachmentItem":
+        tools = []
+
+        for db_tool_exposure in db_tool_exposures:
+            if db_tool_exposure.attachment_id == dbo.id:
+                tools.append(db_tool_exposure.tool_name)
+
+        return ChatMessageAttachmentItem(
+            file_id=dbo.file_id,
+            exposed_to_tools=tools
+        )
+
+
+@dataclass
+class ChatMessageInputItem:
+    role: str
+    contents: Sequence[ChatMessageContentPart]
+    attachments: list[ChatMessageAttachmentItem]
+    additional_data: dict[str, Any] | None = None
+
+
+@dataclass
+class ChatMessageItem:
+    id: str
+    role: str
+    contents: Sequence[ChatMessageContentPart]
+    attachments: list[ChatMessageAttachmentItem]
+    create_time: datetime
+    additional_data: dict[str, Any] | None = None
+
+    @staticmethod
+    def from_db(
+        dbo: ChatMessage,
+        db_contents: Sequence[ChatMessageContent],
+        db_attachments: Sequence[ChatMessageAttachment],
+        db_attachment_tool_exposures: Sequence[ChatMessageAttachmentToolExposure]
+    ) -> "ChatMessageItem":
+        contents = []
+
+        for db_content in db_contents:
+            if db_content.type == "text":
+                content = ChatMessageContentTextPart(
+                    db_content.content if db_content.content is not None else ""
+                )
+            elif db_content.type == "image_file":
+                content = ChatMessageContentImagePart(
+                    uuid.UUID(db_content.content)
+                )
+            else:
+                raise ValueError(f"Unsupported chat message content type {db_content.type} on message id {dbo.id}")
+
+            contents.append(content)
+
+        return ChatMessageItem(
+            id=str(dbo.id),
+            role=dbo.role,
+            contents=contents,
+            attachments=[ChatMessageAttachmentItem.from_db(a, db_attachment_tool_exposures) for a in db_attachments],
+            create_time=dbo.create_time,
+            additional_data=json.loads(dbo.additional_data) if dbo.additional_data is not None else None
+        )
