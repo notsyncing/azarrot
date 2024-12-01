@@ -43,6 +43,25 @@ def upgrade() -> None:
     )
 
     op.create_table(
+        "agent_chat_tasks",
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("agent_id", sa.Uuid(as_uuid=True), index=True),
+        sa.Column("thread_id", sa.Uuid(as_uuid=True), index=True),
+        sa.Column("status", sa.String(32), nullable=False),
+        sa.Column("complete_time", sa.DateTime),
+        sa.Column("error_message", sa.Text),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+        sa.Column("update_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
+        "agent_chat_messages",
+        sa.Column("message_id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("agent_chat_task_id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
         "chat_threads",
         sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("additional_data", sa.Text),
@@ -66,6 +85,7 @@ def upgrade() -> None:
         sa.Column("thread_id", sa.Uuid(as_uuid=True), index=True),
         sa.Column("role", sa.String(64), nullable=False),
         sa.Column("order", sa.Integer, nullable=False),
+        sa.Column("deleted", sa.Boolean, nullable=False),
         sa.Column("additional_data", sa.Text),
         sa.Column("create_time", sa.DateTime, nullable=False),
         sa.Column("update_time", sa.DateTime, nullable=False),
@@ -102,6 +122,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("agents")
     op.drop_table("agent_tools")
+    op.drop_table("agent_chat_tasks")
+    op.drop_table("agent_chat_messages")
     op.drop_table("chat_threads")
     op.drop_table("chat_thread_tool_preset_params")
     op.drop_table("chat_messages")

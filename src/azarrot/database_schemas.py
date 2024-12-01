@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from azarrot.common_types import (
+    AgentChatTaskStatus,
     MessageContentType,
     VectorStoreExpireBaseline,
     VectorStoreFileFailedReason,
@@ -229,6 +230,50 @@ class ChatThreadToolPresetParams(Base):
         )
 
 
+class AgentChatTask(Base):
+    __tablename__ = "agent_chat_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    agent_id: Mapped[uuid.UUID]
+    thread_id: Mapped[uuid.UUID]
+    status: Mapped[AgentChatTaskStatus]
+    complete_time: Mapped[datetime | None]
+    error_message: Mapped[str | None]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"id={self.id}, "
+            f"agent_id={self.agent_id}, "
+            f"thread_id={self.thread_id}, "
+            f"status={self.status}, "
+            f"complete_time={self.complete_time}, "
+            f"error_message={self.error_message}, "
+            f"create_time={self.create_time}, "
+            f"update_time={self.update_time}, "
+            ")"
+        )
+
+
+class AgentChatMessage(Base):
+    __tablename__ = "agent_chat_messages"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    agent_chat_task_id: Mapped[uuid.UUID]
+    create_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"message_id={self.message_id}, "
+            f"agent_chat_task_id={self.agent_chat_task_id}, "
+            f"create_time={self.create_time}, "
+            ")"
+        )
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
@@ -236,6 +281,7 @@ class ChatMessage(Base):
     thread_id: Mapped[uuid.UUID]
     role: Mapped[str]
     order: Mapped[int]
+    deleted: Mapped[bool]
     additional_data: Mapped[str | None]
     create_time: Mapped[datetime]
     update_time: Mapped[datetime]
@@ -246,6 +292,7 @@ class ChatMessage(Base):
             f"thread_id={self.thread_id}, "
             f"role={self.role}, "
             f"order={self.order}, "
+            f"deleted={self.deleted}, "
             f"additional_data={self.additional_data}, create_time={self.create_time}, "
             f"update_time={self.update_time})"
         )

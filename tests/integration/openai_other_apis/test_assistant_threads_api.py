@@ -7,7 +7,7 @@ import pytest
 from openai.types.beta.thread_update_params import ToolResources, ToolResourcesCodeInterpreter
 
 from azarrot.chats.common_data import ChatMessageContentTextPart
-from azarrot.chats.thread_manager import ChatThreadAgentToolPresetParams
+from azarrot.chats.thread_manager import ChatMessageListPagedQuery, ChatThreadAgentToolPresetParams
 from azarrot.server import Server
 from azarrot.tools.internal import INTERNAL_TOOL_FILE_SEARCH
 from azarrot.tools.internal.tool_code_file_search import FileSearchToolConfigs
@@ -52,7 +52,11 @@ def test_create_message_thread(no_backend_server: Server) -> None:
     thread_info = no_backend_server.chat_thread_manager.get(message_thread.id)
     assert thread_info is not None
 
-    messages = no_backend_server.chat_thread_manager.get_messages(thread_info.id)
+    page = no_backend_server.chat_thread_manager.get_messages(
+        ChatMessageListPagedQuery(thread_id=thread_info.id, create_time_desc_order=False, page_size=10)
+    )
+
+    messages = page.data
     assert len(messages) == 2
 
     msg1 = messages[0]

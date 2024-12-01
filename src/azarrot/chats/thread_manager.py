@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from sqlakeyset import select_page
 from sqlalchemy import Engine, and_, delete, select, update
 from sqlalchemy.orm import Session
 
@@ -14,8 +15,10 @@ from azarrot.chats.common_data import (
     ChatMessageInputItem,
     ChatMessageItem,
 )
+from azarrot.common_data import PageResult
 from azarrot.common_types import MessageContentType
 from azarrot.database_schemas import (
+    AgentChatMessage,
     ChatMessage,
     ChatMessageAttachment,
     ChatMessageAttachmentToolExposure,
@@ -51,6 +54,16 @@ class ChatThreadInfo:
             additional_data=json.loads(dbo.additional_data) if dbo.additional_data is not None else None,
             create_time=dbo.create_time,
         )
+
+
+@dataclass
+class ChatMessageListPagedQuery:
+    thread_id: str | uuid.UUID
+    agent_chat_task_id: str | None = None
+    create_time_desc_order: bool = False
+    page_size: int = 20
+    before_id: str | uuid.UUID | None = None
+    after_id: str | uuid.UUID | None = None
 
 
 class ChatThreadManager:
@@ -118,7 +131,7 @@ class ChatThreadManager:
                 select(ChatThread).where(
                     and_(
                         ChatThread.id == thread_id,
-                        ChatThread.deleted == False,  # noqa: E712
+                        ChatThread.deleted == False,
                     )
                 )
             ).scalar_one_or_none()
@@ -157,7 +170,7 @@ class ChatThreadManager:
                 select(ChatThread).where(
                     and_(
                         ChatThread.id == thread_id,
-                        ChatThread.deleted == False,  # noqa: E712
+                        ChatThread.deleted == False,
                     )
                 )
             ).scalar_one_or_none()
@@ -196,7 +209,7 @@ class ChatThreadManager:
                 .where(
                     and_(
                         ChatThread.id == thread_id,
-                        ChatThread.deleted == False,  # noqa: E712
+                        ChatThread.deleted == False,
                     )
                 )
             )
@@ -215,9 +228,11 @@ class ChatThreadManager:
         else:
             raise ValueError(f"Unsupported message content part type {type(msg_content)}")
 
-    def add_messages(self, thread_id: str | uuid.UUID, messages: list[ChatMessageInputItem]) -> None:
+    def add_messages(self, thread_id: str | uuid.UUID, messages: list[ChatMessageInputItem]) -> list[ChatMessageItem]:
         thread_id = sanitize_uuid(thread_id)
         now = datetime.now()
+
+        result = []
 
         with Session(self._database) as db:
             if self.__is_thread_not_exist(db, thread_id):
@@ -232,6 +247,7 @@ class ChatThreadManager:
                     thread_id=thread_id,
                     role=message.role,
                     order=i,
+                    deleted=False,
                     additional_data=json.dumps(message.additional_data)
                     if message.additional_data is not None
                     else None,
@@ -240,6 +256,8 @@ class ChatThreadManager:
                 )
 
                 db.add(db_msg)
+
+                db_msg_contents = []
 
                 for j in range(len(message.contents)):
                     content = message.contents[j]
@@ -256,45 +274,97 @@ class ChatThreadManager:
                     )
 
                     db.add(db_msg_content)
+                    db_msg_contents.append(db_msg_content)
 
-                for attachment in message.attachments:
-                    attachment_id = uuid.uuid4()
+                db_msg_attachments = []
+                db_msg_attachment_tools = []
 
-                    db_attachment = ChatMessageAttachment(
-                        id=attachment_id, message_id=message_id, file_id=attachment.file_id, create_time=now
-                    )
+                if message.attachments is not None:
+                    for attachment in message.attachments:
+                        attachment_id = uuid.uuid4()
 
-                    db.add(db_attachment)
+                        db_attachment = ChatMessageAttachment(
+                            id=attachment_id, message_id=message_id, file_id=attachment.file_id, create_time=now
+                        )
 
-                    if attachment.exposed_to_tools is not None:
-                        for tool_name in attachment.exposed_to_tools:
-                            db_aet = ChatMessageAttachmentToolExposure(
-                                attachment_id=attachment_id, tool_name=tool_name, create_time=now
-                            )
+                        db.add(db_attachment)
+                        db_msg_attachments.append(db_attachment)
 
-                            db.add(db_aet)
+                        if attachment.exposed_to_tools is not None:
+                            for tool_name in attachment.exposed_to_tools:
+                                db_aet = ChatMessageAttachmentToolExposure(
+                                    attachment_id=attachment_id, tool_name=tool_name, create_time=now
+                                )
+
+                                db.add(db_aet)
+                                db_msg_attachment_tools.append(db_aet)
+
+                result.append(
+                    ChatMessageItem.from_db(db_msg, db_msg_contents, db_msg_attachments, db_msg_attachment_tools)
+                )
 
             db.commit()
 
-    def add_message(self, thread_id: str | uuid.UUID, message: ChatMessageInputItem) -> None:
-        self.add_messages(thread_id, [message])
+            return result
 
-    def get_messages(self, thread_id: str | uuid.UUID) -> list[ChatMessageItem]:
-        thread_id = sanitize_uuid(thread_id)
+    def add_message(self, thread_id: str | uuid.UUID, message: ChatMessageInputItem) -> ChatMessageItem | None:
+        msg_list = self.add_messages(thread_id, [message])
+
+        if len(msg_list) <= 0:
+            return None
+
+        return msg_list[0]
+
+    def get_messages(self, query: ChatMessageListPagedQuery) -> PageResult[ChatMessageItem]:
+        if query.before_id is not None and query.after_id is not None:
+            raise ValueError("You cannot specify both before_id and after_id!")
+
+        page_border_id = None
+
+        if query.before_id is not None:
+            page_border_id = sanitize_uuid(query.before_id)
+        elif query.after_id is not None:
+            page_border_id = sanitize_uuid(query.after_id)
+
+        thread_id = sanitize_uuid(query.thread_id)
 
         with Session(self._database) as db:
             if self.__is_thread_not_exist(db, thread_id):
-                return []
+                return PageResult([], is_last_page=True)
 
-            db_msgs = (
-                db.execute(
-                    select(ChatMessage)
-                    .where(ChatMessage.thread_id == thread_id)
-                    .order_by(ChatMessage.create_time, ChatMessage.order)
+            page_border_keyset = None
+
+            if page_border_id is not None:
+                page_border_conditions = db.execute(
+                    select(ChatMessage.create_time, ChatMessage.order).where(
+                        and_(ChatMessage.id == page_border_id, ChatMessage.deleted == False)
+                    )
+                ).first()
+
+                if page_border_conditions is None:
+                    raise ValueError(f"Specified page border item id {page_border_id} does not exist!")
+
+                pb_create_time, pb_order = page_border_conditions._t  # noqa: SLF001
+
+                page_border_keyset = (pb_create_time, pb_order, page_border_id)
+
+            q = select(ChatMessage).where(and_(ChatMessage.thread_id == thread_id, ChatMessage.deleted == False))
+
+            if query.agent_chat_task_id is not None:
+                q = q.join(AgentChatMessage, AgentChatMessage.message_id == ChatMessage.id).where(
+                    AgentChatMessage.agent_chat_task_id == query.agent_chat_task_id
                 )
-                .scalars()
-                .all()
-            )
+
+            if query.create_time_desc_order:
+                q = q.order_by(ChatMessage.create_time.desc(), ChatMessage.order.desc(), ChatMessage.id.desc())
+            else:
+                q = q.order_by(ChatMessage.create_time, ChatMessage.order, ChatMessage.id)
+
+            before = page_border_keyset if query.before_id is not None else None
+            after = page_border_keyset if query.after_id is not None else None
+
+            data = select_page(db, q, per_page=query.page_size, before=before, after=after)
+            db_msgs: list[ChatMessage] = [r._tuple()[0] for r in data]  # noqa: SLF001
 
             result = []
 
@@ -325,7 +395,108 @@ class ChatThreadManager:
                     ChatMessageItem.from_db(db_msg, db_msg_contents, db_msg_attachments, db_msg_attachment_tools)
                 )
 
-            return result
+            return PageResult(
+                data=result,
+                is_last_page=not data.paging.has_next,
+            )
+
+    def get_message(
+        self, message_id: str | uuid.UUID, thread_id: str | uuid.UUID | None = None
+    ) -> ChatMessageItem | None:
+        message_id = sanitize_uuid(message_id)
+
+        if thread_id is not None:
+            thread_id = sanitize_uuid(thread_id)
+
+        with Session(self._database) as db:
+            query = select(ChatMessage).where(and_(ChatMessage.id == message_id, ChatMessage.deleted == False))
+
+            if thread_id is not None:
+                if self.__is_thread_not_exist(db, thread_id):
+                    return None
+
+                query = query.where(ChatMessage.thread_id == thread_id)
+
+            db_msg = db.execute(query).scalar_one_or_none()
+
+            if db_msg is None:
+                return None
+
+            db_msg_contents = (
+                db.execute(select(ChatMessageContent).where(ChatMessageContent.message_id == db_msg.id)).scalars().all()
+            )
+
+            db_msg_attachments = (
+                db.execute(select(ChatMessageAttachment).where(ChatMessageAttachment.message_id == db_msg.id))
+                .scalars()
+                .all()
+            )
+
+            db_msg_attachment_tools = (
+                db.execute(
+                    select(ChatMessageAttachmentToolExposure).where(
+                        ChatMessageAttachmentToolExposure.attachment_id.in_([a.id for a in db_msg_attachments])
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+            return ChatMessageItem.from_db(db_msg, db_msg_contents, db_msg_attachments, db_msg_attachment_tools)
+
+    def update_message(
+        self,
+        message_id: str | uuid.UUID,
+        thread_id: str | uuid.UUID | None = None,
+        new_metadata: dict[str, Any] | None = None,
+    ) -> bool:
+        message_id = sanitize_uuid(message_id)
+
+        if thread_id is not None:
+            thread_id = sanitize_uuid(thread_id)
+
+        with Session(self._database) as db:
+            query = select(ChatMessage).where(and_(ChatMessage.id == message_id, ChatMessage.deleted == False))
+
+            if thread_id is not None:
+                if self.__is_thread_not_exist(db, thread_id):
+                    return False
+
+                query = query.where(ChatMessage.thread_id == thread_id)
+
+            db_msg = db.execute(query).scalar_one_or_none()
+
+            if db_msg is None:
+                return False
+
+            if new_metadata is not None:
+                db_msg.additional_data = json.dumps(new_metadata)
+
+            db.commit()
+            return True
+
+    def delete_message(
+        self,
+        message_id: str | uuid.UUID,
+        thread_id: str | uuid.UUID | None = None,
+    ) -> bool:
+        message_id = sanitize_uuid(message_id)
+
+        if thread_id is not None:
+            thread_id = sanitize_uuid(thread_id)
+
+        with Session(self._database) as db:
+            db_msg = db.execute(
+                select(ChatMessage).where(and_(ChatMessage.id == message_id, ChatMessage.deleted == False))
+            ).scalar_one_or_none()
+
+            if db_msg is None:
+                return False
+
+            db_msg.deleted = True
+
+            db.commit()
+            return True
 
     def clear_database(self) -> None:
         with Session(self._database) as db:
@@ -335,3 +506,4 @@ class ChatThreadManager:
             db.execute(delete(ChatMessageContent))
             db.execute(delete(ChatMessageAttachment))
             db.execute(delete(ChatMessageAttachmentToolExposure))
+            db.commit()

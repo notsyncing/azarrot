@@ -5,3 +5,5 @@ VectorStoreFileState = Literal["pending", "processing", "completed", "failed", "
 VectorStoreFileFailedReason = Literal["system_error"]
 
 MessageContentType = Literal["text", "image_file"]
+
+AgentChatTaskStatus = Literal["queued", "in_progress", "requires_action", "expired", "completed", "failed", "cancelled"]

@@ -10,7 +10,7 @@ from azarrot.chats.thread_manager import ChatThreadAgentToolPresetParams, ChatTh
 from azarrot.config import OpenAIFrontendConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.openai_support.openai_assistant_messages import (
-    OpenAIAssistantMessage,
+    OpenAIAssistantMessageRequest,
     to_chat_message_input_items,
 )
 from azarrot.frontends.openai_support.openai_assistants import (
@@ -30,7 +30,7 @@ from azarrot.vector_store.manager import VectorStoreManager
 
 
 class OpenAIAssistantCreateThreadRequest(BaseModel):
-    messages: list[OpenAIAssistantMessage] | None = None
+    messages: list[OpenAIAssistantMessageRequest] | None = None
     tool_resources: OpenAIToolResources | None = None
     metadata: dict[str, Any] | None = None
 

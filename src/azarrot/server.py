@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from pymilvus import MilvusClient
 from sqlalchemy import Engine, create_engine
 
+from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
@@ -256,6 +257,7 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
 
     agent_manager = AgentManager(db)
     chat_thread_manager = ChatThreadManager(db)
+    agent_chat_task_manager = AgentChatTaskManager(db)
 
     vector_store_worker = VectorStoreWorker(
         config.vector_store_configs, vector_store, model_manager, file_store, backend_pipe, db, vec_db_uri
@@ -271,6 +273,7 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
             file_store,
             agent_manager,
             chat_thread_manager,
+            agent_chat_task_manager,
             vector_store,
             api,
             working_dirs,

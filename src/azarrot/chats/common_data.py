@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+import dataclass_wizard
 from typing_extensions import override
 
 from azarrot.database_schemas import (
@@ -23,8 +24,27 @@ class ChatMessageContentPart(ABC):
 
 
 @dataclass
+class ChatMessageTextFileCitation:
+    placeholder: str
+    source_file_id: str
+
+
+@dataclass
+class ChatMessageTextFilePath:
+    placeholder: str
+    target_file_id: str
+
+
+@dataclass
+class ChatMessageTextExtraContent:
+    file_citations: list[ChatMessageTextFileCitation] | None = None
+    file_paths: list[ChatMessageTextFilePath] | None = None
+
+
+@dataclass
 class ChatMessageContentTextPart(ChatMessageContentPart):
     text: str
+    extra_content: ChatMessageTextExtraContent | None = None
 
     @override
     def to_persist_content(self) -> str:
@@ -62,13 +82,14 @@ class ChatMessageAttachmentItem:
 class ChatMessageInputItem:
     role: str
     contents: Sequence[ChatMessageContentPart]
-    attachments: list[ChatMessageAttachmentItem]
+    attachments: list[ChatMessageAttachmentItem] | None = None
     additional_data: dict[str, Any] | None = None
 
 
 @dataclass
 class ChatMessageItem:
     id: str
+    thread_id: str
     role: str
     contents: Sequence[ChatMessageContentPart]
     attachments: list[ChatMessageAttachmentItem]
@@ -88,7 +109,14 @@ class ChatMessageItem:
             content: ChatMessageContentPart
 
             if db_content.type == "text":
-                content = ChatMessageContentTextPart(db_content.content if db_content.content is not None else "")
+                content = ChatMessageContentTextPart(
+                    text=db_content.content if db_content.content is not None else "",
+                    extra_content=dataclass_wizard.fromdict(
+                        ChatMessageTextExtraContent, json.loads(db_content.extra_content)
+                    )
+                    if db_content.extra_content is not None
+                    else None,
+                )
             elif db_content.type == "image_file":
                 content = ChatMessageContentImagePart(uuid.UUID(db_content.content))
             else:
@@ -98,6 +126,7 @@ class ChatMessageItem:
 
         return ChatMessageItem(
             id=str(dbo.id),
+            thread_id=str(dbo.thread_id),
             role=dbo.role,
             contents=contents,
             attachments=[ChatMessageAttachmentItem.from_db(a, db_attachment_tool_exposures) for a in db_attachments],

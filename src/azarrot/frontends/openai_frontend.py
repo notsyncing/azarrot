@@ -8,6 +8,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, FastAPI
 from starlette.responses import StreamingResponse
 
+from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager
 from azarrot.backends.common import CTIS_HAS_OBJECT, CustomTextIteratorStreamer
 from azarrot.chats.thread_manager import ChatThreadManager
@@ -29,6 +30,9 @@ from azarrot.common_data import (
 from azarrot.config import DEFAULT_MAX_TOKENS, OpenAIFrontendConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.openai_support.openai_assistant_messages import (
+    OpenAIAssistantMessages,
+)
 from azarrot.frontends.openai_support.openai_assistant_threads import OpenAIAssistantThreads
 from azarrot.frontends.openai_support.openai_assistants import OpenAIAssistants
 from azarrot.frontends.openai_support.openai_data import (
@@ -62,7 +66,9 @@ class OpenAIFrontend:
     _openai_files: OpenAIFiles
     _assistants: OpenAIAssistants
     _threads: OpenAIAssistantThreads
+    _messages: OpenAIAssistantMessages
     _vstores: OpenAIVectorStores
+    _api: FastAPI
 
     def __init__(
         self,
@@ -72,6 +78,7 @@ class OpenAIFrontend:
         file_store: FileStore,
         agent_manager: AgentManager,
         chat_thread_manager: ChatThreadManager,
+        agent_chat_task_manager: AgentChatTaskManager,
         vector_store: VectorStoreManager,
         api: FastAPI,
         working_dirs: WorkingDirectories,
@@ -87,8 +94,13 @@ class OpenAIFrontend:
             openai_config, chat_thread_manager, vector_store, model_manager, file_store
         )
 
+        self._messages = OpenAIAssistantMessages(file_store, chat_thread_manager, agent_chat_task_manager)
         self._vstores = OpenAIVectorStores(openai_config, model_manager, vector_store)
+        self._api = api
 
+        self.__init_routes()
+
+    def __init_routes(self) -> None:
         router = APIRouter()
 
         # Models API
@@ -127,6 +139,13 @@ class OpenAIFrontend:
         router.add_api_route("/v1/threads/{thread_id}", self._threads.update_thread, methods=["POST"])
         router.add_api_route("/v1/threads/{thread_id}", self._threads.delete_thread, methods=["DELETE"])
 
+        # Assistants - Messages API
+        router.add_api_route("/v1/threads/{tid}/messages", self._messages.create_message, methods=["POST"])
+        router.add_api_route("/v1/threads/{tid}/messages", self._messages.get_message_list, methods=["GET"])
+        router.add_api_route("/v1/threads/{tid}/messages/{mid}", self._messages.get_message, methods=["GET"])
+        router.add_api_route("/v1/threads/{tid}/messages/{mid}", self._messages.update_message, methods=["POST"])
+        router.add_api_route("/v1/threads/{tid}/messages/{mid}", self._messages.delete_message, methods=["DELETE"])
+
         vs_url = "/v1/vector_stores"
 
         # Assistants - Vector stores API
@@ -148,7 +167,7 @@ class OpenAIFrontend:
         router.add_api_route(vs_url + "/{vid}/file_batches/{bid}/cancel", self._vstores.cancel_batch, methods=["POST"])
         router.add_api_route(vs_url + "/{vid}/file_batches/{bid}/files", self._vstores.get_batch_files, methods=["GET"])
 
-        api.include_router(router)
+        self._api.include_router(router)
 
     def __to_openai_model(self, model: Model) -> dict:
         return {"id": model.id, "object": "model", "created": int(model.create_time.timestamp()), "owned_by": "openai"}

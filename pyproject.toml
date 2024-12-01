@@ -110,6 +110,7 @@ lint.ignore = [
     "D415",
     "EM101",
     "EM102",
+    "E712",
     "E722",
     "ERA001",
     "COM812",   # Conflicts with the formatter

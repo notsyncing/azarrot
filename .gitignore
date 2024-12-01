@@ -14,3 +14,4 @@ reports/
 .mypy_cache/
 .pytest_cache/
 http-requests/
+kernel.errors.txt

@@ -39,6 +39,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Uploads|Create, upload, complete, cancel|✅|✅||
 |Assistants (v2)|Assistants|☑️|☑️|`response_format` not implemented yet|
 |Assistants (v2)|Threads|✅|✅||
+|Assistants (v2)|Messages|✅|✅||
 |Assistants (v2)|Vector stores|✅|✅|Vector store bytes used is estimated|
 |Assistants (v2)|Vector store files|✅|✅|Vector store bytes used is estimated|
 |Assistants (v2)|Vector store file batches|✅|✅|Vector store bytes used is estimated|
