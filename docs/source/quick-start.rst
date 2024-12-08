@@ -76,13 +76,6 @@ And copy an example model file into the models directory:
     cp <SOURCE_ROOT>/examples/CodeQwen1.5-7B-ipex-llm.model.yml models/
 
 Azarrot will load all `.model.yml` files in this directory.
-You need to manually download the model from huggingface, or convert them if you are using the OpenVINO backend:
-
-.. code-block:: bash
-
-    huggingface-cli download --local-dir models/CodeQwen1.5-7B Qwen/CodeQwen1.5-7B
-
-Azarrot will convert it to `int4` when loading the model with IPEX-LLM backend.
 
 Start to use
 ------------

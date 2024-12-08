@@ -21,10 +21,12 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 ## Supported OpenAI features
 
 - ✅：Fully supported
-- ☑️：Partially supported
+- ☑️：Mostly supported
 - ❓：Implemented, but not tested, may work or not
 - 🚧：Working in progress
 - ❌：Not supported yet
+
+### Backend-specific features
 
 |Feature|Subfeature|IPEX-LLM|OpenVINO|Remarks|
 |-------|----------|--------|--------|-------|
@@ -34,15 +36,21 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Chat|Image input|✅|❌|InternVL2 supported|
 |Chat|Tool calling|✅|❓|Qwen2 supported|
 |Embeddings|Create embeddings|❌|☑️|`encoding_format` not implemented yet|
-|Models|List models|✅|✅||
-|Files|Upload, list, retrieve, delete, retrieve content|✅|✅||
-|Uploads|Create, upload, complete, cancel|✅|✅||
-|Assistants (v2)|Assistants|☑️|☑️|`response_format` not implemented yet|
-|Assistants (v2)|Threads|✅|✅||
-|Assistants (v2)|Messages|✅|✅||
-|Assistants (v2)|Vector stores|✅|✅|Vector store bytes used is estimated|
-|Assistants (v2)|Vector store files|✅|✅|Vector store bytes used is estimated|
-|Assistants (v2)|Vector store file batches|✅|✅|Vector store bytes used is estimated|
+
+### Backend-agnostic features
+
+|Feature|Subfeature|Supported|Remarks|
+|-------|----------|---------|-------|
+|Models|List models|✅||
+|Files|Upload, list, retrieve, delete, retrieve content|✅||
+|Uploads|Create, upload, complete, cancel|✅||
+|Assistants (v2)|Assistants|☑️|`response_format` not implemented yet|
+|Assistants (v2)|Threads|✅||
+|Assistants (v2)|Messages|✅||
+|Assistants (v2)|Runs|🚧|`include[]` not implemented yet, tools not implemented yet|
+|Assistants (v2)|Vector stores|✅|Vector store bytes used is estimated|
+|Assistants (v2)|Vector store files|✅|Vector store bytes used is estimated|
+|Assistants (v2)|Vector store file batches|✅|Vector store bytes used is estimated|
 
 ### Other features
 
@@ -66,7 +74,7 @@ Other untested models may work or not.
 
 ### Hardware
 
-Azarrot supports CPUs and Intel GPUs. NVIDIA and AMD GPUs may work if you manually install corresponding `torch` libraries.
+Azarrot supports CPUs and Intel GPUs.
 
 Tested GPUs:
 
@@ -77,7 +85,7 @@ Tested GPUs:
 
 Due to the `xpu` branch of `intel-extension-for-pytorch` still has no python 3.12 build, we have to use `Python 3.11` or below.
 
-You also have to install oneAPI Toolkit (at least 2024.0) and drivers.
+You also have to install oneAPI Toolkit (at least 2024.2) and drivers.
 
 Azarrot is tested on Ubuntu 22.04 and python 3.10.
 
@@ -126,13 +134,6 @@ cp <SOURCE_ROOT>/examples/CodeQwen1.5-7B-ipex-llm.model.yml models/
 ```
 
 Azarrot will load all `.model.yml` files in this directory.
-You need to manually download the model from huggingface, or convert them if you are using the OpenVINO backend:
-
-```bash
-huggingface-cli download --local-dir models/CodeQwen1.5-7B Qwen/CodeQwen1.5-7B
-```
-
-Azarrot will convert it to `int4` when loading the model.
 
 Now we can start the server:
 
