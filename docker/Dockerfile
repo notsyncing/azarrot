@@ -1,4 +1,4 @@
-FROM docker.io/intel/oneapi-basekit:2024.2.1-0-devel-ubuntu22.04
+FROM docker.io/intel/oneapi-basekit:2025.0.0-0-devel-ubuntu22.04
 
 RUN apt update && apt -y install python3 python3-pip libmagic1
 
@@ -15,8 +15,6 @@ ENV PIP_EXTRA_INDEX_URL https://pytorch-extension.intel.com/release-whl/stable/x
 RUN cd /app && python3 -m pip install -U pip && python3 -m pip install . && python3 -m pip install .[model_supports] && \
     python3 -m pip install auto-gptq==0.7.1 && \
     python3 -m pip cache purge && \
-    python3 -m pip install torch==2.1.0.post3 torchvision==0.16.0.post3 torchaudio==2.1.0.post3 intel-extension-for-pytorch==2.1.40+xpu oneccl_bind_pt==2.1.400+xpu && \
-    python3 -m pip install numpy==1.26.4 && \
     python3 -m pip install transformers==4.46.3 trl
 
 VOLUME /app/models
