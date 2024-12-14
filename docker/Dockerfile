@@ -8,8 +8,8 @@ WORKDIR /app/working
 COPY src /app/src/
 COPY pyproject.toml README.md LICENSE docker/server.yml /app/
 
-# Change the URL to https://pytorch-extension.intel.com/release-whl/stable/xpu/cn/ if you are in China
-ENV PIP_EXTRA_INDEX_URL https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
+# Change the URL to https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ if you are not in mainland China
+ENV PIP_EXTRA_INDEX_URL https://pytorch-extension.intel.com/release-whl/stable/xpu/cn/
 
 # We need to override some too-old dependencies on ipex-llm
 RUN cd /app && python3 -m pip install -U pip && python3 -m pip install . && python3 -m pip install .[model_supports] && \
