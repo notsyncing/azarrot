@@ -161,6 +161,7 @@ def downgrade() -> None:
     op.drop_table("agent_tools")
     op.drop_table("agent_chat_tasks")
     op.drop_table("agent_chat_task_tools")
+    op.drop_table("agent_chat_task_details")
     op.drop_table("agent_chat_messages")
     op.drop_table("chat_threads")
     op.drop_table("chat_thread_tool_preset_params")
