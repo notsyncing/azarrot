@@ -23,18 +23,17 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 - ✅：Fully supported
 - ☑️：Mostly supported
 - ❓：Implemented, but not tested, may work or not
-- 🚧：Working in progress
+- 🚧：Working in progress, not working yet
 - ❌：Not supported yet
 
 ### Backend-specific features
 
 |Feature|Subfeature|IPEX-LLM|OpenVINO|Remarks|
 |-------|----------|--------|--------|-------|
-|Chat|Basic chat completion|☑️|☑️|Text generation works, some parameters (like `frequency_penalty`) not implemented yet|
+|Chat|Basic chat completion|☑️|☑️|Text generation works, some advanced parameters (like `frequency_penalty`, `n`, `logprobs`, etc) not implemented yet|
 |Chat|Seeding|✅|✅||
 |Chat|Streaming response|✅|✅||
 |Chat|Image input|✅|❌|InternVL2 supported|
-|Chat|Tool calling|✅|❓|Qwen2 supported|
 |Embeddings|Create embeddings|❌|☑️|`encoding_format` not implemented yet|
 
 ### Backend-agnostic features
@@ -42,12 +41,13 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Feature|Subfeature|Supported|Remarks|
 |-------|----------|---------|-------|
 |Models|List models|✅||
+|Chat|Tool calling|✅|Qwen2 supported|
 |Files|Upload, list, retrieve, delete, retrieve content|✅||
 |Uploads|Create, upload, complete, cancel|✅||
 |Assistants (v2)|Assistants|☑️|`response_format` not implemented yet|
 |Assistants (v2)|Threads|✅||
 |Assistants (v2)|Messages|✅||
-|Assistants (v2)|Runs|🚧|`include[]` not implemented yet, tools not implemented yet|
+|Assistants (v2)|Runs & Run steps|🚧|`include[]`, `response_format` not implemented yet, tools not implemented yet, `stream` not implemented yet|
 |Assistants (v2)|Vector stores|✅|Vector store bytes used is estimated|
 |Assistants (v2)|Vector store files|✅|Vector store bytes used is estimated|
 |Assistants (v2)|Vector store file batches|✅|Vector store bytes used is estimated|

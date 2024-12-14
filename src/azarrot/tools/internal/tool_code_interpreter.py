@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,6 +9,12 @@ from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 @dataclass
 class CodeInterpreterToolConfigs:
     exposed_files: list[str] | None = None
+
+
+@dataclass
+class CodeInterpreterOutputs:
+    console: str | None = None
+    files: list[uuid.UUID] | None = None  # list of file ID in file store
 
 
 class CodeInterpreterTool(Tool):

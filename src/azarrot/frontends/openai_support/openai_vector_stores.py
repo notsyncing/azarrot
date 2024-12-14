@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field
 
 from azarrot.common_types import VectorStoreExpireBaseline, VectorStoreFileState
 from azarrot.config import OpenAIFrontendConfig
+from azarrot.frontends.openai_support.openai_data import (
+    OpenAILastError,
+    OpenAIVectorStoreAutoChunkingStrategy,
+    OpenAIVectorStoreChunkingStrategy,
+    OpenAIVectorStoreStaticChunkingStrategy,
+    OpenAIVectorStoreStaticChunkingStrategyConfigs,
+)
 from azarrot.models.model_manager import ModelManager
 from azarrot.vector_store import (
     VECTOR_STORE_DEFAULT_CHUNKING_CONFIG,
@@ -106,23 +113,6 @@ class OpenAIVectorStoreInfo:
         )
 
 
-class OpenAIVectorStoreAutoChunkingStrategy(BaseModel):
-    type: Literal["auto"] = "auto"
-
-
-class OpenAIVectorStoreStaticChunkingStrategyConfigs(BaseModel):
-    max_chunk_size_tokens: int = Field(ge=100, le=4096)
-    chunk_overlap_tokens: int
-
-
-class OpenAIVectorStoreStaticChunkingStrategy(BaseModel):
-    type: Literal["static"] = "static"
-    static: OpenAIVectorStoreStaticChunkingStrategyConfigs
-
-
-OpenAIVectorStoreChunkingStrategy = OpenAIVectorStoreAutoChunkingStrategy | OpenAIVectorStoreStaticChunkingStrategy
-
-
 class OpenAIVectorStoreCreationRequest(BaseModel):
     file_ids: list[str] | None = None
     name: str | None = None
@@ -135,12 +125,6 @@ class OpenAIVectorStoreUpdateRequest(BaseModel):
     name: str | None = None
     expires_after: OpenAIVectorStoreExpirePolicy | None = None
     metadata: dict[str, Any] | None = None
-
-
-@dataclass
-class OpenAIVectorFileErrorInfo:
-    code: Literal["server_error", "rate_limited"]
-    message: str
 
 
 OpenAIVectorStoreFileStatus = Literal["in_progress", "completed", "cancelled", "failed"]
@@ -166,7 +150,7 @@ class OpenAIVectorStoreFileInfo:
     created_at: int
     vector_store_id: str
     status: OpenAIVectorStoreFileStatus
-    last_error: OpenAIVectorFileErrorInfo | None
+    last_error: OpenAILastError | None
     chunking_strategy: OpenAIVectorStoreChunkingStrategy
 
     object: str = "vector_store.file"
@@ -176,7 +160,7 @@ class OpenAIVectorStoreFileInfo:
         last_error = None
 
         if file.state == "failed":
-            last_error = OpenAIVectorFileErrorInfo(
+            last_error = OpenAILastError(
                 code="server_error", message=file.failed_message if file.failed_message is not None else ""
             )
 

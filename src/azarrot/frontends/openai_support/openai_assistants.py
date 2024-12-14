@@ -8,87 +8,37 @@ from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field
 from starlette.status import HTTP_404_NOT_FOUND
 
+from azarrot.agents.common_data import AgentToolRequest
 from azarrot.agents.manager import (
     AgentGenerationParameters,
     AgentInfo,
     AgentListPagedQuery,
     AgentManager,
     AgentToolInfo,
-    AgentToolRequest,
 )
 from azarrot.config import OpenAIFrontendConfig
-from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorStoreChunkingStrategy
-from azarrot.frontends.utils import to_backend_tool_parameters
+from azarrot.frontends.openai_support.openai_data import (
+    OpenAIAssistantTool,
+    OpenAICodeInterpreterTool,
+    OpenAIFileSearchTool,
+    OpenAIFileSearchToolOptions,
+    OpenAIFileSearchToolVectorStoreCreationRequest,
+    OpenAIFunctionTool,
+    OpenAIFunctionToolOptions,
+    OpenAIToolResources,
+)
+from azarrot.frontends.utils import to_backend_tool_parameters, to_openai_assistant_tools
 from azarrot.models.model_manager import ModelManager
-from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_FILE_SEARCH
+from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_RAG_SEARCH
 from azarrot.tools.internal.tool_code_file_search import FileSearchToolConfigs
 from azarrot.tools.internal.tool_code_interpreter import CodeInterpreterToolConfigs
 from azarrot.tools.tool import LocalizedToolDescription
 from azarrot.vector_store.manager import VectorStoreManager
 
-OPENAI_TOOL_CODE_INTERPRETER: Literal["code_interpreter"] = "code_interpreter"
-OPENAI_TOOL_FILE_SEARCH: Literal["file_search"] = "file_search"
-OPENAI_TOOL_FUNCTION: Literal["function"] = "function"
-
 OPENAI_FILE_SEARCH_MAX_RESULT_COUNT = 20
 OPENAI_FILE_SEARCH_RERANKER_SCORE_THRESHOLD = 0.0
 
 OpenAIAssistantToolType = Literal["code_interpreter", "file_search", "function"]
-
-
-class OpenAICodeInterpreterTool(BaseModel):
-    type: Literal["code_interpreter"] = OPENAI_TOOL_CODE_INTERPRETER
-
-
-class OpenAIFileSearchToolRankingOptions(BaseModel):
-    ranker: str | None = None
-    score_threshold: float
-
-
-class OpenAIFileSearchToolOptions(BaseModel):
-    max_num_results: int | None = None
-    ranking_options: OpenAIFileSearchToolRankingOptions | None = None
-
-
-class OpenAIFileSearchTool(BaseModel):
-    type: Literal["file_search"] = OPENAI_TOOL_FILE_SEARCH
-    file_search: OpenAIFileSearchToolOptions | None = None
-
-
-class OpenAIFunctionToolOptions(BaseModel):
-    name: str
-    description: str | None = None
-    parameters: dict[str, Any] | None = None
-    strict: bool | None = None
-
-
-class OpenAIFunctionTool(BaseModel):
-    type: Literal["function"] = OPENAI_TOOL_FUNCTION
-    function: OpenAIFunctionToolOptions
-
-
-class OpenAICodeInterpreterToolResource(BaseModel):
-    file_ids: list[str]
-
-
-class OpenAIFileSearchToolVectorStoreCreationRequest(BaseModel):
-    file_ids: list[str] | None = None
-    chunking_strategy: Annotated[OpenAIVectorStoreChunkingStrategy, Field(discriminator="type")] | None = None
-    metadata: dict[str, Any] | None = None
-    vs_id: uuid.UUID | None = None
-
-
-class OpenAIFileSearchToolResource(BaseModel):
-    vector_store_ids: list[str] | None = None
-    vector_stores: list[OpenAIFileSearchToolVectorStoreCreationRequest] | None = None
-
-
-class OpenAIToolResources(BaseModel):
-    code_interpreter: OpenAICodeInterpreterToolResource | None = None
-    file_search: OpenAIFileSearchToolResource | None = None
-
-
-OpenAIAssistantTool = OpenAICodeInterpreterTool | OpenAIFileSearchTool | OpenAIFunctionTool
 
 
 class OpenAICreateAssistantRequest(BaseModel):
@@ -101,8 +51,8 @@ class OpenAICreateAssistantRequest(BaseModel):
 
     tool_resources: OpenAIToolResources
     metadata: dict[str, Any] | None = None
-    temperature: float | None = None
-    top_p: float | None = None
+    temperature: float = Field(default=1, ge=0, le=2)
+    top_p: float = Field(default=1, ge=0, le=1)
 
 
 class OpenAIUpdateCodeInterpreterToolResource(BaseModel):
@@ -231,7 +181,7 @@ def to_agent_tool_requests(
             )
 
             agent_tool = AgentToolRequest(
-                tool_name=INTERNAL_TOOL_FILE_SEARCH,
+                tool_name=INTERNAL_TOOL_RAG_SEARCH,
                 tool_preset_parameters=dataclass_wizard.asdict(agent_tool_params),
                 is_internal_tool=True,
             )
@@ -267,66 +217,9 @@ class OpenAIAssistantInfo:
 
     @staticmethod
     def from_agent_info(agent: AgentInfo, agent_tools: list[AgentToolInfo]) -> "OpenAIAssistantInfo":
-        tools: list[OpenAIAssistantTool] = []
+        tools, tool_resources = to_openai_assistant_tools(agent.id, agent_tools)
 
-        tool_resources = OpenAIToolResources()
-
-        for agent_tool in agent_tools:
-            tool_params_dict = agent_tool.tool_preset_parameters
-            tool: OpenAIAssistantTool
-
-            if agent_tool.tool_name == INTERNAL_TOOL_CODE_INTERPRETER:
-                tool = OpenAICodeInterpreterTool()
-
-                if tool_params_dict is not None:
-                    configs = dataclass_wizard.fromdict(CodeInterpreterToolConfigs, tool_params_dict)
-
-                    tool_resources.code_interpreter = OpenAICodeInterpreterToolResource(
-                        file_ids=[str(f) for f in configs.exposed_files] if configs.exposed_files is not None else []
-                    )
-            elif agent_tool.tool_name == INTERNAL_TOOL_FILE_SEARCH:
-                if tool_params_dict is None:
-                    raise ValueError(f"Agent {agent.id} enabled file-search tool, but it has no preset parameter!")
-
-                rag_search_params = dataclass_wizard.fromdict(FileSearchToolConfigs, tool_params_dict)
-
-                tool = OpenAIFileSearchTool(
-                    file_search=OpenAIFileSearchToolOptions(
-                        max_num_results=rag_search_params.max_result_count,
-                        ranking_options=OpenAIFileSearchToolRankingOptions(
-                            ranker=rag_search_params.reranker_model_id,
-                            score_threshold=rag_search_params.reranker_score_threshold,
-                        ),
-                    )
-                )
-
-                tool_resources.file_search = OpenAIFileSearchToolResource(
-                    vector_store_ids=[str(v) for v in rag_search_params.vector_stores],
-                )
-            else:
-                if tool_params_dict is None:
-                    raise ValueError(
-                        f"Agent {agent.id} enabled function tool {agent_tool.tool_name}, "
-                        "but it has no preset parameter!"
-                    )
-
-                function_params = dataclass_wizard.fromdict(LocalizedToolDescription, tool_params_dict)
-
-                tool = OpenAIFunctionTool(
-                    function=OpenAIFunctionToolOptions(
-                        name=function_params.name,
-                        description=function_params.description,
-                        parameters=function_params.parameters_dict(),
-                        strict=False,
-                    )
-                )
-
-            tools.append(tool)
-
-        agent_gen_params = {}
-
-        if agent.default_generation_parameters is not None:
-            agent_gen_params = json.loads(agent.default_generation_parameters)
+        agent_gen_params = agent.default_generation_parameters
 
         return OpenAIAssistantInfo(
             id=agent.id,
@@ -338,8 +231,8 @@ class OpenAIAssistantInfo:
             tools=tools,
             tool_resources=tool_resources,
             metadata=json.loads(agent.additional_data) if agent.additional_data is not None else None,
-            temperature=agent_gen_params.get("temperature", None),
-            top_p=agent_gen_params.get("top_p", None),
+            temperature=agent_gen_params.temperature if agent_gen_params is not None else None,
+            top_p=agent_gen_params.top_p if agent_gen_params is not None else None,
         )
 
 
@@ -457,15 +350,24 @@ class OpenAIAssistants:
         return OpenAIAssistantInfo.from_agent_info(agent, agent_tools_info)
 
     def update_assistant(self, assistant_id: str, request: OpenAIUpdateAssistantRequest) -> OpenAIAssistantInfo:
+        def_gen_params = None
+
+        if request.temperature is not None or request.top_p is not None:
+            def_gen_params = AgentGenerationParameters()
+
+            if request.temperature is not None:
+                def_gen_params.temperature = request.temperature
+
+            if request.top_p is not None:
+                def_gen_params.top_p = request.top_p
+
         updated_agent = self._agent_manager.update(
             assistant_id,
             model_id=request.model,
             name=request.name,
             description=request.description,
             instructions=request.instructions,
-            default_generation_parameters=AgentGenerationParameters(
-                temperature=request.temperature, top_p=request.top_p
-            ),
+            default_generation_parameters=def_gen_params,
             tools=to_agent_tool_requests(
                 request.tools,
                 request.tool_resources,

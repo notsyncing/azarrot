@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from azarrot.tools.internal import INTERNAL_TOOL_FILE_SEARCH
+from azarrot.tools.internal import INTERNAL_TOOL_RAG_SEARCH
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
 
@@ -13,10 +13,24 @@ class FileSearchToolConfigs:
     reranker_score_threshold: float = 0.0
 
 
+@dataclass
+class FileSearchResult:
+    file_id: str
+    file_name: str | None
+    score: float
+    matched_chunks: list[str]
+
+
+@dataclass
+class FileSearchOutputs:
+    current_configs: FileSearchToolConfigs
+    search_results: list[FileSearchResult]
+
+
 class FileSearchTool(Tool):
     def description(self) -> ToolDescription:
         return ToolDescription(
-            name=INTERNAL_TOOL_FILE_SEARCH,
+            name=INTERNAL_TOOL_RAG_SEARCH,
             default_locale="zh-cn",
             display_name={"zh-cn": "文件搜索工具"},
             description={"zh-cn": "用于在一系列文件中搜索与特定句子相关的内容的工具"},

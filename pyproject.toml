@@ -118,6 +118,7 @@ lint.ignore = [
     "ANN401",
     "PT001",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
     "PT023",    # https://github.com/astral-sh/ruff/issues/8796#issuecomment-1825907715
+    "PLR0911",
     "PLR0912",
     "PLR0913",
     "DTZ005",

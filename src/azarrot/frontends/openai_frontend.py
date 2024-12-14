@@ -3,7 +3,7 @@ import logging
 import uuid
 from collections.abc import Generator
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, FastAPI
 from starlette.responses import StreamingResponse
@@ -13,7 +13,6 @@ from azarrot.agents.manager import AgentManager
 from azarrot.backends.common import CTIS_HAS_OBJECT, CustomTextIteratorStreamer
 from azarrot.chats.thread_manager import ChatThreadManager
 from azarrot.common_data import (
-    CallableToolsInfo,
     EmbeddingsGenerationRequest,
     GenerationMessage,
     GenerationMessageContent,
@@ -33,6 +32,7 @@ from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.openai_support.openai_assistant_messages import (
     OpenAIAssistantMessages,
 )
+from azarrot.frontends.openai_support.openai_assistant_runs import OpenAIAssistantRuns
 from azarrot.frontends.openai_support.openai_assistant_threads import OpenAIAssistantThreads
 from azarrot.frontends.openai_support.openai_assistants import OpenAIAssistants
 from azarrot.frontends.openai_support.openai_data import (
@@ -41,8 +41,6 @@ from azarrot.frontends.openai_support.openai_data import (
     CreateEmbeddingsRequest,
     SystemChatCompletionMessage,
     ToolChatCompletionMessage,
-    ToolChoice,
-    ToolInfo,
     UserChatCompletionMessage,
     UserChatImageContentItem,
     UserChatImageUrl,
@@ -50,9 +48,8 @@ from azarrot.frontends.openai_support.openai_data import (
 )
 from azarrot.frontends.openai_support.openai_files import OpenAIFiles
 from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorStores
-from azarrot.frontends.utils import to_backend_tool_parameters
+from azarrot.frontends.utils import to_backend_tools_info, to_openai_token_usage, to_openai_tool_calls
 from azarrot.models.model_manager import ModelManager
-from azarrot.tools.tool import LocalizedToolDescription
 from azarrot.utils.downloader import download_file_to_store
 from azarrot.vector_store import VectorStoreManager
 
@@ -68,6 +65,7 @@ class OpenAIFrontend:
     _threads: OpenAIAssistantThreads
     _messages: OpenAIAssistantMessages
     _vstores: OpenAIVectorStores
+    _runs: OpenAIAssistantRuns
     _api: FastAPI
 
     def __init__(
@@ -96,11 +94,12 @@ class OpenAIFrontend:
 
         self._messages = OpenAIAssistantMessages(file_store, chat_thread_manager, agent_chat_task_manager)
         self._vstores = OpenAIVectorStores(openai_config, model_manager, vector_store)
+        self._runs = OpenAIAssistantRuns(agent_chat_task_manager, chat_thread_manager, self._threads)
         self._api = api
 
         self.__init_routes()
 
-    def __init_routes(self) -> None:
+    def __init_routes(self) -> None:  # noqa: PLR0915
         router = APIRouter()
 
         # Models API
@@ -145,6 +144,21 @@ class OpenAIFrontend:
         router.add_api_route("/v1/threads/{tid}/messages/{mid}", self._messages.get_message, methods=["GET"])
         router.add_api_route("/v1/threads/{tid}/messages/{mid}", self._messages.update_message, methods=["POST"])
         router.add_api_route("/v1/threads/{tid}/messages/{mid}", self._messages.delete_message, methods=["DELETE"])
+
+        r_url = "/v1/threads/{tid}/runs"
+
+        # Assistants - Run API
+        router.add_api_route(r_url, self._runs.run_assistant, methods=["POST"])
+        router.add_api_route("/v1/threads/runs", self._runs.run_assistant_with_thread, methods=["POST"])
+        router.add_api_route(r_url, self._runs.get_run_list, methods=["GET"])
+        router.add_api_route(r_url + "/{rid}", self._runs.get_run, methods=["GET"])
+        router.add_api_route(r_url + "/{rid}", self._runs.update_run, methods=["POST"])
+        router.add_api_route(r_url + "/{rid}/submit_tool_outputs", self._runs.submit_tool_outputs, methods=["POST"])
+        router.add_api_route(r_url + "/{rid}/cancel", self._runs.cancel_run, methods=["POST"])
+
+        # Assistants - Run steps API
+        router.add_api_route(r_url + "/{rid}/steps", self._runs.get_step_list, methods=["GET"])
+        router.add_api_route(r_url + "/{rid}/steps/{sid}", self._runs.get_step, methods=["GET"])
 
         vs_url = "/v1/vector_stores"
 
@@ -256,29 +270,6 @@ class OpenAIFrontend:
 
         return result
 
-    def __to_backend_tools_info(
-        self, tools_info: list[ToolInfo] | None, tools_choice: Literal["none", "auto", "required"] | ToolChoice | None
-    ) -> CallableToolsInfo | None:
-        if tools_info is None:
-            return None
-
-        tools = [
-            LocalizedToolDescription(
-                name=tool_info.function.name,
-                display_name=None,
-                description=tool_info.function.description,
-                parameters=to_backend_tool_parameters(tool_info.function.parameters),
-            )
-            for tool_info in tools_info
-        ]
-
-        return CallableToolsInfo(
-            tools=tools,
-            force_use_no_tool=tools_choice == "none",
-            force_use_any_tool=tools_choice == "required",
-            force_use_tool_name=tools_choice.function.name if isinstance(tools_choice, ToolChoice) else None,
-        )
-
     def __to_openai_chat_completion_object(
         self,
         model: Model,
@@ -295,18 +286,7 @@ class OpenAIFrontend:
         elif isinstance(content, ToolCallResponseMessageContent):
             message = {"role": "tool", "content": content.result, "tool_call_id": content.to_id}
         elif isinstance(content, ToolCallRequestMessageContentList):
-            tool_calls = [
-                {
-                    "id": tool_call_req.id,
-                    "type": "function",
-                    "function": {
-                        "name": tool_call_req.function_name,
-                        "arguments": json.dumps(tool_call_req.function_arguments),
-                    },
-                }
-                for tool_call_req in content
-            ]
-
+            tool_calls = to_openai_tool_calls(content)
             message = {"role": "assistant", "tool_calls": tool_calls}
 
             is_delta = False
@@ -330,11 +310,7 @@ class OpenAIFrontend:
         }
 
         if contains_usage_info and usage_info is not None:
-            resp["usage"] = {
-                "prompt_tokens": usage_info.prompt_tokens,
-                "completion_tokens": usage_info.completion_tokens,
-                "total_tokens": usage_info.prompt_tokens + usage_info.completion_tokens,
-            }
+            resp["usage"] = to_openai_token_usage(usage_info)
 
         return resp
 
@@ -412,7 +388,7 @@ class OpenAIFrontend:
             temperature=request.temperature,
             top_p=request.top_p,
             seed=request.seed,
-            tools_info=self.__to_backend_tools_info(request.tools, request.tool_choice),
+            tools_info=to_backend_tools_info(request.tools, request.tool_choice),
             parallel_tool_calling=request.parallel_tool_calls,
         )
 
@@ -460,8 +436,5 @@ class OpenAIFrontend:
                 {"object": "embedding", "embedding": data, "index": index} for index, data in enumerate(data_list)
             ],
             "model": request.model,
-            "usage": {
-                "prompt_tokens": gen_stats.prompt_tokens,
-                "total_tokens": gen_stats.prompt_tokens + gen_stats.completion_tokens,
-            },
+            "usage": to_openai_token_usage(gen_stats),
         }

@@ -61,6 +61,21 @@ class ChatMessageContentImagePart(ChatMessageContentPart):
 
 
 @dataclass
+class ChatMessageToolOutputItem:
+    tool_call_id: str
+    output: str
+
+
+@dataclass
+class ChatMessageToolOutputsPart(ChatMessageContentPart):
+    tool_outputs: list[ChatMessageToolOutputItem]
+
+    @override
+    def to_persist_content(self) -> str:
+        return json.dumps(dataclass_wizard.asdict(self.tool_outputs))
+
+
+@dataclass
 class ChatMessageAttachmentItem:
     file_id: uuid.UUID
     exposed_to_tools: list[str] | None = None

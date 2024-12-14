@@ -14,6 +14,7 @@ from azarrot.chats.common_data import (
     ChatMessageContentTextPart,
     ChatMessageInputItem,
     ChatMessageItem,
+    ChatMessageToolOutputsPart,
 )
 from azarrot.common_data import PageResult
 from azarrot.common_types import MessageContentType
@@ -225,6 +226,8 @@ class ChatThreadManager:
             return "text"
         elif isinstance(msg_content, ChatMessageContentImagePart):
             return "image_file"
+        elif isinstance(msg_content, ChatMessageToolOutputsPart):
+            return "tool_outputs"
         else:
             raise ValueError(f"Unsupported message content part type {type(msg_content)}")
 

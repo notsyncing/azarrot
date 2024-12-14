@@ -10,9 +10,17 @@ from sqlakeyset import select_page
 from sqlalchemy import Engine, delete, select
 from sqlalchemy.orm import Session
 
+from azarrot.agents.common_data import AgentToolRequest
+from azarrot.agents.utils import convert_agent_tool_request_to_database
 from azarrot.common_data import PageResult
 from azarrot.database_schemas import Agent, AgentTool
 from azarrot.utils import sanitize_uuid
+
+
+@dataclass
+class AgentGenerationParameters:
+    temperature: float = 1
+    top_p: float = 1
 
 
 @dataclass
@@ -22,20 +30,27 @@ class AgentInfo:
     description: str | None
     model_id: str
     model_instruction: str | None
-    default_generation_parameters: str | None
+    default_generation_parameters: AgentGenerationParameters | None
     additional_data: str | None
     create_time: datetime
     update_time: datetime
 
     @classmethod
     def from_db_agent(cls, agent: Agent) -> "AgentInfo":
+        if agent.default_generation_parameters is not None:
+            gen_params = dataclass_wizard.fromdict(
+                AgentGenerationParameters, json.loads(agent.default_generation_parameters)
+            )
+        else:
+            gen_params = None
+
         return cls(
             id=str(agent.id),
             name=agent.name,
             description=agent.description,
             model_id=agent.model_id,
             model_instruction=agent.model_instruction,
-            default_generation_parameters=agent.default_generation_parameters,
+            default_generation_parameters=gen_params,
             additional_data=agent.additional_data,
             create_time=agent.create_time,
             update_time=agent.update_time,
@@ -64,19 +79,6 @@ class AgentToolInfo:
 
 
 @dataclass
-class AgentToolRequest:
-    tool_name: str
-    tool_preset_parameters: dict[str, Any] | None = None
-    is_internal_tool: bool = False
-
-
-@dataclass
-class AgentGenerationParameters:
-    temperature: float | None = None
-    top_p: float | None = None
-
-
-@dataclass
 class AgentListPagedQuery:
     create_time_desc_order: bool = False
     page_size: int = 20
@@ -89,30 +91,6 @@ class AgentManager:
 
     def __init__(self, database: Engine) -> None:
         self._database = database
-
-    def __convert_tool_request_to_database(
-        self, agent_id: uuid.UUID, tool_requests: list[AgentToolRequest], create_time: datetime, update_time: datetime
-    ) -> list[AgentTool]:
-        agent_tools = []
-
-        for tool in tool_requests:
-            tool_param_text = None
-
-            if tool.tool_preset_parameters is not None:
-                tool_param_text = json.dumps(tool.tool_preset_parameters)
-
-            agent_tool = AgentTool(
-                agent_id=agent_id,
-                tool_name=tool.tool_name,
-                tool_preset_parameters=tool_param_text,
-                is_internal_tool=tool.is_internal_tool,
-                create_time=create_time,
-                update_time=update_time,
-            )
-
-            agent_tools.append(agent_tool)
-
-        return agent_tools
 
     def create(
         self,
@@ -150,7 +128,7 @@ class AgentManager:
             agent_tools = []
 
             if tools is not None:
-                agent_tools = self.__convert_tool_request_to_database(agent_id, tools, now, now)
+                agent_tools = convert_agent_tool_request_to_database(agent_id, tools, now, now)
                 db.add_all(agent_tools)
 
             db.commit()
@@ -270,7 +248,7 @@ class AgentManager:
             if tools is not None:
                 db.execute(delete(AgentTool).where(AgentTool.agent_id == agent.id))
 
-                agent_tools = self.__convert_tool_request_to_database(agent.id, tools, now, now)
+                agent_tools = convert_agent_tool_request_to_database(agent.id, tools, now, now)
                 db.add_all(agent_tools)
 
             if additional_data is not None:

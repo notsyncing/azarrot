@@ -197,6 +197,8 @@ class Server:
 
         self._running = False
 
+        log.info("Stopping azarrot server...")
+
         if self._schedule_thread is not None:
             self._schedule_thread.join(20)
             self._schedule_thread = None

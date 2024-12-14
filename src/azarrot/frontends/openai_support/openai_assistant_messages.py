@@ -16,11 +16,12 @@ from azarrot.chats.common_data import (
     ChatMessageContentTextPart,
     ChatMessageInputItem,
     ChatMessageItem,
+    ChatMessageToolOutputsPart,
 )
 from azarrot.chats.thread_manager import ChatMessageListPagedQuery, ChatThreadManager
 from azarrot.file_store import FileStore
 from azarrot.frontends.openai_support.openai_assistants import OpenAIAssistantToolType
-from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_FILE_SEARCH
+from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_RAG_SEARCH
 
 OpenAIAssistantMessageRole = Literal["assistant", "user"]
 
@@ -187,7 +188,7 @@ def to_chat_message_input_item(
                     if tool.type == "code_interpreter":
                         exposed_to_tools.append(INTERNAL_TOOL_CODE_INTERPRETER)
                     elif tool.type == "file_search":
-                        exposed_to_tools.append(INTERNAL_TOOL_FILE_SEARCH)
+                        exposed_to_tools.append(INTERNAL_TOOL_RAG_SEARCH)
 
             attachment = ChatMessageAttachmentItem(
                 file_id=uuid.UUID(openai_attachment.file_id), exposed_to_tools=exposed_to_tools
@@ -277,6 +278,8 @@ class OpenAIAssistantMessages:
                 result = OpenAIAssistantMessagePartImageFile(
                     image_file=OpenAIAssistantMessagePartImageFileInfo(file_id=str(msg_content.image_file_id))
                 )
+            elif isinstance(msg_content, ChatMessageToolOutputsPart):
+                continue
             else:
                 raise ValueError(f"Unsupported chat message content type {msg_content}")
 
@@ -296,7 +299,7 @@ class OpenAIAssistantMessages:
                 for exposed_tool in msg_attachment.exposed_to_tools:
                     if exposed_tool == INTERNAL_TOOL_CODE_INTERPRETER:
                         tool = OpenAIAssistantMessageAttachmentTool(type="code_interpreter")
-                    elif exposed_tool == INTERNAL_TOOL_FILE_SEARCH:
+                    elif exposed_tool == INTERNAL_TOOL_RAG_SEARCH:
                         tool = OpenAIAssistantMessageAttachmentTool(type="file_search")
                     else:
                         raise ValueError(f"Unsupported chat message exposed tool type {exposed_tool}")

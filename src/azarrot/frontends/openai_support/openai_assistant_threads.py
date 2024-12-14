@@ -14,16 +14,15 @@ from azarrot.frontends.openai_support.openai_assistant_messages import (
     to_chat_message_input_items,
 )
 from azarrot.frontends.openai_support.openai_assistants import (
-    OpenAICodeInterpreterToolResource,
-    OpenAIFileSearchToolResource,
     OpenAIFileSearchToolVectorStoreCreationRequest,
     OpenAIToolResources,
     create_openai_requested_vector_stores,
     to_agent_code_interpreter_tool_options,
     to_agent_file_search_tool_options,
 )
+from azarrot.frontends.openai_support.openai_data import OpenAICodeInterpreterToolResource, OpenAIFileSearchToolResource
 from azarrot.models.model_manager import ModelManager
-from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_FILE_SEARCH
+from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_RAG_SEARCH
 from azarrot.tools.internal.tool_code_file_search import FileSearchToolConfigs
 from azarrot.tools.internal.tool_code_interpreter import CodeInterpreterToolConfigs
 from azarrot.vector_store.manager import VectorStoreManager
@@ -75,7 +74,7 @@ def to_chat_thread_tool_preset_params(
         )
 
         file_search_params = ChatThreadAgentToolPresetParams(
-            tool_name=INTERNAL_TOOL_FILE_SEARCH, tool_additional_preset_params=dataclass_wizard.asdict(tool_params)
+            tool_name=INTERNAL_TOOL_RAG_SEARCH, tool_additional_preset_params=dataclass_wizard.asdict(tool_params)
         )
 
         agent_tool_params.append(file_search_params)
@@ -152,7 +151,7 @@ class OpenAIAssistantThreads:
                     if code_interpreter_params.exposed_files is not None
                     else []
                 )
-            elif params.tool_name == INTERNAL_TOOL_FILE_SEARCH:
+            elif params.tool_name == INTERNAL_TOOL_RAG_SEARCH:
                 file_search_params = dataclass_wizard.fromdict(
                     FileSearchToolConfigs, params.tool_additional_preset_params
                 )

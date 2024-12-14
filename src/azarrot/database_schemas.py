@@ -4,7 +4,11 @@ from datetime import datetime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from azarrot.common_types import (
+    AgentChatTaskDetailStatus,
+    AgentChatTaskDetailType,
+    AgentChatTaskRequiredAction,
     AgentChatTaskStatus,
+    AgentChatTaskThreadHistoryStrategy,
     MessageContentType,
     VectorStoreExpireBaseline,
     VectorStoreFileFailedReason,
@@ -236,9 +240,22 @@ class AgentChatTask(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     agent_id: Mapped[uuid.UUID]
     thread_id: Mapped[uuid.UUID]
+    model_id: Mapped[str]
+    model_instruction: Mapped[str | None]
     status: Mapped[AgentChatTaskStatus]
+    current_required_action: Mapped[AgentChatTaskRequiredAction | None]
+    current_required_action_data: Mapped[str | None]
+    start_time: Mapped[datetime | None]
     complete_time: Mapped[datetime | None]
     error_message: Mapped[str | None]
+    generation_parameters: Mapped[str | None]
+    thread_history_strategy: Mapped[AgentChatTaskThreadHistoryStrategy]
+    thread_history_strategy_params: Mapped[str]
+    max_tokens: Mapped[int]
+    tools_info: Mapped[str | None]
+    parallel_tool_calling: Mapped[bool]
+    current_generation_statistics: Mapped[str | None]
+    additional_data: Mapped[str | None]
     create_time: Mapped[datetime]
     update_time: Mapped[datetime]
 
@@ -248,11 +265,73 @@ class AgentChatTask(Base):
             f"id={self.id}, "
             f"agent_id={self.agent_id}, "
             f"thread_id={self.thread_id}, "
+            f"model_id={self.model_id}, "
+            f"model_instruction={self.model_instruction}, "
+            f"status={self.status}, "
+            f"current_required_action={self.current_required_action}, "
+            f"current_required_action_data={self.current_required_action_data}, "
+            f"start_time={self.start_time}, "
+            f"complete_time={self.complete_time}, "
+            f"error_message={self.error_message}, "
+            f"generation_parameters={self.generation_parameters}, "
+            f"thread_history_strategy={self.thread_history_strategy}, "
+            f"thread_history_strategy_params={self.thread_history_strategy_params}, "
+            f"max_tokens={self.max_tokens}, "
+            f"tools_info={self.tools_info}, "
+            f"parallel_tool_calling={self.parallel_tool_calling}, "
+            f"current_generation_statistics={self.current_generation_statistics}, "
+            f"additional_data={self.additional_data}, "
+            f"create_time={self.create_time}, "
+            f"update_time={self.update_time}, "
+            ")"
+        )
+
+
+class AgentChatTaskTool(Base):
+    __tablename__ = "agent_chat_task_tools"
+
+    agent_chat_task_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    tool_name: Mapped[str] = mapped_column(primary_key=True)
+    is_internal_tool: Mapped[bool]
+    tool_preset_parameters: Mapped[str | None]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(agent_chat_task_id={self.agent_chat_task_id}, tool_name={self.tool_name}, "
+            f"is_internal_tool={self.is_internal_tool}, tool_preset_parameters={self.tool_preset_parameters}, "
+            f"create_time={self.create_time}, update_time={self.update_time})"
+        )
+
+
+class AgentChatTaskDetail(Base):
+    __tablename__ = "agent_chat_task_details"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    agent_chat_task_id: Mapped[uuid.UUID]
+    type: Mapped[AgentChatTaskDetailType]
+    data: Mapped[str]
+    status: Mapped[AgentChatTaskDetailStatus]
+    complete_time: Mapped[datetime]
+    error_message: Mapped[str | None]
+    generation_statistics: Mapped[str | None]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"id={self.id}, "
+            f"agent_chat_task_id={self.agent_chat_task_id}, "
+            f"type={self.type}, "
+            f"data={self.data}, "
             f"status={self.status}, "
             f"complete_time={self.complete_time}, "
             f"error_message={self.error_message}, "
+            f"generation_statistics={self.generation_statistics}, "
             f"create_time={self.create_time}, "
-            f"update_time={self.update_time}, "
+            f"update_time={self.update_time}"
             ")"
         )
 
