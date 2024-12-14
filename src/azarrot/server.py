@@ -171,6 +171,8 @@ class Server:
     chat_thread_manager: ChatThreadManager
     api: FastAPI
 
+    enable_schedule_thread: bool = True
+
     _uvicorn_server: uvicorn.Server | None = None
     _running: bool = False
     _schedule_thread: Thread | None = None
@@ -181,8 +183,11 @@ class Server:
 
         self._running = True
 
-        self._schedule_thread = Thread(target=self.__schedule_loop)
-        self._schedule_thread.start()
+        if self.enable_schedule_thread:
+            self._schedule_thread = Thread(target=self.__schedule_loop)
+            self._schedule_thread.start()
+        else:
+            log.info("Schedule thread disabled.")
 
         self.vector_store_worker.start()
 
@@ -219,7 +224,11 @@ class Server:
             time.sleep(1)
 
 
-def create_server(config: ServerConfig | None = None, enable_backends: list[type[BaseBackend]] | None = None) -> Server:
+def create_server(
+    config: ServerConfig | None = None,
+    enable_backends: list[type[BaseBackend]] | None = None,
+    enable_schedule_thread: bool = True
+) -> Server:
     log.info("Azarrot is initializing...")
 
     if config is None:
@@ -294,6 +303,8 @@ def create_server(config: ServerConfig | None = None, enable_backends: list[type
         vector_store_worker=vector_store_worker,
         chat_thread_manager=chat_thread_manager,
         api=api,
+
+        enable_schedule_thread=enable_schedule_thread
     )
 
 

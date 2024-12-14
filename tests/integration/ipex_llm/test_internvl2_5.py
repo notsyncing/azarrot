@@ -3,7 +3,7 @@ from openai import OpenAI
 from azarrot.backends.ipex_llm_backend import BACKEND_ID_IPEX_LLM
 from azarrot.server import Server
 
-INTERNVL2_CHAT_MODEL = "OpenGVLab/InternVL2-8B"
+INTERNVL2_CHAT_MODEL = "OpenGVLab/InternVL2_5-8B"
 
 
 def test_internvl2_hello(ipex_llm_server: Server) -> None:
@@ -85,4 +85,4 @@ def test_internvl2_image_input(ipex_llm_server: Server) -> None:
     result = completion.choices[0].message
     assert result is not None
     assert result.content is not None
-    assert result.content.find("小熊猫") >= 0
+    assert result.content.find("小红熊猫") >= 0
