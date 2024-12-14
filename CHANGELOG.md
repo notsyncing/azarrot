@@ -4,10 +4,11 @@ The following are change log of each versions.
 
 ## 0.4.0 (2024-12-??)
 
+- Update transformers to 4.46.3
 - [WIP] Support assistant API
 - Support loading GPTQ model on IPEX-LLM backend
 - Update OpenVINO to 2024.5.0
-- Update IPEX-LLM to 2.1.0b20241207 (with torch 2.3.110+xpu)
+- Update IPEX-LLM to 2.1.0b20241213 (with torch 2.3.110+xpu)
 - Support specifying quantization mode in ipex-llm backend
 - Support vector store API
 - Support uploads API
