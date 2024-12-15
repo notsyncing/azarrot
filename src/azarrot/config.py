@@ -34,6 +34,6 @@ class ServerConfig:
 
     partial_file_expire_time: int = 3600 * 1000
 
-    vector_store_configs: VectorStoreConfig = field(default=VectorStoreConfig())
+    vector_store_configs: VectorStoreConfig = field(default_factory=lambda: VectorStoreConfig())
 
-    openai_configs: OpenAIFrontendConfig = field(default=OpenAIFrontendConfig())
+    openai_configs: OpenAIFrontendConfig = field(default_factory=lambda: OpenAIFrontendConfig())
