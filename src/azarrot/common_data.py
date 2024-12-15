@@ -84,6 +84,7 @@ class Model:
     generation_variant: Literal["normal", "internvl2", "qwen2"]
     preset: ModelPreset
     use_original_precision: bool
+    is_for_raw_completion: bool
 
     ipex_llm: IPEXLLMModelConfig | None
 

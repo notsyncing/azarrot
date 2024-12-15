@@ -25,9 +25,11 @@ from azarrot.backends.internvl2_support import (
 from azarrot.common_data import (
     EmbeddingModelInfo,
     EmbeddingsGenerationRequest,
+    GenerationMessage,
     GenerationStatistics,
     Model,
     ModelInfo,
+    TextGenerationMessageContent,
     TextGenerationRequest,
 )
 from azarrot.config import ServerConfig
@@ -193,6 +195,14 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         return [sanitize_device(d.strip().lower()) for d in device_str.split(",")]
 
+    def __get_first_text_message_with_role(self, expected_role: str, messages: list[GenerationMessage]) -> str | None:
+        for msg in messages:
+            if msg.role == expected_role:
+                if isinstance(msg.contents[0], TextGenerationMessageContent):
+                    return msg.contents[0].text
+
+        return None
+
     def __generate_normal(
         self,
         loaded_model: LoadedTransformersModel,
@@ -201,13 +211,24 @@ class TransformersBasedBackend(BaseBackend, ABC):
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
-        result = loaded_model.tokenizer.apply_chat_template(
-            to_transformers_chat_messages(request.messages), return_tensors="pt", return_dict=True
-        )
+        if not loaded_model.info.is_for_raw_completion:
+            result = loaded_model.tokenizer.apply_chat_template(
+                to_transformers_chat_messages(request.messages), return_tensors="pt", return_dict=True
+            )
 
-        result = cast(dict[str, Any], result)
+            result = cast(dict[str, Any], result)
+        else:
+            first_user_msg = self.__get_first_text_message_with_role("user", request.messages)
 
-        inputs = result["input_ids"]
+            if first_user_msg is None:
+                raise ValueError(
+                    f"This model {loaded_model.info.id} is for raw completion, but no user text message was found in "
+                    "this request!"
+                )
+
+            result = loaded_model.tokenizer(first_user_msg, return_tensors="pt")
+
+        inputs: Any = result["input_ids"]
         attention_mask = result.get("attention_mask")
 
         gen_stats.prompt_tokens = len(cast(torch.Tensor, inputs[0]))

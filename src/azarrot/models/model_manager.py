@@ -131,6 +131,7 @@ class ModelManager:
                 generation_variant=model_generation_variant,
                 preset=model_preset,
                 use_original_precision=model_info.get("use_original_precision", False),
+                is_for_raw_completion=model_info.get("is_for_raw_completion", False),
                 ipex_llm=ipex_llm,
                 info=None,
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
@@ -171,6 +172,7 @@ class ModelManager:
         skip_if_loaded: bool = False,
         model_preset: ModelPreset | None = None,
         use_original_precision: bool = False,
+        is_for_raw_completion: bool = False,
     ) -> None:
         backend = self._backends.get(backend_id)
 
@@ -202,6 +204,7 @@ class ModelManager:
             generation_variant=model_generation_variant,
             preset=preset,
             use_original_precision=use_original_precision,
+            is_for_raw_completion=is_for_raw_completion,
             ipex_llm=None,
             info=None,
             create_time=datetime.now(),
