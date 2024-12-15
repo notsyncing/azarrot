@@ -227,7 +227,7 @@ class Server:
 def create_server(
     config: ServerConfig | None = None,
     enable_backends: list[type[BaseBackend]] | None = None,
-    enable_schedule_thread: bool = True
+    enable_schedule_thread: bool = True,
 ) -> Server:
     log.info("Azarrot is initializing...")
 
@@ -303,8 +303,7 @@ def create_server(
         vector_store_worker=vector_store_worker,
         chat_thread_manager=chat_thread_manager,
         api=api,
-
-        enable_schedule_thread=enable_schedule_thread
+        enable_schedule_thread=enable_schedule_thread,
     )
 
 

@@ -4,7 +4,7 @@ import torch
 from transformers import PreTrainedTokenizer
 
 from azarrot.backends.common import TransformersGenerationMethods
-from azarrot.backends.ipex_llm_support.internvl2_tools import load_image
+from azarrot.backends.internvl2_support.internvl2_tools import load_image
 from azarrot.common_data import GenerationMessage, ImageGenerationMessageContent, TextGenerationMessageContent
 
 INTERNVL2_IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"  # noqa: S105

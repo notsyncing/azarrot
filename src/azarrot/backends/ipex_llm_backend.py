@@ -1,123 +1,39 @@
-import gc
 import logging
-from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 import torch
 from ipex_llm.transformers import AutoModelForCausalLM
-from transformers import AutoConfig, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
+from transformers import AutoConfig
+from typing_extensions import override
 
-from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
-from azarrot.backends.common import (
-    CustomTextIteratorStreamer,
-    GenerationHandlers,
-    GenerationMethods,
-    TransformersGenerationMethods,
-    to_transformers_chat_messages,
-)
-from azarrot.backends.ipex_llm_support.internvl2_processor import (
-    InternVL2TransformersGenerationMethods,
-    internvl2_apply_chat_template,
-    internvl2_patch_model,
-)
+from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import (
-    EmbeddingModelInfo,
     EmbeddingsGenerationRequest,
     GenerationStatistics,
     Model,
-    ModelInfo,
-    TextGenerationRequest,
 )
-from azarrot.config import ServerConfig
-from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
-TASK_MODEL_MAP = {
+IPEX_LLM_TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
 }
 
 BACKEND_ID_IPEX_LLM = "ipex-llm"
 
-MODEL_IPEXLLM_QUIRKS = {"internvl2": {"use_cache": False}}
 
-
-@dataclass
-class LoadedModel:
-    info: Model
-    model: PreTrainedModel
-    tokenizer: PreTrainedTokenizer
-    device: str
-
-
-class IPEXLLMBackend(BaseBackend):
+class IPEXLLMBackend(TransformersBasedBackend):
     _log = logging.getLogger(__name__)
-    _models: dict[str, LoadedModel]
-    _default_device: str = "xpu"
 
-    _generation_variants: dict[
-        str,
-        Callable[
-            [LoadedModel, TextGenerationRequest, dict[str, Any], CustomTextIteratorStreamer, GenerationStatistics],
-            GenerationMethods,
-        ],
-    ]
-
-    def __init__(self, config: ServerConfig) -> None:
-        super().__init__(config)
-
-        self._server_config = config
-        self._models = {}
-
-        self._generation_variants = {
-            "normal": self.__generate_normal,
-            "internvl2": self.__generate_internvl2,
-        }
-
-        xpu_count = self.__print_device_list()
-
-        if xpu_count <= 0:
-            self._default_device = "cpu"
-
-        self._log.info("Using default device: %s", self._default_device)
-
+    @override
     def id(self) -> str:
         return BACKEND_ID_IPEX_LLM
 
-    def __print_device_list(self) -> int:
-        self._log.info("IPEX-LLM Available devices:")
-        xpu_count = torch.xpu.device_count()
+    @override
+    def _get_model_class(self, task: str) -> Any:
+        return IPEX_LLM_TASK_MODEL_MAP.get(task)
 
-        for i in range(xpu_count):
-            self._log.info("XPU #%s: %s", i, str(torch.xpu.get_device_properties(i)))
-
-        return xpu_count
-
-    def __extract_model_info(self, ipex_model: PreTrainedModel, task: str) -> ModelInfo:
-        if task == "feature-extraction":
-            return EmbeddingModelInfo(dimension=ipex_model.config.hidden_size)
-        else:
-            return ModelInfo()
-
-    def load_model(self, model: Model) -> ModelInfo:
-        if model.task not in TASK_MODEL_MAP:
-            raise ValueError(f"Model {model.id} ({model.path}) wants task {model.task}, which is not supported!")
-
-        if model.id in self._models:
-            self._log.warning("Model %s is already loaded, will skip it.", model.id)
-            assert model.info is not None
-            return model.info
-
-        model_class = TASK_MODEL_MAP[model.task]
-        model_path = model.path.absolute()
-
-        device = self._server_config.model_device_map.get(model.id, self._default_device)
-
-        self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
-
-        model_kwargs: dict[str, Any] = {}
-
-        model_config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+    @override
+    def _customize_model_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+        model_config = AutoConfig.from_pretrained(model.path.absolute(), trust_remote_code=True)
 
         if "quantization_config" in model_config:
             quantization_config = model_config.quantization_config
@@ -129,19 +45,9 @@ class IPEXLLMBackend(BaseBackend):
                     self._log.info("GPTQ model detected. Will use torch_dtype=torch.float to load this model.")
                     model_kwargs["torch_dtype"] = torch.float
 
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-
-        generation_variant = model.generation_variant
-
         if model.ipex_llm is not None:
             if model.ipex_llm.use_cache:
                 model_kwargs["use_cache"] = True
-
-        model_kwargs_quirks = MODEL_IPEXLLM_QUIRKS.get(generation_variant, {})
-        model_kwargs.update(model_kwargs_quirks)
-
-        if "use_cache" in model_kwargs and not model_kwargs.get("use_cache"):
-            del model_kwargs["use_cache"]
 
         load_in_4bit = False
         load_in_low_bit = None
@@ -155,176 +61,12 @@ class IPEXLLMBackend(BaseBackend):
             else:
                 load_in_4bit = True
 
-        ipex_model: Any = model_class.from_pretrained(
-            model_path,
-            load_in_4bit=load_in_4bit,
-            load_in_low_bit=load_in_low_bit,
-            optimize_model=True,
-            trust_remote_code=True,
-            **model_kwargs,
-        ).to(device)
+        model_kwargs["load_in_4bit"] = load_in_4bit
+        model_kwargs["load_in_low_bit"] = load_in_low_bit
 
-        ipex_model.eval()
+        model_kwargs["optimize_model"] = True
 
-        self._models[model.id] = LoadedModel(model, ipex_model, tokenizer, device)
-
-        self._log.info("Loaded model %s", model.id)
-
-        return self.__extract_model_info(ipex_model, model.task)
-
-    def unload_model(self, model_id: str) -> None:
-        if model_id not in self._models:
-            self._log.warning("Model %s is not loaded.", model_id)
-            return
-
-        del self._models[model_id]
-        torch.xpu.empty_cache()
-        gc.collect()
-
-        self._log.info("Model %s unloaded.", model_id)
-
-    def __get_model(self, model_id: str) -> LoadedModel:
-        if model_id not in self._models:
-            raise ValueError(f"Model {model_id} is not loaded!")
-
-        return self._models[model_id]
-
-    def _parse_device_str(self, device_str: str) -> list[str]:
-        def sanitize_device(device: str) -> str:
-            if device.isdigit():
-                return device
-            elif device != "cpu" and ":" not in device:
-                return device + ":0"
-            else:
-                return device
-
-        if device_str is None or device_str == "":
-            return []
-
-        return [sanitize_device(d.strip().lower()) for d in device_str.split(",")]
-
-    def __generate_normal(
-        self,
-        loaded_model: LoadedModel,
-        request: TextGenerationRequest,
-        common_generation_kwargs: dict[str, Any],
-        streamer: CustomTextIteratorStreamer,
-        gen_stats: GenerationStatistics,
-    ) -> GenerationMethods:
-        result = loaded_model.tokenizer.apply_chat_template(
-            to_transformers_chat_messages(request.messages), return_tensors="pt", return_dict=True
-        )
-
-        result = cast(dict[str, Any], result)
-
-        inputs = result["input_ids"]
-        attention_mask = result.get("attention_mask")
-
-        gen_stats.prompt_tokens = len(cast(torch.Tensor, inputs[0]))
-
-        generation_kwargs = common_generation_kwargs.copy()
-
-        generation_kwargs.update(
-            {
-                "input_ids": inputs.to(loaded_model.device),
-                "attention_mask": attention_mask.to(loaded_model.device) if attention_mask is not None else None,
-                "streamer": streamer,
-                "max_new_tokens": request.max_tokens,
-            }
-        )
-
-        return TransformersGenerationMethods(
-            model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
-        )
-
-    def __generate_internvl2(
-        self,
-        loaded_model: LoadedModel,
-        request: TextGenerationRequest,
-        common_generation_kwargs: dict[str, Any],
-        streamer: CustomTextIteratorStreamer,
-        gen_stats: GenerationStatistics,
-    ) -> GenerationMethods:
-        internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
-
-        inputs, pixel_values = internvl2_apply_chat_template(
-            loaded_model.model, loaded_model.tokenizer, request.messages
-        )
-
-        text_input_length = len(cast(torch.Tensor, inputs[0]))
-        image_input_length = len(pixel_values) if pixel_values is not None else 0
-        gen_stats.prompt_tokens = text_input_length + image_input_length
-
-        # token id 2 is from tokenizer.json ('</s>')
-        attention_mask = loaded_model.model._prepare_attention_mask_for_generation(  # noqa: SLF001
-            inputs,
-            torch.Tensor([2]),  # pyright: ignore[reportArgumentType]
-            torch.Tensor([2]),  # pyright: ignore[reportArgumentType]
-        )
-
-        if pixel_values is not None:
-            pixel_values = pixel_values.to(loaded_model.device)
-
-        generation_kwargs = common_generation_kwargs.copy()
-
-        generation_kwargs.update(
-            {
-                "input_ids": cast(torch.Tensor, inputs).to(loaded_model.device),
-                "attention_mask": attention_mask.to(loaded_model.device),
-                "pixel_values": pixel_values,
-                "streamer": streamer,
-                "max_new_tokens": request.max_tokens,
-                # token id list is taken from https://huggingface.co/OpenGVLab/InternVL2-8B/blob/main/conversation.py#368
-                "eos_token_id": [2, 92543, 92542],
-            }
-        )
-
-        return InternVL2TransformersGenerationMethods(
-            model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
-        )
-
-    def _generate(
-        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
-        loaded_model = self.__get_model(request.model_id)
-        generation_variant = loaded_model.info.generation_variant
-        generation_method = self._generation_variants.get(generation_variant, self.__generate_normal)
-
-        gen_stats = GenerationStatistics(
-            start_time=datetime.now(),
-            first_token_time=datetime.max,
-            end_time=datetime.max,
-            prompt_tokens=0,
-            completion_tokens=0,
-        )
-
-        model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant)
-
-        streamer = CustomTextIteratorStreamer(
-            cast(AutoTokenizer, loaded_model.tokenizer),
-            gen_stats,
-            skip_prompt=True,
-            timeout=self._server_config.single_token_generation_timeout / 1000,
-            skip_special_tokens=True,
-            model_quirks=model_quirks,
-            generation_handlers=generation_handlers,
-        )
-
-        common_generation_kwargs = {"do_sample": True, "temperature": request.temperature, "top_p": request.top_p}
-
-        m = generation_method(loaded_model, request, common_generation_kwargs, streamer, gen_stats)
-
-        task = BackendGenerationTask(
-            model_id=loaded_model.info.id,
-            model_quirks=model_quirks,
-            backend_id=BACKEND_ID_IPEX_LLM,
-            methods=m,
-            device=loaded_model.device,
-            seed=request.seed,
-        )
-
-        return task, streamer, gen_stats
-
+    @override
     def generate_embeddings(
         self, request: EmbeddingsGenerationRequest
     ) -> tuple[list[list[float]], GenerationStatistics]:
