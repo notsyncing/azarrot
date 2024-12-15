@@ -53,6 +53,7 @@ class LoadedModel:
 class IPEXLLMBackend(BaseBackend):
     _log = logging.getLogger(__name__)
     _models: dict[str, LoadedModel]
+    _default_device: str = "xpu"
 
     _generation_variants: dict[
         str,
@@ -73,16 +74,24 @@ class IPEXLLMBackend(BaseBackend):
             "internvl2": self.__generate_internvl2,
         }
 
-        self.__print_device_list()
+        xpu_count = self.__print_device_list()
+
+        if xpu_count <= 0:
+            self._default_device = "cpu"
+
+        self._log.info("Using default device: %s", self._default_device)
 
     def id(self) -> str:
         return BACKEND_ID_IPEX_LLM
 
-    def __print_device_list(self) -> None:
+    def __print_device_list(self) -> int:
         self._log.info("IPEX-LLM Available devices:")
+        xpu_count = torch.xpu.device_count()
 
-        for i in range(torch.xpu.device_count()):
+        for i in range(xpu_count):
             self._log.info("XPU #%s: %s", i, str(torch.xpu.get_device_properties(i)))
+
+        return xpu_count
 
     def __extract_model_info(self, ipex_model: PreTrainedModel, task: str) -> ModelInfo:
         if task == "feature-extraction":
@@ -102,7 +111,7 @@ class IPEXLLMBackend(BaseBackend):
         model_class = TASK_MODEL_MAP[model.task]
         model_path = model.path.absolute()
 
-        device = self._server_config.model_device_map.get(model.id, "xpu")
+        device = self._server_config.model_device_map.get(model.id, self._default_device)
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
