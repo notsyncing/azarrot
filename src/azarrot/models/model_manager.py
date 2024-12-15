@@ -66,6 +66,17 @@ class ModelManager:
 
         return "normal"
 
+    def __download_from_huggingface(self, hf_model_id: str) -> Path:
+        hf_local_dir = self._config.models_dir / Path(f"huggingface/{hf_model_id.replace('/', '_')}")
+
+        if not hf_local_dir.exists():
+            hf_local_dir.mkdir(parents=True)
+
+        self._log.info("Downloading model %s from huggingface...", hf_model_id)
+
+        hf_model_path = huggingface_hub.snapshot_download(hf_model_id, local_dir=hf_local_dir)
+        return Path(hf_model_path)
+
     def __parse_model_file(self, file: Path) -> Model:
         with file.open() as f:
             model_info = yaml.safe_load(f)
@@ -75,14 +86,7 @@ class ModelManager:
 
             if raw_model_path.startswith(MODEL_PATH_HUGGINGFACE):
                 hf_model_id = raw_model_path[len(MODEL_PATH_HUGGINGFACE) :]
-                hf_local_dir = self._config.models_dir / Path(f"huggingface/{hf_model_id.replace('/', '_')}")
-
-                if not hf_local_dir.exists():
-                    hf_local_dir.mkdir(parents=True)
-
-                hf_model_path = huggingface_hub.snapshot_download(hf_model_id, local_dir=hf_local_dir)
-
-                model_path = Path(hf_model_path)
+                model_path = self.__download_from_huggingface(hf_model_id)
             else:
                 model_path = self._config.models_dir / Path(model_info["path"])
 
@@ -180,9 +184,7 @@ class ModelManager:
             self._log.warning("Model %s from huggingface is already loaded, skip loading.", huggingface_id)
             return
 
-        self._log.info("Downloading model %s from huggingface...", huggingface_id)
-
-        model_path = Path(huggingface_hub.snapshot_download(huggingface_id))
+        model_path = self.__download_from_huggingface(huggingface_id)
         model_generation_variant = self.__determine_model_generation_variant(model_path)
 
         preset: ModelPreset
