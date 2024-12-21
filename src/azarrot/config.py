@@ -27,6 +27,8 @@ class ServerConfig:
     host: str = "127.0.0.1"
     port: int = 8080
 
+    huggingface_download_to_home: bool = False
+
     model_device_map: dict[str, str] = field(default_factory=dict)
     single_token_generation_timeout: int = 60000
     auto_batch_threshold: int = 100

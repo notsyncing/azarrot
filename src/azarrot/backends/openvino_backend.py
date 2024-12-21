@@ -1,20 +1,26 @@
 import logging
 import threading
+from datetime import datetime
 from pathlib import Path
 from types import MethodType
 from typing import Any, cast
 
 import openvino
+import torch
 from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction
 from transformers import (
     PreTrainedModel,
+    pipeline,
 )
 from typing_extensions import override
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import (
+    EmbeddingsGenerationRequest,
+    GenerationStatistics,
     Model,
 )
+from azarrot.config import ServerConfig
 
 OPENVINO_TASK_MODEL_MAP = {
     "text-generation": OVModelForCausalLM,
@@ -78,6 +84,12 @@ class OpenVINOBackend(TransformersBasedBackend):
     _log = logging.getLogger(__name__)
     _ov = openvino.Core()
     _default_device: str = "CPU"
+    _auto_use_igpu: bool = True
+
+    def __init__(self, config: ServerConfig, auto_use_igpu: bool = True) -> None:
+        self._auto_use_igpu = auto_use_igpu
+
+        super().__init__(config)
 
     @override
     def id(self) -> str:
@@ -105,6 +117,15 @@ class OpenVINOBackend(TransformersBasedBackend):
             if device_type == openvino.properties.device.Type.DISCRETE:
                 return device
 
+        if self._auto_use_igpu:
+            for device in self._ov.available_devices:
+                device_type = self._ov.get_property(device, "DEVICE_TYPE")
+
+                if device_type == openvino.properties.device.Type.INTEGRATED and device == "GPU":
+                    return device
+        else:
+            self._log.info("No discrete device found, and iGPU usage is disabled. Will default to CPU.")
+
         return "CPU"
 
     def __patch_model(self, original_model: Any) -> Any:
@@ -121,6 +142,10 @@ class OpenVINOBackend(TransformersBasedBackend):
         model_path = model.path.absolute()
         openvino_model_file_path = model_path / Path("openvino_model.xml")
         need_export = not openvino_model_file_path.exists()
+
+        if need_export:
+            self._log.info("OpenVINO model file does not exist at %s. Will export it.", openvino_model_file_path)
+
         need_load_in_4bit = need_export and not model.use_original_precision
         model_kwargs["export"] = need_export
         model_kwargs["load_in_4bit"] = need_load_in_4bit
@@ -136,6 +161,10 @@ class OpenVINOBackend(TransformersBasedBackend):
         return ov_model
 
     @override
+    def _should_move_inputs_to_device(self) -> bool:
+        return False
+
+    @override
     def _parse_device_str(self, device_str: str) -> list[str]:
         def sanitize_device(device: str) -> str:
             if device != "CPU" and "." not in device:
@@ -147,3 +176,39 @@ class OpenVINOBackend(TransformersBasedBackend):
             return []
 
         return [sanitize_device(d.strip().upper()) for d in device_str.split(",")]
+
+    @override
+    def generate_embeddings(
+        self, request: EmbeddingsGenerationRequest
+    ) -> tuple[list[list[float]], GenerationStatistics]:
+        loaded_model = self._get_model(request.model_id)
+
+        gen_stats = GenerationStatistics(
+            start_time=datetime.now(),
+            first_token_time=datetime.now(),
+            end_time=datetime.max,
+            prompt_tokens=0,
+            completion_tokens=0,
+        )
+
+        pipe = pipeline(
+            "feature-extraction", loaded_model.model, tokenizer=loaded_model.tokenizer, trust_remote_code=True
+        )
+
+        outputs: Any = pipe(request.text, return_tensors=True)
+        result = []
+
+        if not isinstance(outputs, list):
+            outputs = [outputs]
+
+        for output in outputs:
+            normalized_embeddings = torch.nn.functional.normalize(output, dim=-1)
+            embeddings = normalized_embeddings[0][0]
+            result.append(embeddings.tolist())
+
+            gen_stats.prompt_tokens = gen_stats.prompt_tokens + output.size()[1]
+            gen_stats.completion_tokens = gen_stats.completion_tokens + output.size()[2]
+
+        gen_stats.end_time = datetime.now()
+
+        return result, gen_stats

@@ -3,8 +3,8 @@ from typing import Any, cast
 import torch
 from transformers import PreTrainedTokenizer
 
-from azarrot.backends.common import TransformersGenerationMethods
 from azarrot.backends.internvl2_support.internvl2_tools import load_image
+from azarrot.backends.transformers_common import TransformersGenerationMethods
 from azarrot.common_data import GenerationMessage, ImageGenerationMessageContent, TextGenerationMessageContent
 
 INTERNVL2_IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"  # noqa: S105
@@ -26,7 +26,7 @@ def internvl2_patch_model(model: Any, tokenizer: PreTrainedTokenizer) -> None:
 
 def internvl2_apply_chat_template(
     model: Any, tokenizer: PreTrainedTokenizer, messages: list[GenerationMessage]
-) -> tuple[torch.Tensor, torch.Tensor | None]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
     image_list: list[torch.Tensor] = []
 
     c = []
@@ -46,7 +46,11 @@ def internvl2_apply_chat_template(
 
         c.append({"role": m.role, "content": final_content})
 
-    inputs = tokenizer.apply_chat_template(c, add_generation_prompt=True, return_tensors="pt")
+    result = tokenizer.apply_chat_template(c, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+    result = cast(dict[str, Any], result)
+
+    inputs: Any = result["input_ids"]
+    attention_mask = result.get("attention_mask")
 
     pixel_values = torch.cat(image_list) if len(image_list) > 0 else None
-    return cast(torch.Tensor, inputs), pixel_values
+    return cast(torch.Tensor, inputs), cast(torch.Tensor, attention_mask), pixel_values

@@ -7,24 +7,23 @@ from datetime import datetime
 from typing import Any, cast
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
+from typing_extensions import override
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
     CustomTextIteratorStreamer,
     GenerationHandlers,
     GenerationMethods,
-    TransformersGenerationMethods,
-    to_transformers_chat_messages,
 )
 from azarrot.backends.internvl2_support import (
     InternVL2TransformersGenerationMethods,
     internvl2_apply_chat_template,
     internvl2_patch_model,
 )
+from azarrot.backends.transformers_common import TransformersGenerationMethods, to_transformers_chat_messages
 from azarrot.common_data import (
     EmbeddingModelInfo,
-    EmbeddingsGenerationRequest,
     GenerationMessage,
     GenerationStatistics,
     Model,
@@ -115,6 +114,10 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _customize_loaded_model(self, model: PreTrainedModel) -> PreTrainedModel:
         return model
 
+    def _should_move_inputs_to_device(self) -> bool:
+        return True
+
+    @override
     def load_model(self, model: Model) -> ModelInfo:
         model_class = self._get_model_class(model.task)
 
@@ -128,7 +131,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         model_path = model.path.absolute()
 
-        device = self._server_config.model_device_map.get(model.id, self._default_device)
+        device = self._determine_device_for_model(model.id)
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
@@ -164,6 +167,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         return self.__extract_model_info(transformers_model, model.task)
 
+    @override
     def unload_model(self, model_id: str) -> None:
         if model_id not in self._models:
             self._log.warning("Model %s is not loaded.", model_id)
@@ -175,12 +179,13 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         self._log.info("Model %s unloaded.", model_id)
 
-    def __get_model(self, model_id: str) -> LoadedTransformersModel:
+    def _get_model(self, model_id: str) -> LoadedTransformersModel:
         if model_id not in self._models:
             raise ValueError(f"Model {model_id} is not loaded!")
 
         return self._models[model_id]
 
+    @override
     def _parse_device_str(self, device_str: str) -> list[str]:
         def sanitize_device(device: str) -> str:
             if device.isdigit():
@@ -235,10 +240,16 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         generation_kwargs = common_generation_kwargs.copy()
 
+        if self._should_move_inputs_to_device():
+            inputs = inputs.to(loaded_model.device)
+
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(loaded_model.device)
+
         generation_kwargs.update(
             {
-                "input_ids": inputs.to(loaded_model.device),
-                "attention_mask": attention_mask.to(loaded_model.device) if attention_mask is not None else None,
+                "input_ids": inputs,
+                "attention_mask": attention_mask,
                 "streamer": streamer,
                 "max_new_tokens": request.max_tokens,
             }
@@ -258,7 +269,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
     ) -> GenerationMethods:
         internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
 
-        inputs, pixel_values = internvl2_apply_chat_template(
+        inputs, attention_mask, pixel_values = internvl2_apply_chat_template(
             loaded_model.model, loaded_model.tokenizer, request.messages
         )
 
@@ -266,27 +277,24 @@ class TransformersBasedBackend(BaseBackend, ABC):
         image_input_length = len(pixel_values) if pixel_values is not None else 0
         gen_stats.prompt_tokens = text_input_length + image_input_length
 
-        # token id 2 is from tokenizer.json ('</s>')
-        attention_mask = loaded_model.model._prepare_attention_mask_for_generation(  # noqa: SLF001
-            inputs,
-            torch.Tensor([2]),  # pyright: ignore[reportArgumentType]
-            torch.Tensor([2]),  # pyright: ignore[reportArgumentType]
-        )
+        if self._should_move_inputs_to_device():
+            inputs = inputs.to(loaded_model.device)
 
-        if pixel_values is not None:
-            pixel_values = pixel_values.to(loaded_model.device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(loaded_model.device)
+
+            if pixel_values is not None:
+                pixel_values = pixel_values.to(loaded_model.device)
 
         generation_kwargs = common_generation_kwargs.copy()
 
         generation_kwargs.update(
             {
-                "input_ids": cast(torch.Tensor, inputs).to(loaded_model.device),
-                "attention_mask": attention_mask.to(loaded_model.device),
+                "input_ids": inputs,
+                "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
                 "streamer": streamer,
                 "max_new_tokens": request.max_tokens,
-                # token id list is taken from https://huggingface.co/OpenGVLab/InternVL2-8B/blob/main/conversation.py#368
-                "eos_token_id": [2, 92543, 92542],
             }
         )
 
@@ -294,10 +302,11 @@ class TransformersBasedBackend(BaseBackend, ABC):
             model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
         )
 
+    @override
     def _generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
-        loaded_model = self.__get_model(request.model_id)
+        loaded_model = self._get_model(request.model_id)
         generation_variant = loaded_model.info.generation_variant
         generation_method = self._generation_variants.get(generation_variant, self.__generate_normal)
 
@@ -335,38 +344,3 @@ class TransformersBasedBackend(BaseBackend, ABC):
         )
 
         return task, streamer, gen_stats
-
-    def generate_embeddings(
-        self, request: EmbeddingsGenerationRequest
-    ) -> tuple[list[list[float]], GenerationStatistics]:
-        loaded_model = self.__get_model(request.model_id)
-
-        gen_stats = GenerationStatistics(
-            start_time=datetime.now(),
-            first_token_time=datetime.now(),
-            end_time=datetime.max,
-            prompt_tokens=0,
-            completion_tokens=0,
-        )
-
-        pipe = pipeline(
-            "feature-extraction", loaded_model.model, tokenizer=loaded_model.tokenizer, trust_remote_code=True
-        )
-
-        outputs: Any = pipe(request.text, return_tensors=True)
-        result = []
-
-        if not isinstance(outputs, list):
-            outputs = [outputs]
-
-        for output in outputs:
-            normalized_embeddings = torch.nn.functional.normalize(output, dim=-1)
-            embeddings = normalized_embeddings[0][0]
-            result.append(embeddings.tolist())
-
-            gen_stats.prompt_tokens = gen_stats.prompt_tokens + output.size()[1]
-            gen_stats.completion_tokens = gen_stats.completion_tokens + output.size()[2]
-
-        gen_stats.end_time = datetime.now()
-
-        return result, gen_stats

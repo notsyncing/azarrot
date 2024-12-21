@@ -1,18 +1,19 @@
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from queue import Empty, Queue
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar
 
 import torch
-from transformers import AutoTokenizer, PreTrainedModel, TextIteratorStreamer, set_seed
+from transformers import AutoTokenizer, TextIteratorStreamer
 
-from azarrot.common_data import GenerationMessage, GenerationStatistics, ModelQuirks, TextGenerationMessageContent
+from azarrot.common_data import GenerationStatistics, ModelQuirks
 
 CTIS_HAS_OBJECT = "__ctis_has_object__"
 CTIS_DELEGATE_TO_NEXT = "__ctis_delegate_to_next__"
+
+EmbeddingsGenerationResult = list[list[float]]
 
 
 @dataclass
@@ -223,6 +224,9 @@ class BatchedCustomTextIteratorStreamer(CustomTextIteratorStreamer):
             **first_streamer.decode_kwargs,
         )
 
+    def get_batched_streamers(self) -> list[CustomTextIteratorStreamer]:
+        return self._inner_streamers
+
     def put(self, value: torch.Tensor) -> None:
         size = value.shape[0]
 
@@ -243,102 +247,21 @@ class BatchedCustomTextIteratorStreamer(CustomTextIteratorStreamer):
             s.update_start_generation_time(time)
 
 
-GM_co = TypeVar("GM_co", bound="GenerationMethods", covariant=True)
+GM = TypeVar("GM", bound="GenerationMethods")
+R = TypeVar("R")
 
 
-class GenerationMethods(ABC, Generic[GM_co]):
-    streamer: CustomTextIteratorStreamer
-    seed: int | None
-    generation_kwargs: dict[str, Any]
-
-    def __init__(
-        self, streamer: CustomTextIteratorStreamer, seed: int | None, generation_kwargs: dict[str, Any]
-    ) -> None:
-        self.streamer = streamer
-        self.seed = seed
-        self.generation_kwargs = generation_kwargs
-
+class GenerationMethods(ABC, Generic[GM, R]):
     @abstractmethod
-    def merge_into_batch(self, others: list[GM_co]) -> None:
+    def merge_into_batch(self, others: list[GM]) -> None:
         pass
 
     @abstractmethod
-    def generate(self) -> bool:
+    def generate(self) -> tuple[bool, list[R]]:
         pass
 
+    def update_start_generation_time(self, time: datetime) -> None:
+        pass
 
-class TransformersGenerationMethods(GenerationMethods):
-    _log = logging.getLogger(__name__)
-    model: PreTrainedModel
-
-    def __init__(
-        self,
-        model: PreTrainedModel,
-        streamer: CustomTextIteratorStreamer,
-        seed: int | None,
-        generation_kwargs: dict[str, Any],
-    ) -> None:
-        super().__init__(streamer, seed, generation_kwargs)
-
-        self.model = model
-
-    def _merge_kwargs_tensors(self, key: str, others: list["TransformersGenerationMethods"]) -> None:
-        if key not in self.generation_kwargs:
-            return
-
-        self_tensor = cast(torch.Tensor, self.generation_kwargs[key])
-        other_tensor_list = [cast(torch.Tensor, gm.generation_kwargs[key]) for gm in others]
-        nested_tensor = torch.nested.as_nested_tensor([self_tensor, *other_tensor_list])
-        self.generation_kwargs[key] = torch.squeeze(nested_tensor.to_padded_tensor(0))
-
-    def _stack_kwargs_tensors(self, key: str, others: list["TransformersGenerationMethods"]) -> None:
-        if key not in self.generation_kwargs:
-            return
-
-        self_tensor = cast(torch.Tensor, self.generation_kwargs[key])
-        other_tensor_list = [cast(torch.Tensor, gm.generation_kwargs[key]) for gm in others]
-        self.generation_kwargs[key] = torch.cat((self_tensor, *other_tensor_list), dim=0)
-
-    def merge_into_batch(self, others: list["TransformersGenerationMethods"]) -> None:
-        self._merge_kwargs_tensors("inputs", others)
-
-        other_streamers = [gm.streamer for gm in others]
-        self.generation_kwargs["streamer"] = BatchedCustomTextIteratorStreamer([self.streamer, *other_streamers])
-
-    def generate(self) -> bool:
-        if self.seed is not None:
-            set_seed(self.seed)
-
-        failed = False
-
-        try:
-            with torch.inference_mode():
-                self.model.generate(**self.generation_kwargs)
-        except StopGenerationError:
-            pass
-        except:
-            self._log.exception("An error occurred when generating text")
-            self.streamer.set_failed()
-            failed = True
-
-        if self.seed is not None:
-            set_seed(int(datetime.now().timestamp()))
-
-        return not failed
-
-
-def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dict[str, str]]:
-    c = []
-
-    for m in messages:
-        for mc in m.contents:
-            content: str
-
-            if isinstance(mc, TextGenerationMessageContent):
-                content = mc.text
-            else:
-                raise ValueError("Invalid generation message for chat: %s", str(mc))
-
-            c.append({"role": m.role, "content": content})
-
-    return c
+    def on_execution_failed(self) -> None:
+        pass

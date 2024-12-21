@@ -227,7 +227,7 @@ class Server:
 
 def create_server(
     config: ServerConfig | None = None,
-    enable_backends: list[type[BaseBackend]] | None = None,
+    enable_backends: list[BaseBackend | type[BaseBackend]] | None = None,
     enable_schedule_thread: bool = True,
 ) -> Server:
     log.info("Azarrot is initializing...")
@@ -254,7 +254,9 @@ def create_server(
     backends: list[BaseBackend]
 
     if enable_backends is not None:
-        backends = [b(config) for b in enable_backends]
+        backends = [
+            b if isinstance(b, BaseBackend) else b(config) for b in enable_backends
+        ]
     else:
         backends = [
             IPEXLLMBackend(config),

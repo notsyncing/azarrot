@@ -6,9 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from itertools import islice
 from queue import Empty, Queue
-from typing import ClassVar
+from typing import Any, ClassVar
 
-from azarrot.backends.common import CustomTextIteratorStreamer, GenerationHandlers, GenerationMethods
+from azarrot.backends.common import (
+    CustomTextIteratorStreamer,
+    EmbeddingsGenerationResult,
+    GenerationHandlers,
+    GenerationMethods,
+)
 from azarrot.common_data import (
     EmbeddingsGenerationRequest,
     GenerationStatistics,
@@ -29,9 +34,12 @@ class BackendGenerationTask:
     device: str
     seed: int | None
 
+    batchable: bool = True
+
     def is_batchable_with(self, other: "BackendGenerationTask") -> bool:
         return (
-            (self.model_quirks is None or not self.model_quirks.does_not_support_batching)
+            self.batchable
+            and (self.model_quirks is None or not self.model_quirks.does_not_support_batching)
             and self.model_id == other.model_id
             and self.backend_id == other.backend_id
             and self.device == other.device
@@ -45,6 +53,7 @@ class TaskReference:
 
     _ready: threading.Event
     _done: threading.Event
+    _result: Any
 
     def __init__(self, task: BackendGenerationTask) -> None:
         self.dependencies = []
@@ -71,7 +80,8 @@ class TaskReference:
         for dep in self.dependencies:
             dep.wait_all_ready()
 
-    def mark_self_as_done(self) -> None:
+    def mark_self_as_done(self, result: Any) -> None:
+        self._result = result
         self._done.set()
 
     def is_done(self) -> bool:
@@ -80,13 +90,16 @@ class TaskReference:
     def wait_done(self) -> None:
         self._done.wait()
 
+    def get_result(self) -> Any:
+        return self._result
+
     def update_start_generation_time(self, time: datetime) -> None:
         if self.task.methods is not None:
-            self.task.methods.streamer.update_start_generation_time(time)
+            self.task.methods.update_start_generation_time(time)
 
     def execution_failed(self) -> None:
         if self.task.methods is not None:
-            self.task.methods.streamer.set_failed()
+            self.task.methods.on_execution_failed()
 
 
 class BubbleTaskReference(TaskReference):
@@ -196,14 +209,14 @@ class DeviceWorker:
                 other_task_methods = [t.task.methods for t in task_ref_list[1:]]
                 first_task_methods.merge_into_batch(other_task_methods)
 
-            success = first_task_methods.generate()
+            success, results = first_task_methods.generate()
 
             if not success:
                 for task_ref in task_ref_list:
                     task_ref.execution_failed()
 
-            for task_ref in task_ref_list:
-                task_ref.mark_self_as_done()
+            for index, task_ref in enumerate(task_ref_list):
+                task_ref.mark_self_as_done(results[index])
 
             if fetched_count == 1:
                 self._log.info(f"Device worker {self._config.device} has done task {task_ref_list[0]}")
@@ -223,6 +236,7 @@ class BaseBackend(ABC):
     _device_queue_lock: ClassVar[threading.Lock] = threading.Lock()
 
     _server_config: ServerConfig
+    _default_device: str
 
     def __init__(self, server_config: ServerConfig) -> None:
         self._server_config = server_config
@@ -243,7 +257,10 @@ class BaseBackend(ABC):
     def _parse_device_str(self, device_str: str) -> list[str]:
         pass
 
-    def __get_device_worker(self, device: str) -> DeviceWorker:
+    def _determine_device_for_model(self, model_id: str) -> str:
+        return self._server_config.model_device_map.get(model_id, self._default_device)
+
+    def _get_device_worker(self, device: str) -> DeviceWorker:
         with BaseBackend._device_queue_lock:
             if device not in BaseBackend._device_queues:
                 worker = DeviceWorker(
@@ -259,10 +276,7 @@ class BaseBackend(ABC):
             else:
                 return BaseBackend._device_queues[device]
 
-    def generate(
-        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
-        task, streamer, gen_stats = self._generate(request, generation_handlers)
+    def __submit_task_to_device(self, task: BackendGenerationTask) -> TaskReference:
         target_devices = self._parse_device_str(task.device)
 
         if len(target_devices) < 0:
@@ -270,25 +284,41 @@ class BaseBackend(ABC):
 
         first_device = target_devices[0]
         first_device_task_ref = TaskReference(task)
-        first_device_worker = self.__get_device_worker(first_device)
+        first_device_worker = self._get_device_worker(first_device)
         first_device_worker.put(first_device_task_ref)
 
         if len(target_devices) > 1:
             for device in islice(target_devices, 1, None):
                 device_task = BubbleTaskReference(first_device_task_ref)
-                device_worker = self.__get_device_worker(device)
+                device_worker = self._get_device_worker(device)
                 device_worker.put(device_task)
+
+        return first_device_task_ref
+
+    def generate(
+        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
+    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+        task, streamer, gen_stats = self._generate(request, generation_handlers)
+        self.__submit_task_to_device(task)
 
         return streamer, gen_stats
 
-    @abstractmethod
     def _generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     def generate_embeddings(
         self, request: EmbeddingsGenerationRequest
-    ) -> tuple[list[list[float]], GenerationStatistics]:
-        pass
+    ) -> tuple[EmbeddingsGenerationResult, GenerationStatistics]:
+        task, gen_stats = self._generate_embeddings(request)
+        task_ref = self.__submit_task_to_device(task)
+
+        task_ref.wait_done()
+
+        return task_ref.get_result(), gen_stats
+
+    def _generate_embeddings(
+        self, request: EmbeddingsGenerationRequest
+    ) -> tuple[BackendGenerationTask, GenerationStatistics]:
+        raise NotImplementedError

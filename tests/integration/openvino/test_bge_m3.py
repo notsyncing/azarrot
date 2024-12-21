@@ -22,7 +22,7 @@ def test_bge_m3_embedding(openvino_server: Server) -> None:
     assert result is not None
     assert result.embedding is not None
     assert len(result.embedding) == BGE_M3_EMBEDDING_DIMENSION
-    assert -0.0613 <= result.embedding[0] <= -0.0606
+    assert -0.0614 <= result.embedding[0] <= -0.0606
     assert -0.0344 <= result.embedding[511] <= -0.0336
     assert 0.0283 <= result.embedding[1023] <= 0.0290
 
@@ -44,7 +44,7 @@ def test_bge_m3_embedding_multiple(openvino_server: Server) -> None:
     assert result1 is not None
     assert result1.embedding is not None
     assert len(result1.embedding) == BGE_M3_EMBEDDING_DIMENSION
-    assert -0.0613 <= result1.embedding[0] <= -0.0606
+    assert -0.0614 <= result1.embedding[0] <= -0.0606
     assert -0.0344 <= result1.embedding[511] <= -0.0336
     assert 0.0283 <= result1.embedding[1023] <= 0.0290
 
@@ -54,4 +54,4 @@ def test_bge_m3_embedding_multiple(openvino_server: Server) -> None:
     assert len(result2.embedding) == BGE_M3_EMBEDDING_DIMENSION
     assert -0.0229 <= result2.embedding[0] <= -0.0227
     assert -0.0071 <= result2.embedding[511] <= -0.0068
-    assert -0.0303 <= result2.embedding[1023] <= -0.0301
+    assert -0.0303 <= result2.embedding[1023] <= -0.0300

@@ -67,10 +67,13 @@ class ModelManager:
         return "normal"
 
     def __download_from_huggingface(self, hf_model_id: str) -> Path:
-        hf_local_dir = self._config.models_dir / Path(f"huggingface/{hf_model_id.replace('/', '_')}")
+        if self._config.huggingface_download_to_home:
+            hf_local_dir = None
+        else:
+            hf_local_dir = self._config.models_dir / Path(f"huggingface/{hf_model_id.replace('/', '_')}")
 
-        if not hf_local_dir.exists():
-            hf_local_dir.mkdir(parents=True)
+            if not hf_local_dir.exists():
+                hf_local_dir.mkdir(parents=True)
 
         self._log.info("Downloading model %s from huggingface...", hf_model_id)
 

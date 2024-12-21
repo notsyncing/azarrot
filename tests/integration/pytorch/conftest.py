@@ -9,27 +9,25 @@ from typing import Any
 
 import pytest
 
-from azarrot.backends.openvino_backend import OpenVINOBackend
+from azarrot.backends.pytorch_backend import PyTorchBackend
 from azarrot.config import ENV_AZARROT_TEST_MODE, ENV_AZARROT_TEST_RESOURCES_ROOT, ServerConfig
 from azarrot.server import Server, create_server
 
 
 @pytest.fixture(scope="module")
-def openvino_server() -> Generator[Server, Any, Any]:
+def pytorch_server() -> Generator[Server, Any, Any]:
     logging.basicConfig(level=logging.INFO)
 
     tmp_dir = tempfile.TemporaryDirectory()
     tmp_path = Path(tmp_dir.name).absolute()
 
-    config = ServerConfig(
-        models_dir=tmp_path / "models",
-        working_dir=tmp_path / "working",
-        huggingface_download_to_home=True
-    )
-
     server = create_server(
-        config=config,
-        enable_backends=[OpenVINOBackend(config, auto_use_igpu=False)],
+        config=ServerConfig(
+            models_dir=tmp_path / "models",
+            working_dir=tmp_path / "working",
+            huggingface_download_to_home=True
+        ),
+        enable_backends=[PyTorchBackend],
         enable_schedule_thread=False,
     )
 

@@ -31,6 +31,7 @@ def create_fake_embedding_model(model_id: str) -> Model:
         task="feature-extraction",
         generation_variant="normal",
         use_original_precision=True,
+        is_for_raw_completion=False,
         preset=ModelPreset(preferred_locale=None, supports_tool_calling=False, enable_internal_tools=False),
         ipex_llm=None,
         info=EmbeddingModelInfo(1024),

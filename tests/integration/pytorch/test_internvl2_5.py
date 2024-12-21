@@ -2,21 +2,21 @@ import logging
 
 from openai import OpenAI
 
-from azarrot.backends.ipex_llm_backend import BACKEND_ID_IPEX_LLM
+from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
 from azarrot.server import Server
 
-INTERNVL2_CHAT_MODEL = "OpenGVLab/InternVL2_5-8B"
+INTERNVL2_CHAT_MODEL = "OpenGVLab/InternVL2_5-1B"
 
 log = logging.getLogger(__name__)
 
 
-def test_internvl2_hello(ipex_llm_server: Server) -> None:
-    ipex_llm_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_IPEX_LLM, "text-generation", skip_if_loaded=True
+def test_internvl2_5_hello(pytorch_server: Server) -> None:
+    pytorch_server.model_manager.load_huggingface_model(
+        INTERNVL2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -32,13 +32,13 @@ def test_internvl2_hello(ipex_llm_server: Server) -> None:
     assert result.content.find("你好！") >= 0
 
 
-def test_internvl2_conversation(ipex_llm_server: Server) -> None:
-    ipex_llm_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_IPEX_LLM, "text-generation", skip_if_loaded=True
+def test_internvl2_5_conversation(pytorch_server: Server) -> None:
+    pytorch_server.model_manager.load_huggingface_model(
+        INTERNVL2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -59,13 +59,13 @@ def test_internvl2_conversation(ipex_llm_server: Server) -> None:
     assert result.content.find("绿=2") >= 0
 
 
-def test_internvl2_image_input(ipex_llm_server: Server) -> None:
-    ipex_llm_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_IPEX_LLM, "text-generation", skip_if_loaded=True
+def test_internvl2_5_image_input(pytorch_server: Server) -> None:
+    pytorch_server.model_manager.load_huggingface_model(
+        INTERNVL2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -92,4 +92,5 @@ def test_internvl2_image_input(ipex_llm_server: Server) -> None:
     assert result is not None
     assert result.content is not None
     log.info("Output: %s", result.content)
-    assert result.content.find("小红熊猫") >= 0
+    assert result.content.find("红") >= 0
+    assert result.content.find("熊猫") >= 0

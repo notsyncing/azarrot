@@ -1,24 +1,26 @@
+import logging
 from typing import Any
 
-import pytest
 from openai import OpenAI
 
-from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
+from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
 from azarrot.models.model_manager import DEFAULT_MODEL_PRESETS
 from azarrot.server import Server
 from azarrot.tools import GLOBAL_TOOL_MANAGER
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
-QWEN2_CHAT_MODEL = "Qwen/Qwen2-7B-Instruct"
+QWEN2_CHAT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+
+log = logging.getLogger(__name__)
 
 
-def test_qwen2_hello(openvino_server: Server) -> None:
-    openvino_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+def test_qwen2_5_hello(pytorch_server: Server) -> None:
+    pytorch_server.model_manager.load_huggingface_model(
+        QWEN2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -30,16 +32,17 @@ def test_qwen2_hello(openvino_server: Server) -> None:
     result = completion.choices[0].message
     assert result is not None
     assert result.content is not None
-    assert result.content.find("有什么我可以解答的问题") >= 0
+    log.info("Output: %s", result.content)
+    assert result.content.find("你好") >= 0
 
 
-def test_qwen2_conversation(openvino_server: Server) -> None:
-    openvino_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+def test_qwen2_5_conversation(pytorch_server: Server) -> None:
+    pytorch_server.model_manager.load_huggingface_model(
+        QWEN2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -56,17 +59,18 @@ def test_qwen2_conversation(openvino_server: Server) -> None:
     result = completion.choices[0].message
     assert result is not None
     assert result.content is not None
-    assert result.content.find("绿是2") >= 0
+    log.info("Output: %s", result.content)
+    assert result.content.find("绿") >= 0
+    assert result.content.find("2") >= 0
 
 
-@pytest.mark.skip(reason="Qwen2 not stable on OpenVINO yet")
-def test_qwen2_tool_calling(openvino_server: Server) -> None:
-    openvino_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+def test_qwen2_5_tool_calling(pytorch_server: Server) -> None:
+    pytorch_server.model_manager.load_huggingface_model(
+        QWEN2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
     )
 
     tools = [
@@ -87,12 +91,17 @@ def test_qwen2_tool_calling(openvino_server: Server) -> None:
         }
     ]
 
-    messages = [{"role": "user", "content": "193与27的RRR运算结果是多少？"}]
+    messages = [
+        {
+            "role": "user",
+            "content": "193与27的RRR运算结果是多少？请通过工具得到结果，并且只用一次。不要用自己认为的结果。"
+        }
+    ]
 
     completion = client.chat.completions.create(
         model=QWEN2_CHAT_MODEL,
-        messages=messages,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-        tools=tools,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        messages=messages,  # pyright: ignore[reportArgumentType]
+        tools=tools,  # pyright: ignore[reportArgumentType]
         seed=100,
     )
 
@@ -123,14 +132,15 @@ def test_qwen2_tool_calling(openvino_server: Server) -> None:
 
     completion = client.chat.completions.create(
         model=QWEN2_CHAT_MODEL,
-        messages=messages,  # type: ignore[arg-type]   # pyright: ignore[reportArgumentType]
-        tools=tools,  # type: ignore[arg-type]   # pyright: ignore[reportArgumentType]
+        messages=messages,  # pyright: ignore[reportArgumentType]
+        tools=tools,  # pyright: ignore[reportArgumentType]
         seed=100,
     )
 
     result = completion.choices[0].message
     assert result is not None
     assert result.content is not None
+    log.info("Output: %s", result.content)
     assert result.content.find("888") >= 0
 
 
@@ -151,10 +161,10 @@ class RRRTool(Tool):
         return kwargs["a"] + kwargs["b"] - 200
 
 
-def test_qwen2_internal_tool_calling(openvino_server: Server) -> None:
-    openvino_server.model_manager.load_huggingface_model(
+def test_qwen2_5_internal_tool_calling(pytorch_server: Server) -> None:
+    pytorch_server.model_manager.load_huggingface_model(
         QWEN2_CHAT_MODEL,
-        BACKEND_ID_OPENVINO,
+        BACKEND_ID_PYTORCH,
         "text-generation",
         skip_if_loaded=True,
         model_preset=DEFAULT_MODEL_PRESETS["qwen2"].with_enable_internal_tools(),
@@ -164,14 +174,17 @@ def test_qwen2_internal_tool_calling(openvino_server: Server) -> None:
     GLOBAL_TOOL_MANAGER.register_tool(RRRTool())
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
-        model=QWEN2_CHAT_MODEL, messages=[{"role": "user", "content": "193与27的RRR运算结果是多少？"}], seed=100
+        model=QWEN2_CHAT_MODEL,
+        messages=[{"role": "user", "content": "193与27的RRR运算结果是多少？请通过工具得到结果，不要用自己认为的结果。"}],  # noqa: E501
+        seed=100
     )
 
     result = completion.choices[0].message
     assert result is not None
     assert result.content is not None
+    log.info("Output: %s", result.content)
     assert result.content.find("结果是20") >= 0

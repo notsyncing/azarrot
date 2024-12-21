@@ -8,8 +8,6 @@ from typing_extensions import override
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import (
-    EmbeddingsGenerationRequest,
-    GenerationStatistics,
     Model,
 )
 
@@ -65,9 +63,3 @@ class IPEXLLMBackend(TransformersBasedBackend):
         model_kwargs["load_in_low_bit"] = load_in_low_bit
 
         model_kwargs["optimize_model"] = True
-
-    @override
-    def generate_embeddings(
-        self, request: EmbeddingsGenerationRequest
-    ) -> tuple[list[list[float]], GenerationStatistics]:
-        raise NotImplementedError

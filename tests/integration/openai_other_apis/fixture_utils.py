@@ -29,7 +29,8 @@ def make_no_backend_server() -> Generator[Server, Any, Any]:
         config=ServerConfig(
             models_dir=tmp_path / "models",
             working_dir=tmp_path / "working",
-            openai_configs=OpenAIFrontendConfig(vector_store_default_embedding_model_id="dummy_model"),
+            huggingface_download_to_home=True,
+            openai_configs=OpenAIFrontendConfig(vector_store_default_embedding_model_id="dummy_model")
         ),
         enable_backends=[],
     )
@@ -62,6 +63,7 @@ def make_openvino_server(
         config=ServerConfig(
             models_dir=tmp_path / "models",
             working_dir=tmp_path / "working",
+            huggingface_download_to_home=True,
             openai_configs=OpenAIFrontendConfig(vector_store_default_embedding_model_id="BAAI/bge-m3"),
             vector_store_configs=VectorStoreConfig(
                 worker_file_process_scan_interval=worker_file_process_scan_interval,

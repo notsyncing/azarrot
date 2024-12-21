@@ -3,24 +3,24 @@ from typing import Any
 
 from openai import OpenAI
 
-from azarrot.backends.ipex_llm_backend import BACKEND_ID_IPEX_LLM
+from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.models.model_manager import DEFAULT_MODEL_PRESETS
 from azarrot.server import Server
 from azarrot.tools import GLOBAL_TOOL_MANAGER
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
-QWEN2_CHAT_MODEL = "Qwen/Qwen2-7B-Instruct"
+QWEN2_CHAT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 
 log = logging.getLogger(__name__)
 
 
-def test_qwen2_hello(ipex_llm_server: Server) -> None:
-    ipex_llm_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_IPEX_LLM, "text-generation", skip_if_loaded=True
+def test_qwen2_5_hello(openvino_server: Server) -> None:
+    openvino_server.model_manager.load_huggingface_model(
+        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -33,16 +33,16 @@ def test_qwen2_hello(ipex_llm_server: Server) -> None:
     assert result is not None
     assert result.content is not None
     log.info("Output: %s", result.content)
-    assert result.content.find("你好") >= 0
+    assert result.content.find("您好") >= 0
 
 
-def test_qwen2_conversation(ipex_llm_server: Server) -> None:
-    ipex_llm_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_IPEX_LLM, "text-generation", skip_if_loaded=True
+def test_qwen2_5_conversation(openvino_server: Server) -> None:
+    openvino_server.model_manager.load_huggingface_model(
+        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -64,13 +64,13 @@ def test_qwen2_conversation(ipex_llm_server: Server) -> None:
     assert result.content.find("2") >= 0
 
 
-def test_qwen2_tool_calling(ipex_llm_server: Server) -> None:
-    ipex_llm_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_IPEX_LLM, "text-generation", skip_if_loaded=True
+def test_qwen2_5_tool_calling(openvino_server: Server) -> None:
+    openvino_server.model_manager.load_huggingface_model(
+        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
     )
 
     tools = [
@@ -91,12 +91,17 @@ def test_qwen2_tool_calling(ipex_llm_server: Server) -> None:
         }
     ]
 
-    messages = [{"role": "user", "content": "193与27的RRR运算结果是多少？请通过工具得到结果，不要用自己认为的结果。"}]
+    messages = [
+        {
+            "role": "user",
+            "content": "193与27的RRR运算结果是多少？请通过工具得到结果，并且只使用一次工具。不要用自己认为的结果。"
+        }
+    ]
 
     completion = client.chat.completions.create(
         model=QWEN2_CHAT_MODEL,
-        messages=messages,  # pyright: ignore[reportArgumentType]
-        tools=tools,  # pyright: ignore[reportArgumentType]
+        messages=messages,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        tools=tools,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
         seed=100,
     )
 
@@ -127,8 +132,8 @@ def test_qwen2_tool_calling(ipex_llm_server: Server) -> None:
 
     completion = client.chat.completions.create(
         model=QWEN2_CHAT_MODEL,
-        messages=messages,  # pyright: ignore[reportArgumentType]
-        tools=tools,  # pyright: ignore[reportArgumentType]
+        messages=messages,  # type: ignore[arg-type]   # pyright: ignore[reportArgumentType]
+        tools=tools,  # type: ignore[arg-type]   # pyright: ignore[reportArgumentType]
         seed=100,
     )
 
@@ -156,10 +161,10 @@ class RRRTool(Tool):
         return kwargs["a"] + kwargs["b"] - 200
 
 
-def test_qwen2_internal_tool_calling(ipex_llm_server: Server) -> None:
-    ipex_llm_server.model_manager.load_huggingface_model(
+def test_qwen2_5_internal_tool_calling(openvino_server: Server) -> None:
+    openvino_server.model_manager.load_huggingface_model(
         QWEN2_CHAT_MODEL,
-        BACKEND_ID_IPEX_LLM,
+        BACKEND_ID_OPENVINO,
         "text-generation",
         skip_if_loaded=True,
         model_preset=DEFAULT_MODEL_PRESETS["qwen2"].with_enable_internal_tools(),
@@ -169,7 +174,7 @@ def test_qwen2_internal_tool_calling(ipex_llm_server: Server) -> None:
     GLOBAL_TOOL_MANAGER.register_tool(RRRTool())
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(

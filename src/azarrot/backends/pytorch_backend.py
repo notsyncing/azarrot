@@ -20,6 +20,10 @@ class PyTorchBackend(TransformersBasedBackend):
     def _customize_model_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
         model_kwargs["low_cpu_mem_usage"] = True
 
-        if not model.use_original_precision:
-            # TODO: Use bitsandbytes
-            pass
+        # TODO: Enable this when bitsandbytes is usable
+        # if not model.use_original_precision:
+        #     model_kwargs["quantization_config"] = BitsAndBytesConfig(
+        #         load_in_4bit=True,
+        #         bnb_4bit_quant_type="nf4",
+        #         bnb_4bit_compute_dtype=torch.bfloat16
+        #     )
