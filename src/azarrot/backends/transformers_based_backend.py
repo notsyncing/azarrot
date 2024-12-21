@@ -21,6 +21,11 @@ from azarrot.backends.internvl2_support import (
     internvl2_apply_chat_template,
     internvl2_patch_model,
 )
+from azarrot.backends.pytorch_common import (
+    determine_pytorch_default_device,
+    parse_pytorch_device_str,
+    print_pytorch_device_list,
+)
 from azarrot.backends.transformers_common import TransformersGenerationMethods, to_transformers_chat_messages
 from azarrot.common_data import (
     EmbeddingModelInfo,
@@ -43,7 +48,7 @@ MODEL_PYTORCH_QUIRKS = {"internvl2": {"use_cache": False}}
 
 @dataclass
 class LoadedTransformersModel:
-    info: Model
+    data: Model
     model: PreTrainedModel
     tokenizer: PreTrainedTokenizer
     device: str
@@ -85,19 +90,10 @@ class TransformersBasedBackend(BaseBackend, ABC):
         self._log.info("Using default device: %s", self._default_device)
 
     def _determine_default_device(self, accel_device_count: int) -> str:
-        if accel_device_count <= 0:
-            return "cpu"
-        else:
-            return "xpu"
+        return determine_pytorch_default_device(accel_device_count)
 
     def _print_device_list(self) -> int:
-        self._log.info("%s Available devices:", self.id())
-        xpu_count = torch.xpu.device_count()
-
-        for i in range(xpu_count):
-            self._log.info("XPU #%s: %s", i, str(torch.xpu.get_device_properties(i)))
-
-        return xpu_count
+        return print_pytorch_device_list(self._log, self.id())
 
     def __extract_model_info(self, transformers_model: PreTrainedModel, task: str) -> ModelInfo:
         if task == "feature-extraction":
@@ -187,18 +183,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
     @override
     def _parse_device_str(self, device_str: str) -> list[str]:
-        def sanitize_device(device: str) -> str:
-            if device.isdigit():
-                return device
-            elif device != "cpu" and ":" not in device:
-                return device + ":0"
-            else:
-                return device
-
-        if device_str is None or device_str == "":
-            return []
-
-        return [sanitize_device(d.strip().lower()) for d in device_str.split(",")]
+        return parse_pytorch_device_str(device_str)
 
     def __get_first_text_message_with_role(self, expected_role: str, messages: list[GenerationMessage]) -> str | None:
         for msg in messages:
@@ -216,7 +201,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
-        if not loaded_model.info.is_for_raw_completion:
+        if not loaded_model.data.is_for_raw_completion:
             result = loaded_model.tokenizer.apply_chat_template(
                 to_transformers_chat_messages(request.messages), return_tensors="pt", return_dict=True
             )
@@ -227,7 +212,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
             if first_user_msg is None:
                 raise ValueError(
-                    f"This model {loaded_model.info.id} is for raw completion, but no user text message was found in "
+                    f"This model {loaded_model.data.id} is for raw completion, but no user text message was found in "
                     "this request!"
                 )
 
@@ -307,7 +292,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
         loaded_model = self._get_model(request.model_id)
-        generation_variant = loaded_model.info.generation_variant
+        generation_variant = loaded_model.data.generation_variant
         generation_method = self._generation_variants.get(generation_variant, self.__generate_normal)
 
         gen_stats = GenerationStatistics(
@@ -318,7 +303,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
             completion_tokens=0,
         )
 
-        model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.info.generation_variant)
+        model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.data.generation_variant)
 
         streamer = CustomTextIteratorStreamer(
             cast(AutoTokenizer, loaded_model.tokenizer),
@@ -335,7 +320,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         m = generation_method(loaded_model, request, common_generation_kwargs, streamer, gen_stats)
 
         task = BackendGenerationTask(
-            model_id=loaded_model.info.id,
+            model_id=loaded_model.data.id,
             model_quirks=model_quirks,
             backend_id=self.id(),
             methods=m,

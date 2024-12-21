@@ -15,7 +15,7 @@ ENV PIP_EXTRA_INDEX_URL https://pytorch-extension.intel.com/release-whl/stable/x
 RUN cd /app && python3 -m pip install -U pip && python3 -m pip install . && python3 -m pip install .[model_supports] && \
     python3 -m pip install auto-gptq==0.7.1 && \
     python3 -m pip cache purge && \
-    python3 -m pip install transformers==4.46.3 trl
+    python3 -m pip install transformers==4.46.3 trl sentence-transformers==3.3.1
 
 VOLUME /app/models
 VOLUME /app/working

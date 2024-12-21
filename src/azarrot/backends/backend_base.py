@@ -53,7 +53,8 @@ class TaskReference:
 
     _ready: threading.Event
     _done: threading.Event
-    _result: Any
+    _result: Any | None = None
+    _exception: Exception | None = None
 
     def __init__(self, task: BackendGenerationTask) -> None:
         self.dependencies = []
@@ -90,16 +91,26 @@ class TaskReference:
     def wait_done(self) -> None:
         self._done.wait()
 
-    def get_result(self) -> Any:
+    def get_result(self) -> Any | None:
+        if self._exception is not None:
+            raise self._exception
+
         return self._result
 
     def update_start_generation_time(self, time: datetime) -> None:
         if self.task.methods is not None:
             self.task.methods.update_start_generation_time(time)
 
-    def execution_failed(self) -> None:
+    def execution_failed(self, exception: Exception | None = None) -> None:
+        if exception is not None:
+            self._exception = exception
+        else:
+            self._exception = ValueError("Execution failed!")
+
         if self.task.methods is not None:
             self.task.methods.on_execution_failed()
+
+        self._done.set()
 
 
 class BubbleTaskReference(TaskReference):
@@ -215,8 +226,14 @@ class DeviceWorker:
                 for task_ref in task_ref_list:
                     task_ref.execution_failed()
 
+            results_len = len(results)
+
             for index, task_ref in enumerate(task_ref_list):
-                task_ref.mark_self_as_done(results[index])
+                if index >= results_len:
+                    self._log.error("Too less results %d", results_len)
+                    task_ref.execution_failed()
+                else:
+                    task_ref.mark_self_as_done(results[index])
 
             if fetched_count == 1:
                 self._log.info(f"Device worker {self._config.device} has done task {task_ref_list[0]}")
@@ -316,7 +333,12 @@ class BaseBackend(ABC):
 
         task_ref.wait_done()
 
-        return task_ref.get_result(), gen_stats
+        result = task_ref.get_result()
+
+        if result is None:
+            raise ValueError("No data returned!")
+
+        return result, gen_stats
 
     def _generate_embeddings(
         self, request: EmbeddingsGenerationRequest

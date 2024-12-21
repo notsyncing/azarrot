@@ -21,6 +21,7 @@ from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.backends.pytorch_backend import PyTorchBackend
+from azarrot.backends.sentences_transformers_backend import SentenceTransformersBackend
 from azarrot.chats.thread_manager import ChatThreadManager
 from azarrot.common_data import WorkingDirectories
 from azarrot.config import OpenAIFrontendConfig, ServerConfig
@@ -262,6 +263,7 @@ def create_server(
             IPEXLLMBackend(config),
             OpenVINOBackend(config),
             PyTorchBackend(config),
+            SentenceTransformersBackend(config),
         ]
 
     log.info("Enabled backends: %s", backends)
