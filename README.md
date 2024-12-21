@@ -83,9 +83,9 @@ Tested GPUs:
 
 ### Software
 
-Due to the `xpu` branch of `intel-extension-for-pytorch` still has no python 3.12 build, we have to use `Python 3.11` or below.
+Due to `ipex-llm` does not support `intel_extension_for_pytorch 2.5.10+xpu`, we have to use `Python 3.11` or below.
 
-You also have to install oneAPI Toolkit (at least 2024.2) and drivers.
+You also have to install oneAPI Toolkit (at least 2024.2) and Intel GPU drivers.
 
 Azarrot is tested on Ubuntu 22.04 and python 3.10.
 
