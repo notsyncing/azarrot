@@ -13,9 +13,9 @@ readme = "README.md"
 requires-python = "<= 3.11.99"
 version = "0.4.0"
 dependencies = [
-    "openvino==2024.5",
+    "openvino==2024.6",
     "optimum[openvino]==1.23.3",
-    "ipex-llm[xpu-arc]==2.2.0b20241213",
+    "ipex-llm[xpu-arc]==2.2.0b20241220",
     "uvicorn==0.32.1",
     "fastapi==0.115.0",
     "pyyaml==6.0.2",
