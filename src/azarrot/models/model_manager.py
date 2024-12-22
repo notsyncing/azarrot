@@ -10,7 +10,8 @@ import yaml
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import BACKEND_ID_IPEX_LLM
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
-from azarrot.common_data import IPEXLLMModelConfig, Model, ModelPreset
+from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
+from azarrot.common_data import IPEXLLMModelConfig, Model, ModelPreset, PyTorchModelConfig
 from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
 
@@ -109,6 +110,16 @@ class ModelManager:
                     quantization_mode=ipex_llm_config.get("quantization_mode", "default"),
                 )
 
+            pytorch = None
+
+            if model_backend == BACKEND_ID_PYTORCH:
+                pytorch_config = model_info.get("pytorch", {})
+
+                pytorch = PyTorchModelConfig(
+                    compile=pytorch_config.get("compile", False),
+                    compile_backend=pytorch_config.get("compile_backend", "inductor")
+                )
+
             default_model_preset = DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET)
             model_preset_data = model_info.get("preset", None)
             model_preset: ModelPreset
@@ -136,6 +147,7 @@ class ModelManager:
                 use_original_precision=model_info.get("use_original_precision", False),
                 is_for_raw_completion=model_info.get("is_for_raw_completion", False),
                 ipex_llm=ipex_llm,
+                pytorch=pytorch,
                 info=None,
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
             )
@@ -209,6 +221,7 @@ class ModelManager:
             use_original_precision=use_original_precision,
             is_for_raw_completion=is_for_raw_completion,
             ipex_llm=None,
+            pytorch=None,
             info=None,
             create_time=datetime.now(),
         )

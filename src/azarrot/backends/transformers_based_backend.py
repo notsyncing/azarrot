@@ -107,8 +107,8 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _customize_model_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
         pass
 
-    def _customize_loaded_model(self, model: PreTrainedModel) -> PreTrainedModel:
-        return model
+    def _customize_loaded_model(self, model: Model, loaded_model: PreTrainedModel) -> PreTrainedModel:  # noqa: ARG002
+        return loaded_model
 
     def _should_move_inputs_to_device(self) -> bool:
         return True
@@ -155,7 +155,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         transformers_model.eval()
 
-        transformers_model = self._customize_loaded_model(transformers_model)
+        transformers_model = self._customize_loaded_model(model, transformers_model)
 
         self._models[model.id] = LoadedTransformersModel(model, transformers_model, tokenizer, device)
 

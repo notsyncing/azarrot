@@ -1,6 +1,8 @@
 import logging
-from typing import Any
+from typing import Any, cast
 
+import torch
+from transformers import PreTrainedModel
 from typing_extensions import override
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
@@ -27,3 +29,13 @@ class PyTorchBackend(TransformersBasedBackend):
         #         bnb_4bit_quant_type="nf4",
         #         bnb_4bit_compute_dtype=torch.bfloat16
         #     )
+
+    @override
+    def _customize_loaded_model(self, model: Model, loaded_model: PreTrainedModel) -> PreTrainedModel:
+        if model.pytorch is not None:
+            if model.pytorch.compile:
+                self._log.info("Compiling model %s with backend %s", model.id, model.pytorch.compile_backend)
+                compiled_model = torch.compile(loaded_model, backend=model.pytorch.compile_backend)
+                loaded_model = cast(PreTrainedModel, compiled_model)
+
+        return loaded_model

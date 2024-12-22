@@ -155,8 +155,8 @@ class OpenVINOBackend(TransformersBasedBackend):
         model_kwargs["use_cache"] = model.task == "text-generation-with-past"
 
     @override
-    def _customize_loaded_model(self, model: PreTrainedModel) -> PreTrainedModel:
-        ov_model = self.__patch_model(model)
+    def _customize_loaded_model(self, model: Model, loaded_model: PreTrainedModel) -> PreTrainedModel:
+        ov_model = self.__patch_model(loaded_model)
         ov_model.compile()
         return ov_model
 

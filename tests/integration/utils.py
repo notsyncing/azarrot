@@ -34,6 +34,7 @@ def create_fake_embedding_model(model_id: str) -> Model:
         is_for_raw_completion=False,
         preset=ModelPreset(preferred_locale=None, supports_tool_calling=False, enable_internal_tools=False),
         ipex_llm=None,
+        pytorch=None,
         info=EmbeddingModelInfo(1024),
         create_time=datetime.now(),
     )

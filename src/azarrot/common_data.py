@@ -45,6 +45,12 @@ class IPEXLLMModelConfig:
 
 
 @dataclass
+class PyTorchModelConfig:
+    compile: bool
+    compile_backend: str
+
+
+@dataclass
 class ModelPreset:
     preferred_locale: Literal["zh-cn", "en-us"] | None
     supports_tool_calling: bool
@@ -87,6 +93,7 @@ class Model:
     is_for_raw_completion: bool
 
     ipex_llm: IPEXLLMModelConfig | None
+    pytorch: PyTorchModelConfig | None
 
     # The following properties are computed at runtime
 
