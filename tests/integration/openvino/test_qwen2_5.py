@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 def test_qwen2_5_hello(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation-with-past", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -38,7 +38,7 @@ def test_qwen2_5_hello(openvino_server: Server) -> None:
 
 def test_qwen2_5_conversation(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation-with-past", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -66,7 +66,7 @@ def test_qwen2_5_conversation(openvino_server: Server) -> None:
 
 def test_qwen2_5_tool_calling(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+        QWEN2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation-with-past", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -165,7 +165,7 @@ def test_qwen2_5_internal_tool_calling(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
         QWEN2_CHAT_MODEL,
         BACKEND_ID_OPENVINO,
-        "text-generation",
+        "text-generation-with-past",
         skip_if_loaded=True,
         model_preset=DEFAULT_MODEL_PRESETS["qwen2"].with_enable_internal_tools(),
     )
