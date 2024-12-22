@@ -2,16 +2,24 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import huggingface_hub
 import yaml
+from optimum.intel.openvino.configuration import OVQuantizationMethod
 
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.ipex_llm_backend import BACKEND_ID_IPEX_LLM
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
-from azarrot.common_data import IPEXLLMModelConfig, Model, ModelPreset, PyTorchModelConfig
+from azarrot.common_data import (
+    IPEXLLMModelConfig,
+    Model,
+    ModelPreset,
+    OpenVINOModelConfig,
+    OpenVINOQuantizationConfigs,
+    PyTorchModelConfig,
+)
 from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
 
@@ -81,6 +89,26 @@ class ModelManager:
         hf_model_path = huggingface_hub.snapshot_download(hf_model_id, local_dir=hf_local_dir)
         return Path(hf_model_path)
 
+    def __parse_openvino_model_config(self, config_data: Any) -> OpenVINOModelConfig:
+        quant_config = config_data.get("quantization_configs")
+
+        if quant_config is not None:
+            qc = OpenVINOQuantizationConfigs(
+                bits=quant_config.get("bits", 8),
+                sym=quant_config.get("sym", False),
+                group_size=quant_config.get("group_size"),
+                ratio=quant_config.get("ratio", 1.0),
+                all_layers=quant_config.get("all_layers"),
+                quant_method=quant_config.get("quant_method", OVQuantizationMethod.DEFAULT),
+                weight_format=quant_config.get("weight_format"),
+            )
+        else:
+            qc = None
+
+        return OpenVINOModelConfig(
+            quantization_configs=qc
+        )
+
     def __parse_model_file(self, file: Path) -> Model:
         with file.open() as f:
             model_info = yaml.safe_load(f)
@@ -99,6 +127,12 @@ class ModelManager:
             model_generation_variant = model_info.get(
                 "generation_variant", self.__determine_model_generation_variant(model_path)
             )
+
+            openvino = None
+
+            if model_backend == BACKEND_ID_OPENVINO:
+                openvino_config = model_info.get("openvino", {})
+                openvino = self.__parse_openvino_model_config(openvino_config)
 
             ipex_llm = None
 
@@ -146,6 +180,7 @@ class ModelManager:
                 preset=model_preset,
                 use_original_precision=model_info.get("use_original_precision", False),
                 is_for_raw_completion=model_info.get("is_for_raw_completion", False),
+                openvino=openvino,
                 ipex_llm=ipex_llm,
                 pytorch=pytorch,
                 info=None,
@@ -220,6 +255,7 @@ class ModelManager:
             preset=preset,
             use_original_precision=use_original_precision,
             is_for_raw_completion=is_for_raw_completion,
+            openvino=None,
             ipex_llm=None,
             pytorch=None,
             info=None,

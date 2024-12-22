@@ -7,7 +7,8 @@ from typing import Any, cast
 
 import openvino
 import torch
-from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction
+from openvino import properties as ov_props
+from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction, OVWeightQuantizationConfig
 from transformers import (
     PreTrainedModel,
     pipeline,
@@ -148,9 +149,35 @@ class OpenVINOBackend(TransformersBasedBackend):
 
         need_load_in_4bit = need_export and not model.use_original_precision
         model_kwargs["export"] = need_export
-        model_kwargs["load_in_4bit"] = need_load_in_4bit
 
-        model_kwargs["ov_config"] = {"PERFORMANCE_HINT": "THROUGHPUT"}
+        if model.openvino is not None:
+            if model.openvino.quantization_configs is not None:
+                model_kwargs["quantization_config"] = OVWeightQuantizationConfig(
+                    bits=model.openvino.quantization_configs.bits,
+                    sym=model.openvino.quantization_configs.sym,
+                    group_size=model.openvino.quantization_configs.group_size,
+                    ratio=model.openvino.quantization_configs.ratio,
+                    all_layers=model.openvino.quantization_configs.all_layers,
+                    quant_method=model.openvino.quantization_configs.quant_method,
+                    weight_format=model.openvino.quantization_configs.weight_format,
+                )
+
+        if "quantization_config" not in model_kwargs and need_load_in_4bit:
+            model_kwargs["quantization_config"] = OVWeightQuantizationConfig(bits=4)
+
+        ov_config = {
+            "PERFORMANCE_HINT": ov_props.hint.PerformanceMode.LATENCY,
+        }
+
+        if model.device is not None and model.device.upper() == "CPU":
+            ov_config["INFERENCE_NUM_THREADS"] = 6
+            ov_config["SCHEDULING_CORE_TYPE"] = ov_props.hint.SchedulingCoreType.PCORE_ONLY
+            ov_config["ENABLE_HYPER_THREADING"] = False
+            ov_config["ENABLE_CPU_PINNING"] = True
+
+        self._log.info("Using OpenVINO configs for device %s: %s", model.device, ov_config)
+
+        model_kwargs["ov_config"] = ov_config
 
         model_kwargs["use_cache"] = model.task == "text-generation-with-past"
 

@@ -16,6 +16,22 @@ class WorkingDirectories:
 
 
 @dataclass
+class OpenVINOQuantizationConfigs:
+    bits: int
+    sym: bool
+    group_size: int | None
+    ratio: float
+    all_layers: bool | None
+    quant_method: str
+    weight_format: str | None
+
+
+@dataclass
+class OpenVINOModelConfig:
+    quantization_configs: OpenVINOQuantizationConfigs | None
+
+
+@dataclass
 class IPEXLLMModelConfig:
     use_cache: bool
 
@@ -92,11 +108,13 @@ class Model:
     use_original_precision: bool
     is_for_raw_completion: bool
 
+    openvino: OpenVINOModelConfig | None
     ipex_llm: IPEXLLMModelConfig | None
     pytorch: PyTorchModelConfig | None
 
     # The following properties are computed at runtime
 
+    device: str | None = None
     info: ModelInfo | None = None
     create_time: datetime = datetime.min
 

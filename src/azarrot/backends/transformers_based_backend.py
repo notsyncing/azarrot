@@ -128,6 +128,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         model_path = model.path.absolute()
 
         device = self._determine_device_for_model(model.id)
+        model.device = device
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 

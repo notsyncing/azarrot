@@ -231,6 +231,8 @@ class SentenceTransformersBackend(BaseBackend):
     def load_model(self, model: Model) -> ModelInfo:
         model_path = str(model.path.absolute())
         device = self._determine_device_for_model(model.id)
+        model.device = device
+
         model_info: ModelInfo
 
         if model.task == "feature-extraction":
