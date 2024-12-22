@@ -1,4 +1,4 @@
-FROM docker.io/intel/oneapi-basekit:2025.0.0-0-devel-ubuntu22.04
+FROM docker.io/intel/oneapi-basekit:2025.0.1-0-devel-ubuntu22.04
 
 RUN apt update && apt -y install python3 python3-pip libmagic1
 
