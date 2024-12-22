@@ -13,7 +13,7 @@ def test_bge_m3_embedding(openvino_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     embeddings = client.embeddings.create(model=BGE_M3_MODEL, input="这是一行测试文字", encoding_format="float")
@@ -33,7 +33,7 @@ def test_bge_m3_embedding_multiple(openvino_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     embeddings = client.embeddings.create(

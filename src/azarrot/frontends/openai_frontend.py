@@ -181,7 +181,7 @@ class OpenAIFrontend:
         router.add_api_route(vs_url + "/{vid}/file_batches/{bid}/cancel", self._vstores.cancel_batch, methods=["POST"])
         router.add_api_route(vs_url + "/{vid}/file_batches/{bid}/files", self._vstores.get_batch_files, methods=["GET"])
 
-        self._api.include_router(router)
+        self._api.include_router(router, prefix="/openai")
 
     def __to_openai_model(self, model: Model) -> dict:
         return {"id": model.id, "object": "model", "created": int(model.create_time.timestamp()), "owned_by": "openai"}

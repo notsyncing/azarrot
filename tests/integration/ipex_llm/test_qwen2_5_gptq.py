@@ -12,7 +12,7 @@ def test_qwen2_5_gptq_hello(ipex_llm_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(

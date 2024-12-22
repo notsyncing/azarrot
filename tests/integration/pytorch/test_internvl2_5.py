@@ -16,7 +16,7 @@ def test_internvl2_5_hello(pytorch_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -38,7 +38,7 @@ def test_internvl2_5_conversation(pytorch_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -65,7 +65,7 @@ def test_internvl2_5_image_input(pytorch_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{pytorch_server.config.host}:{pytorch_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(

@@ -13,7 +13,7 @@ def test_bge_m3_embedding(sentence_transformers_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{sentence_transformers_server.config.host}:{sentence_transformers_server.config.port}/v1",
+        base_url=f"http://{sentence_transformers_server.config.host}:{sentence_transformers_server.config.port}/openai/v1",
         api_key="__TEST__"
     )
 
@@ -34,7 +34,7 @@ def test_bge_m3_embedding_multiple(sentence_transformers_server: Server) -> None
     )
 
     client = OpenAI(
-        base_url=f"http://{sentence_transformers_server.config.host}:{sentence_transformers_server.config.port}/v1",
+        base_url=f"http://{sentence_transformers_server.config.host}:{sentence_transformers_server.config.port}/openai/v1",
         api_key="__TEST__"
     )
 

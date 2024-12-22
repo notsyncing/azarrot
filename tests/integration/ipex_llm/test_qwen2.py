@@ -20,7 +20,7 @@ def test_qwen2_hello(ipex_llm_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -42,7 +42,7 @@ def test_qwen2_conversation(ipex_llm_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -70,7 +70,7 @@ def test_qwen2_tool_calling(ipex_llm_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     tools = [
@@ -169,7 +169,7 @@ def test_qwen2_internal_tool_calling(ipex_llm_server: Server) -> None:
     GLOBAL_TOOL_MANAGER.register_tool(RRRTool())
 
     client = OpenAI(
-        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{ipex_llm_server.config.host}:{ipex_llm_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(

@@ -20,7 +20,7 @@ def test_qwen2_5_hello(openvino_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -42,7 +42,7 @@ def test_qwen2_5_conversation(openvino_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
@@ -70,7 +70,7 @@ def test_qwen2_5_tool_calling(openvino_server: Server) -> None:
     )
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     tools = [
@@ -174,7 +174,7 @@ def test_qwen2_5_internal_tool_calling(openvino_server: Server) -> None:
     GLOBAL_TOOL_MANAGER.register_tool(RRRTool())
 
     client = OpenAI(
-        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/v1", api_key="__TEST__"
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
     completion = client.chat.completions.create(
