@@ -27,6 +27,8 @@ from azarrot.common_data import WorkingDirectories
 from azarrot.config import OpenAIFrontendConfig, ServerConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.cohere_frontend import CohereFrontend
+from azarrot.frontends.jina_frontend import JinaFrontend
 from azarrot.frontends.openai_frontend import OpenAIFrontend
 from azarrot.models.chat_templates import ChatTemplateManager
 from azarrot.models.model_manager import ModelManager
@@ -294,6 +296,16 @@ def create_server(
             vector_store,
             api,
             working_dirs,
+        ),
+        JinaFrontend(
+            api,
+            model_manager,
+            backend_pipe,
+        ),
+        CohereFrontend(
+            api,
+            model_manager,
+            backend_pipe,
         )
     ]
 

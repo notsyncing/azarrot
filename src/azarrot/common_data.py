@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Generic, Literal, TypeVar
 
@@ -175,6 +175,21 @@ class GenerationStatistics:
     prompt_tokens: int
     completion_tokens: int
 
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+    def to_stats_text(self) -> str:
+        time_delta = (self.end_time - self.start_time) / timedelta(milliseconds=1)
+        ftt = (self.first_token_time - self.start_time) / timedelta(milliseconds=1)
+
+        total_tokens = self.prompt_tokens + self.completion_tokens
+        speed = (self.completion_tokens) / time_delta * 1000
+
+        return (
+            f"Total tokens: {total_tokens} (prompt {self.prompt_tokens}, completion {self.completion_tokens}), "
+            f"first token latency: {ftt} ms, cost {time_delta} ms, {speed:.3f} tok/s"
+        )
+
 
 @dataclass
 class ModelToolCallConfig:
@@ -192,3 +207,18 @@ PR_T = TypeVar("PR_T")
 class PageResult(Generic[PR_T]):
     data: list[PR_T]
     is_last_page: bool
+
+
+@dataclass
+class ReranksGenerationRequest:
+    model_id: str
+    query: str
+    documents: list[str]
+    max_count: int | None = None
+    max_tokens_per_document: int | None = None
+
+
+@dataclass
+class RerankResultItem:
+    input_index: int
+    score: float

@@ -4,6 +4,7 @@ import logging
 import operator
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 import torch
 from sentence_transformers import CrossEncoder, SentenceTransformer
@@ -27,6 +28,8 @@ from azarrot.common_data import (
     GenerationStatistics,
     Model,
     ModelInfo,
+    RerankResultItem,
+    ReranksGenerationRequest,
     TextGenerationRequest,
 )
 from azarrot.config import ServerConfig
@@ -106,6 +109,80 @@ class SentenceTransformerGenerationMethods(
             results.append(current_list)
 
         return True, results
+
+
+class CrossEncoderGenerationMethods(
+    GenerationMethods["CrossEncoderGenerationMethods", list[RerankResultItem]]
+):
+    _log = logging.getLogger(__name__)
+    _model: CrossEncoder
+    _inputs: list[ReranksGenerationRequest]
+    _gen_stats: GenerationStatistics
+
+    def __init__(
+        self,
+        model: CrossEncoder,
+        inputs: ReranksGenerationRequest,
+        generation_statistics: GenerationStatistics
+    ) -> None:
+        super().__init__()
+
+        self._model = model
+        self._inputs = [inputs]
+        self._gen_stats = generation_statistics
+
+    def get_inputs(self) -> list[ReranksGenerationRequest]:
+        return self._inputs
+
+    @override
+    def is_batching_supported(self) -> bool:
+        return False
+
+    @override
+    def merge_into_batch(self, others: list["CrossEncoderGenerationMethods"]) -> None:
+        raise NotImplementedError
+
+    @override
+    def generate(self) -> tuple[bool, list[list[RerankResultItem]]]:
+        assert len(self._inputs) == 1
+
+        gen_input = self._inputs[0]
+
+        if gen_input.max_tokens_per_document is not None:
+            for i, text in enumerate(gen_input.documents):
+                text_length = len(text)
+
+                if text_length > gen_input.max_tokens_per_document:
+                    self._log.warning(
+                        "Rerank input document index %d is overlength (%d vs %d), will be truncated!",
+                        i, text_length, gen_input.max_tokens_per_document
+                    )
+
+                    gen_input.documents[i] = gen_input.documents[i][0:gen_input.max_tokens_per_document]
+
+        try:
+            ranks = self._model.rank(
+                query=gen_input.query,
+                documents=gen_input.documents,
+                top_k=gen_input.max_count
+            )
+        except:
+            self._log.exception("An error occurred when generating reranks")
+            return False, []
+
+        results = [
+            RerankResultItem(
+                input_index=cast(int, rank["corpus_id"]),
+                score=float(rank["score"])
+            ) for rank in ranks
+        ]
+
+        self._gen_stats.end_time = datetime.now()
+        self._gen_stats.first_token_time = datetime.now()
+        self._gen_stats.prompt_tokens = sum([len(t) for t in gen_input.documents])
+        self._gen_stats.completion_tokens = len(results)
+
+        return True, [results]
 
 
 class SentenceTransformersBackend(BaseBackend):
@@ -219,6 +296,40 @@ class SentenceTransformersBackend(BaseBackend):
         m = SentenceTransformerGenerationMethods(
             model=loaded_model.model,
             inputs=request.text if isinstance(request.text, list) else [request.text],
+            generation_statistics=gen_stats
+        )
+
+        task = BackendGenerationTask(
+            model_id=loaded_model.data.id,
+            model_quirks=None,
+            backend_id=self.id(),
+            methods=m,
+            device=loaded_model.device,
+            seed=None,
+        )
+
+        return task, gen_stats
+
+    @override
+    def _generate_reranks(
+        self, request: ReranksGenerationRequest
+    ) -> tuple[BackendGenerationTask, GenerationStatistics]:
+        loaded_model = self.__get_model(request.model_id)
+
+        if not isinstance(loaded_model.model, CrossEncoder):
+            raise ValueError(f"Model {loaded_model.data.id} is not a reranking model!")
+
+        gen_stats = GenerationStatistics(
+            start_time=datetime.now(),
+            first_token_time=datetime.now(),
+            end_time=datetime.max,
+            prompt_tokens=0,
+            completion_tokens=0,
+        )
+
+        m = CrossEncoderGenerationMethods(
+            model=loaded_model.model,
+            inputs=request,
             generation_statistics=gen_stats
         )
 

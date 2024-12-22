@@ -20,6 +20,8 @@ from azarrot.common_data import (
     Model,
     ModelInfo,
     ModelQuirks,
+    RerankResultItem,
+    ReranksGenerationRequest,
     TextGenerationRequest,
 )
 from azarrot.config import ServerConfig
@@ -40,6 +42,7 @@ class BackendGenerationTask:
         return (
             self.batchable
             and (self.model_quirks is None or not self.model_quirks.does_not_support_batching)
+            and (self.methods is None or self.methods.is_batching_supported())
             and self.model_id == other.model_id
             and self.backend_id == other.backend_id
             and self.device == other.device
@@ -342,5 +345,25 @@ class BaseBackend(ABC):
 
     def _generate_embeddings(
         self, request: EmbeddingsGenerationRequest
+    ) -> tuple[BackendGenerationTask, GenerationStatistics]:
+        raise NotImplementedError
+
+    def generate_reranks(
+        self, request: ReranksGenerationRequest
+    ) -> tuple[list[RerankResultItem], GenerationStatistics]:
+        task, gen_stats = self._generate_reranks(request)
+        task_ref = self.__submit_task_to_device(task)
+
+        task_ref.wait_done()
+
+        result = task_ref.get_result()
+
+        if result is None:
+            raise ValueError("No data returned!")
+
+        return result, gen_stats
+
+    def _generate_reranks(
+        self, request: ReranksGenerationRequest
     ) -> tuple[BackendGenerationTask, GenerationStatistics]:
         raise NotImplementedError

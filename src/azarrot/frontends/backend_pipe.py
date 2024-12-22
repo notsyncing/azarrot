@@ -16,6 +16,8 @@ from azarrot.common_data import (
     GenerationMessageContent,
     GenerationStatistics,
     Model,
+    RerankResultItem,
+    ReranksGenerationRequest,
     TextGenerationMessageContent,
     TextGenerationRequest,
     ToolCallRequestMessageContent,
@@ -177,3 +179,9 @@ class BackendPipe:
     ) -> tuple[list[list[float]], GenerationStatistics]:
         bk = self._backends[model.backend]
         return bk.generate_embeddings(request)
+
+    def generate_reranks(
+        self, model: Model, request: ReranksGenerationRequest
+    ) -> tuple[list[RerankResultItem], GenerationStatistics]:
+        bk = self._backends[model.backend]
+        return bk.generate_reranks(request)

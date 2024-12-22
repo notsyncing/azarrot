@@ -252,6 +252,9 @@ R = TypeVar("R")
 
 
 class GenerationMethods(ABC, Generic[GM, R]):
+    def is_batching_supported(self) -> bool:
+        return True
+
     @abstractmethod
     def merge_into_batch(self, others: list[GM]) -> None:
         pass

@@ -57,6 +57,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 - Internal tool calling on OpenAI Chat API without explicit tool calling request
 - Auto-batching on OpenAI Chat API
 - Auto model downloading from huggingface
+- Jina and Cohere(v2) Rerank API support on SentenceTransformers backend
 
 ## Tested models
 
