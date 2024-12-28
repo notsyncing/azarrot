@@ -2,7 +2,7 @@ import logging
 from typing import Any, cast
 
 import torch
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, PreTrainedTokenizer
 from typing_extensions import override
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
@@ -19,7 +19,7 @@ class PyTorchBackend(TransformersBasedBackend):
         return BACKEND_ID_PYTORCH
 
     @override
-    def _customize_model_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
         model_kwargs["low_cpu_mem_usage"] = True
 
         # TODO: Enable this when bitsandbytes is usable
@@ -31,7 +31,13 @@ class PyTorchBackend(TransformersBasedBackend):
         #     )
 
     @override
-    def _customize_loaded_model(self, model: Model, loaded_model: PreTrainedModel) -> PreTrainedModel:
+    def _customize_loaded_model(
+        self,
+        model: Model,
+        loaded_model: PreTrainedModel,
+        loaded_tokenizer: PreTrainedTokenizer,
+        model_kwargs: dict[str, Any]
+    ) -> PreTrainedModel:
         if model.pytorch is not None:
             if model.pytorch.compile:
                 self._log.info("Compiling model %s with backend %s", model.id, model.pytorch.compile_backend)

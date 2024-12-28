@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -122,6 +123,10 @@ class ModelManager:
             else:
                 model_path = self._config.models_dir / Path(model_info["path"])
 
+            hf_cache_files = model_path.glob("*")
+            latest_file = max(hf_cache_files, key=os.path.getmtime)
+            model_revision = str(latest_file.lstat().st_mtime)
+
             model_backend = model_info.get("backend", BACKEND_ID_OPENVINO)
 
             model_generation_variant = model_info.get(
@@ -175,6 +180,7 @@ class ModelManager:
                 id=model_info["id"],
                 backend=model_backend,
                 path=model_path,
+                revision=model_revision,
                 task=model_info["task"],
                 generation_variant=model_generation_variant,
                 preset=model_preset,
@@ -246,10 +252,14 @@ class ModelManager:
         else:
             preset = DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET)
 
+        hf_cache_files = model_path.glob("*")
+        latest_file = max(hf_cache_files, key=os.path.getmtime)
+
         model = Model(
             id=huggingface_id,
             backend=backend_id,
             path=model_path,
+            revision=str(latest_file.lstat().st_mtime),
             task=for_task,
             generation_variant=model_generation_variant,
             preset=preset,

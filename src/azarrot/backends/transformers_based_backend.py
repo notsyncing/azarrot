@@ -104,10 +104,16 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _get_model_class(self, task: str) -> Any | None:
         return TRANSFORMERS_TASK_MODEL_MAP.get(task)
 
-    def _customize_model_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
         pass
 
-    def _customize_loaded_model(self, model: Model, loaded_model: PreTrainedModel) -> PreTrainedModel:  # noqa: ARG002
+    def _customize_loaded_model(
+        self,
+        model: Model,     # noqa: ARG002
+        loaded_model: PreTrainedModel,
+        loaded_tokenizer: PreTrainedTokenizer,  # noqa: ARG002
+        model_kwargs: dict[str, Any]    # noqa: ARG002
+    ) -> PreTrainedModel:
         return loaded_model
 
     def _should_move_inputs_to_device(self) -> bool:
@@ -125,8 +131,6 @@ class TransformersBasedBackend(BaseBackend, ABC):
             assert model.info is not None
             return model.info
 
-        model_path = model.path.absolute()
-
         device = self._determine_device_for_model(model.id)
         model.device = device
 
@@ -134,7 +138,9 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         model_kwargs: dict[str, Any] = {}
 
-        self._customize_model_kwargs(model, model_kwargs)
+        self._customize_model_and_kwargs(model, model_kwargs)
+
+        model_path = model.path.absolute()
 
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
 
@@ -156,7 +162,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         transformers_model.eval()
 
-        transformers_model = self._customize_loaded_model(model, transformers_model)
+        transformers_model = self._customize_loaded_model(model, transformers_model, tokenizer, model_kwargs)
 
         self._models[model.id] = LoadedTransformersModel(model, transformers_model, tokenizer, device)
 

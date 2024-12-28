@@ -30,7 +30,7 @@ class IPEXLLMBackend(TransformersBasedBackend):
         return IPEX_LLM_TASK_MODEL_MAP.get(task)
 
     @override
-    def _customize_model_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
         model_config = AutoConfig.from_pretrained(model.path.absolute(), trust_remote_code=True)
 
         if "quantization_config" in model_config:

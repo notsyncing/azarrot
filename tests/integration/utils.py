@@ -28,6 +28,7 @@ def create_fake_embedding_model(model_id: str) -> Model:
         id=model_id,
         backend="openvino",
         path=Path("./"),
+        revision=model_id,
         task="feature-extraction",
         generation_variant="normal",
         use_original_precision=True,

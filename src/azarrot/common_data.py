@@ -102,6 +102,7 @@ class Model:
     backend: str
     path: Path
     task: str
+    revision: str
 
     generation_variant: Literal["normal", "internvl2", "qwen2"]
     preset: ModelPreset

@@ -12,6 +12,7 @@ from openvino import properties as ov_props
 from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction, OVWeightQuantizationConfig
 from transformers import (
     PreTrainedModel,
+    PreTrainedTokenizer,
     pipeline,
 )
 from typing_extensions import override
@@ -143,14 +144,27 @@ class OpenVINOBackend(TransformersBasedBackend):
     def _get_model_class(self, task: str) -> Any | None:
         return OPENVINO_TASK_MODEL_MAP.get(task)
 
+    def __make_openvino_export_path(self, model: Model) -> Path:
+        return self._server_config.models_dir / "openvino_exports" / f"{model.id}-{model.revision}"
+
     @override
-    def _customize_model_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
         model_path = model.path.absolute()
         openvino_model_file_path = model_path / Path("openvino_model.xml")
         need_export = not openvino_model_file_path.exists()
 
         if need_export:
-            self._log.info("OpenVINO model file does not exist at %s. Will export it.", openvino_model_file_path)
+            openvino_export_path = self.__make_openvino_export_path(model)
+
+            if (openvino_export_path / "openvino_model.xml").exists():
+                self._log.info("Will load previous exported OpenVINO model from %s", openvino_export_path)
+                model.path = openvino_export_path
+                need_export = False
+            else:
+                self._log.info(
+                    "OpenVINO model file does not exist at %s. Will export it to %s",
+                    openvino_model_file_path, openvino_export_path
+                )
 
         need_load_in_4bit = need_export and not model.use_original_precision
         model_kwargs["export"] = need_export
@@ -187,7 +201,19 @@ class OpenVINOBackend(TransformersBasedBackend):
         model_kwargs["use_cache"] = model.task == "text-generation-with-past"
 
     @override
-    def _customize_loaded_model(self, model: Model, loaded_model: PreTrainedModel) -> PreTrainedModel:
+    def _customize_loaded_model(
+        self,
+        model: Model,
+        loaded_model: PreTrainedModel,
+        loaded_tokenizer: PreTrainedTokenizer,
+        model_kwargs: dict[str, Any]
+    ) -> PreTrainedModel:
+        if model_kwargs.get("export", False):
+            ov_model_export_path = self.__make_openvino_export_path(model)
+            loaded_model.save_pretrained(ov_model_export_path)
+            loaded_tokenizer.save_pretrained(ov_model_export_path)
+            self._log.info("Exported OpenVINO model to %s", ov_model_export_path)
+
         ov_model = self.__patch_model(loaded_model)
         ov_model.compile()
         return ov_model
