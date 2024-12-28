@@ -1,5 +1,5 @@
 import logging
-from typing import Any, cast
+from typing import Any
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -41,7 +41,6 @@ class PyTorchBackend(TransformersBasedBackend):
         if model.pytorch is not None:
             if model.pytorch.compile:
                 self._log.info("Compiling model %s with backend %s", model.id, model.pytorch.compile_backend)
-                compiled_model = torch.compile(loaded_model, backend=model.pytorch.compile_backend)
-                loaded_model = cast(PreTrainedModel, compiled_model)
+                loaded_model.forward = torch.compile(loaded_model.forward, backend=model.pytorch.compile_backend)
 
         return loaded_model
