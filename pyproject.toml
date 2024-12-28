@@ -32,7 +32,8 @@ dependencies = [
     "langchain-community==0.3.3",
     "langchain-milvus==0.1.6",
     "langchain-unstructured[local]==0.1.5",
-    "dataclass-wizard==0.29.1"
+    "dataclass-wizard==0.29.1",
+    "psutil==6.1.1"
 ]
 classifiers = [
   # How mature is this project? Common values are

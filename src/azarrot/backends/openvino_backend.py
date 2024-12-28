@@ -6,6 +6,7 @@ from types import MethodType
 from typing import Any, cast
 
 import openvino
+import psutil
 import torch
 from openvino import properties as ov_props
 from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction, OVWeightQuantizationConfig
@@ -86,11 +87,15 @@ class OpenVINOBackend(TransformersBasedBackend):
     _ov = openvino.Core()
     _default_device: str = "CPU"
     _auto_use_igpu: bool = True
+    _cpu_phy_core_count: int = 0
 
     def __init__(self, config: ServerConfig, auto_use_igpu: bool = True) -> None:
         self._auto_use_igpu = auto_use_igpu
 
         super().__init__(config)
+
+        self._cpu_phy_core_count = psutil.cpu_count(logical=False) or 0
+        self._log.info("CPU has %d physical cores.", self._cpu_phy_core_count)
 
     @override
     def id(self) -> str:
@@ -170,7 +175,7 @@ class OpenVINOBackend(TransformersBasedBackend):
         }
 
         if model.device is not None and model.device.upper() == "CPU":
-            ov_config["INFERENCE_NUM_THREADS"] = 6
+            ov_config["INFERENCE_NUM_THREADS"] = self._cpu_phy_core_count
             ov_config["SCHEDULING_CORE_TYPE"] = ov_props.hint.SchedulingCoreType.PCORE_ONLY
             ov_config["ENABLE_HYPER_THREADING"] = False
             ov_config["ENABLE_CPU_PINNING"] = True
