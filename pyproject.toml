@@ -101,6 +101,7 @@ extend-exclude = [
 target-version = "py311"
 lint.select = ["ALL"]
 lint.ignore = [
+    "BLE001",
     "C901",
     "D100",
     "D101",

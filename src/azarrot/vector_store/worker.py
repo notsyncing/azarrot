@@ -267,7 +267,7 @@ class VectorStoreWorker:
 
             file.vector_count = vector_count
             db_session.commit()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self._log.error("Failed to process file %s", file.file_id, exc_info=True)
             failed_reason = "system_error"
             failed_message = str(e)

@@ -4,9 +4,11 @@ from logging import Logger
 
 from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel
+from typing_extensions import override
 
 from azarrot.common_data import Model, ReranksGenerationRequest
 from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.base import Frontend
 from azarrot.models.model_manager import ModelManager
 
 
@@ -41,24 +43,23 @@ class JinaRerankResult:
     results: list[JinaRerankResultItem]
 
 
-class JinaFrontend:
+class JinaFrontend(Frontend):
     _log: Logger = logging.getLogger(__name__)
 
     _api: FastAPI
     _model_manager: ModelManager
     _backend_pipe: BackendPipe
 
-    def __init__(
-        self,
-        api: FastAPI,
-        model_manager: ModelManager,
-        backend_pipe: BackendPipe
-    ) -> None:
+    def __init__(self, api: FastAPI, model_manager: ModelManager, backend_pipe: BackendPipe) -> None:
         self._api = api
         self._model_manager = model_manager
         self._backend_pipe = backend_pipe
 
         self.__init_routes()
+
+    @override
+    def id(self) -> str:
+        return "Jina"
 
     def __init_routes(self) -> None:
         router = APIRouter()
@@ -82,27 +83,21 @@ class JinaFrontend:
         results, gen_stats = self._backend_pipe.generate_reranks(
             model,
             ReranksGenerationRequest(
-                model_id=model.id,
-                query=request.query,
-                documents=request.documents,
-                max_count=request.top_n
-            )
+                model_id=model.id, query=request.query, documents=request.documents, max_count=request.top_n
+            ),
         )
 
         self._log.info(gen_stats.to_stats_text())
 
         return JinaRerankResult(
             model=model.id,
-            usage=JinaUsageInfo(
-                total_tokens=gen_stats.total_tokens()
-            ),
+            usage=JinaUsageInfo(total_tokens=gen_stats.total_tokens()),
             results=[
                 JinaRerankResultItem(
                     index=r.input_index,
-                    document=JinaRerankResultTextItem(
-                        text=request.documents[r.input_index]
-                    ),
-                    relevance_score=r.score
-                ) for r in results
-            ]
+                    document=JinaRerankResultTextItem(text=request.documents[r.input_index]),
+                    relevance_score=r.score,
+                )
+                for r in results
+            ],
         )

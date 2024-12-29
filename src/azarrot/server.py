@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from pymilvus import MilvusClient
 from sqlalchemy import Engine, create_engine
 
+from azarrot.agents.chat_task_executor import AgentChatTaskExecutor
 from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager
 from azarrot.backends.backend_base import BaseBackend
@@ -27,6 +28,7 @@ from azarrot.common_data import WorkingDirectories
 from azarrot.config import OpenAIFrontendConfig, ServerConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.base import Frontend
 from azarrot.frontends.cohere_frontend import CohereFrontend
 from azarrot.frontends.jina_frontend import JinaFrontend
 from azarrot.frontends.openai_frontend import OpenAIFrontend
@@ -167,12 +169,13 @@ class Server:
     model_manager: ModelManager
     backend_pipe: BackendPipe
     backends: list[BaseBackend]
-    frontends: list[OpenAIFrontend]
+    frontends: list[Frontend]
     file_store: FileStore
     agent_manager: AgentManager
     vector_store: VectorStoreManager
     vector_store_worker: VectorStoreWorker
     chat_thread_manager: ChatThreadManager
+    chat_task_executor: AgentChatTaskExecutor
     api: FastAPI
 
     enable_schedule_thread: bool = True
@@ -195,6 +198,8 @@ class Server:
 
         self.vector_store_worker.start()
 
+        self.chat_task_executor.start()
+
         log.info("Starting API server...")
         uvicorn_config = uvicorn.Config(self.api, host=self.config.host, port=self.config.port)
         self._uvicorn_server = uvicorn.Server(uvicorn_config)
@@ -215,6 +220,8 @@ class Server:
         if self._uvicorn_server is not None:
             self._uvicorn_server.should_exit = True
             self._uvicorn_server = None
+
+        self.chat_task_executor.stop()
 
         self.vector_store_worker.stop()
 
@@ -257,9 +264,7 @@ def create_server(
     backends: list[BaseBackend]
 
     if enable_backends is not None:
-        backends = [
-            b if isinstance(b, BaseBackend) else b(config) for b in enable_backends
-        ]
+        backends = [b if isinstance(b, BaseBackend) else b(config) for b in enable_backends]
     else:
         backends = [
             IPEXLLMBackend(config),
@@ -276,7 +281,12 @@ def create_server(
 
     agent_manager = AgentManager(db)
     chat_thread_manager = ChatThreadManager(db)
-    agent_chat_task_manager = AgentChatTaskManager(db)
+
+    agent_chat_task_executor = AgentChatTaskExecutor(
+        db, chat_template_manager, agent_manager, model_manager, file_store, chat_thread_manager, backend_pipe
+    )
+
+    agent_chat_task_manager = AgentChatTaskManager(db, agent_chat_task_executor)
 
     vector_store_worker = VectorStoreWorker(
         config.vector_store_configs, vector_store, model_manager, file_store, backend_pipe, db, vec_db_uri
@@ -306,7 +316,7 @@ def create_server(
             api,
             model_manager,
             backend_pipe,
-        )
+        ),
     ]
 
     return Server(
@@ -320,6 +330,7 @@ def create_server(
         vector_store=vector_store,
         vector_store_worker=vector_store_worker,
         chat_thread_manager=chat_thread_manager,
+        chat_task_executor=agent_chat_task_executor,
         api=api,
         enable_schedule_thread=enable_schedule_thread,
     )

@@ -55,10 +55,7 @@ class SentenceTransformerGenerationMethods(
     _gen_stats: GenerationStatistics
 
     def __init__(
-        self,
-        model: SentenceTransformer,
-        inputs: list[str],
-        generation_statistics: GenerationStatistics
+        self, model: SentenceTransformer, inputs: list[str], generation_statistics: GenerationStatistics
     ) -> None:
         super().__init__()
 
@@ -77,7 +74,7 @@ class SentenceTransformerGenerationMethods(
     @override
     def generate(self) -> tuple[bool, list[EmbeddingsGenerationResult]]:
         input_counts = [len(input_list) for input_list in self._inputs]
-        flatten_inputs = functools.reduce(operator.iadd, self._inputs, [])
+        flatten_inputs: list[str] = functools.reduce(operator.iadd, self._inputs, [])
 
         try:
             embeddings = self._model.encode(flatten_inputs, convert_to_tensor=True)
@@ -111,19 +108,14 @@ class SentenceTransformerGenerationMethods(
         return True, results
 
 
-class CrossEncoderGenerationMethods(
-    GenerationMethods["CrossEncoderGenerationMethods", list[RerankResultItem]]
-):
+class CrossEncoderGenerationMethods(GenerationMethods["CrossEncoderGenerationMethods", list[RerankResultItem]]):
     _log = logging.getLogger(__name__)
     _model: CrossEncoder
     _inputs: list[ReranksGenerationRequest]
     _gen_stats: GenerationStatistics
 
     def __init__(
-        self,
-        model: CrossEncoder,
-        inputs: ReranksGenerationRequest,
-        generation_statistics: GenerationStatistics
+        self, model: CrossEncoder, inputs: ReranksGenerationRequest, generation_statistics: GenerationStatistics
     ) -> None:
         super().__init__()
 
@@ -155,26 +147,21 @@ class CrossEncoderGenerationMethods(
                 if text_length > gen_input.max_tokens_per_document:
                     self._log.warning(
                         "Rerank input document index %d is overlength (%d vs %d), will be truncated!",
-                        i, text_length, gen_input.max_tokens_per_document
+                        i,
+                        text_length,
+                        gen_input.max_tokens_per_document,
                     )
 
-                    gen_input.documents[i] = gen_input.documents[i][0:gen_input.max_tokens_per_document]
+                    gen_input.documents[i] = gen_input.documents[i][0 : gen_input.max_tokens_per_document]
 
         try:
-            ranks = self._model.rank(
-                query=gen_input.query,
-                documents=gen_input.documents,
-                top_k=gen_input.max_count
-            )
+            ranks = self._model.rank(query=gen_input.query, documents=gen_input.documents, top_k=gen_input.max_count)
         except:
             self._log.exception("An error occurred when generating reranks")
             return False, []
 
         results = [
-            RerankResultItem(
-                input_index=cast(int, rank["corpus_id"]),
-                score=float(rank["score"])
-            ) for rank in ranks
+            RerankResultItem(input_index=cast(int, rank["corpus_id"]), score=float(rank["score"])) for rank in ranks
         ]
 
         self._gen_stats.end_time = datetime.now()
@@ -213,17 +200,13 @@ class SentenceTransformersBackend(BaseBackend):
 
     @override
     def generate(
-        self,
-        request: TextGenerationRequest,
-        generation_handlers: GenerationHandlers
+        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         raise NotImplementedError
 
     @override
     def _generate(
-        self,
-        request: TextGenerationRequest,
-        generation_handlers: GenerationHandlers
+        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
         raise NotImplementedError
 
@@ -236,17 +219,11 @@ class SentenceTransformersBackend(BaseBackend):
         model_info: ModelInfo
 
         if model.task == "feature-extraction":
-            st_model = SentenceTransformer(
-                model_path, local_files_only=True, trust_remote_code=True, device=device
-            )
+            st_model = SentenceTransformer(model_path, local_files_only=True, trust_remote_code=True, device=device)
 
-            model_info = EmbeddingModelInfo(
-                dimension=st_model.get_sentence_embedding_dimension() or -1
-            )
+            model_info = EmbeddingModelInfo(dimension=st_model.get_sentence_embedding_dimension() or -1)
         elif model.task == "text-classification":
-            st_model = CrossEncoder(
-                model_path, local_files_only=True, trust_remote_code=True, device=device
-            )
+            st_model = CrossEncoder(model_path, local_files_only=True, trust_remote_code=True, device=device)
 
             model_info = ModelInfo()
         else:
@@ -298,7 +275,7 @@ class SentenceTransformersBackend(BaseBackend):
         m = SentenceTransformerGenerationMethods(
             model=loaded_model.model,
             inputs=request.text if isinstance(request.text, list) else [request.text],
-            generation_statistics=gen_stats
+            generation_statistics=gen_stats,
         )
 
         task = BackendGenerationTask(
@@ -329,11 +306,7 @@ class SentenceTransformersBackend(BaseBackend):
             completion_tokens=0,
         )
 
-        m = CrossEncoderGenerationMethods(
-            model=loaded_model.model,
-            inputs=request,
-            generation_statistics=gen_stats
-        )
+        m = CrossEncoderGenerationMethods(model=loaded_model.model, inputs=request, generation_statistics=gen_stats)
 
         task = BackendGenerationTask(
             model_id=loaded_model.data.id,

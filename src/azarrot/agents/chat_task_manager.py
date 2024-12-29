@@ -1,6 +1,5 @@
 import json
 import uuid
-from abc import ABC
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,25 +11,28 @@ from sqlakeyset import select_page
 from sqlalchemy import Engine, and_, select
 from sqlalchemy.orm import Session
 
-from azarrot.agents.common_data import AgentToolRequest
+from azarrot.agents.chat_task_executor import AgentChatTaskExecutor
+from azarrot.agents.common_data import (
+    AgentChatTaskAutoThreadHistoryStrategyParams,
+    AgentChatTaskDetailsData,
+    AgentChatTaskInfo,
+    AgentChatTaskMessageDetailsData,
+    AgentChatTaskThreadHistoryStrategyParams,
+    AgentChatTaskToolCallDetailsData,
+    AgentToolRequest,
+)
 from azarrot.agents.manager import AgentGenerationParameters
 from azarrot.agents.utils import (
     convert_agent_chat_task_tool_request_to_database,
-    convert_database_to_agent_tool_request,
 )
 from azarrot.common_data import (
     CallableToolsInfo,
     GenerationStatistics,
     PageResult,
-    ToolCallRequestMessageContent,
-    ToolCallRequestMessageContentList,
 )
 from azarrot.common_types import (
-    AgentChatTaskDetailDataType,
     AgentChatTaskDetailStatus,
     AgentChatTaskDetailType,
-    AgentChatTaskRequiredAction,
-    AgentChatTaskStatus,
     AgentChatTaskThreadHistoryStrategy,
 )
 from azarrot.database_schemas import (
@@ -43,115 +45,6 @@ from azarrot.database_schemas import (
     ChatThread,
 )
 from azarrot.utils import sanitize_uuid
-
-
-class AgentChatTaskThreadHistoryStrategyParams:
-    pass
-
-
-@dataclass
-class AgentChatTaskAutoThreadHistoryStrategyParams(AgentChatTaskThreadHistoryStrategyParams):
-    head_preserve_count: int = 1
-    tail_preserve_count: int = 5
-
-
-@dataclass
-class AgentChatTaskLastMessageThreadHistoryStrategyParams(AgentChatTaskThreadHistoryStrategyParams):
-    count: int
-
-
-@dataclass
-class AgentChatTaskInfo:
-    id: str
-    agent_id: str
-    thread_id: str
-    status: AgentChatTaskStatus
-    current_required_action: AgentChatTaskRequiredAction | None
-    current_required_action_data: ToolCallRequestMessageContentList | None  # Add more data types as union type here
-    start_time: datetime | None
-    complete_time: datetime | None
-    error_message: str | None
-    model_id: str
-    model_instruction: str | None
-    tools: list[AgentToolRequest] | None
-    tools_info: CallableToolsInfo | None
-    parallel_tool_calling: bool
-    additional_data: dict[str, Any] | None
-    generation_statistics: GenerationStatistics
-    generation_parameters: AgentGenerationParameters
-    max_tokens: int
-    thread_history_strategy: AgentChatTaskThreadHistoryStrategy
-    thread_history_strategy_params: AgentChatTaskThreadHistoryStrategyParams
-    create_time: datetime
-
-    @staticmethod
-    def from_db(dbo: AgentChatTask, db_tools: Sequence[AgentChatTaskTool] | None = None) -> "AgentChatTaskInfo":
-        current_req_action = dbo.current_required_action
-
-        if current_req_action == "tool_call_request" and dbo.current_required_action_data is not None:
-            req_list = dataclass_wizard.fromlist(
-                ToolCallRequestMessageContent, json.loads(dbo.current_required_action_data)
-            )
-
-            current_req_action_data = ToolCallRequestMessageContentList(req_list)
-        else:
-            current_req_action_data = None
-
-        if dbo.tools_info is not None:
-            tools_info = dataclass_wizard.fromdict(CallableToolsInfo, json.loads(dbo.tools_info))
-        else:
-            tools_info = None
-
-        if dbo.current_generation_statistics is not None:
-            gen_stats = dataclass_wizard.fromdict(GenerationStatistics, json.loads(dbo.current_generation_statistics))
-        else:
-            gen_stats = GenerationStatistics(
-                start_time=dbo.start_time or datetime.min,
-                first_token_time=dbo.start_time or datetime.min,
-                end_time=dbo.complete_time or datetime.min,
-                prompt_tokens=0,
-                completion_tokens=0,
-            )
-
-        if dbo.generation_parameters is not None:
-            gen_params = dataclass_wizard.fromdict(AgentGenerationParameters, json.loads(dbo.generation_parameters))
-        else:
-            gen_params = AgentGenerationParameters()
-
-        ths_params_type: type[AgentChatTaskThreadHistoryStrategyParams]
-
-        if dbo.thread_history_strategy == "auto":
-            ths_params_type = AgentChatTaskAutoThreadHistoryStrategyParams
-        elif dbo.thread_history_strategy == "last_messages":
-            ths_params_type = AgentChatTaskLastMessageThreadHistoryStrategyParams
-        else:
-            raise ValueError(f"Unsupported thread history strategy {dbo.thread_history_strategy}")
-
-        ths_params = dataclass_wizard.fromdict(ths_params_type, json.loads(dbo.thread_history_strategy_params))
-
-        return AgentChatTaskInfo(
-            id=str(dbo.id),
-            agent_id=str(dbo.agent_id),
-            thread_id=str(dbo.thread_id),
-            status=dbo.status,
-            current_required_action=current_req_action,
-            current_required_action_data=current_req_action_data,
-            start_time=dbo.start_time,
-            complete_time=dbo.complete_time,
-            error_message=dbo.error_message,
-            model_id=dbo.model_id,
-            model_instruction=dbo.model_instruction,
-            tools=convert_database_to_agent_tool_request(db_tools),
-            tools_info=tools_info,
-            parallel_tool_calling=dbo.parallel_tool_calling,
-            additional_data=json.loads(dbo.additional_data) if dbo.additional_data is not None else None,
-            generation_statistics=gen_stats,
-            generation_parameters=gen_params,
-            max_tokens=dbo.max_tokens,
-            thread_history_strategy=dbo.thread_history_strategy,
-            thread_history_strategy_params=ths_params,
-            create_time=dbo.create_time,
-        )
 
 
 @dataclass
@@ -188,30 +81,6 @@ class AgentChatTaskDetailsListPagedQuery:
     before_id: str | uuid.UUID | None = None
     after_id: str | uuid.UUID | None = None
     include_file_search_contents: bool = False
-
-
-class AgentChatTaskDetailsData(ABC):
-    type: AgentChatTaskDetailDataType
-
-
-@dataclass
-class AgentChatTaskMessageDetailsData(AgentChatTaskDetailsData):
-    message_id: str
-    type = "message"
-
-
-@dataclass
-class AgentChatTaskDetailToolCallItem:
-    tool_call_id: str
-    tool_name: str
-    tool_input: str
-    tool_output: str
-
-
-@dataclass
-class AgentChatTaskToolCallDetailsData(AgentChatTaskDetailsData):
-    tool_calls: list[AgentChatTaskDetailToolCallItem]
-    type = "tool_call"
 
 
 @dataclass
@@ -257,9 +126,11 @@ class AgentChatTaskDetailItem:
 
 class AgentChatTaskManager:
     _database: Engine
+    _executor: AgentChatTaskExecutor
 
-    def __init__(self, database: Engine) -> None:
+    def __init__(self, database: Engine, executor: AgentChatTaskExecutor) -> None:
         self._database = database
+        self._executor = executor
 
     def create_task(self, request: AgentChatTaskCreationRequest) -> AgentChatTaskInfo:
         agent_id = sanitize_uuid(request.agent_id)
@@ -280,8 +151,8 @@ class AgentChatTaskManager:
             if db_thread is None:
                 raise ValueError(f"Thread {thread_id} does not exist!")
 
-            model_id = db_agent.model_id
-            model_instruction = db_agent.model_instruction
+            model_id = None
+            model_instruction = None
 
             if request.model_id is not None:
                 model_id = request.model_id
@@ -337,7 +208,9 @@ class AgentChatTaskManager:
 
             db.commit()
 
-            return AgentChatTaskInfo.from_db(db_task, agent_tools)
+            info = AgentChatTaskInfo.from_db(db_task, agent_tools)
+            self._executor.add_task(info)
+            return info
 
     def get_current_tasks_by_messages(self, message_id_list: Sequence[str | uuid.UUID]) -> dict[str, AgentChatTaskInfo]:
         message_id_list = [sanitize_uuid(s) for s in message_id_list]

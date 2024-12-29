@@ -22,9 +22,7 @@ def sentence_transformers_server() -> Generator[Server, Any, Any]:
     tmp_path = Path(tmp_dir.name).absolute()
 
     config = ServerConfig(
-        models_dir=tmp_path / "models",
-        working_dir=tmp_path / "working",
-        huggingface_download_to_home=True
+        models_dir=tmp_path / "models", working_dir=tmp_path / "working", huggingface_download_to_home=True
     )
 
     server = create_server(

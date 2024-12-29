@@ -106,9 +106,7 @@ class ModelManager:
         else:
             qc = None
 
-        return OpenVINOModelConfig(
-            quantization_configs=qc
-        )
+        return OpenVINOModelConfig(quantization_configs=qc)
 
     def __parse_model_file(self, file: Path) -> Model:
         with file.open() as f:
@@ -156,7 +154,7 @@ class ModelManager:
 
                 pytorch = PyTorchModelConfig(
                     compile=pytorch_config.get("compile", False),
-                    compile_backend=pytorch_config.get("compile_backend", "inductor")
+                    compile_backend=pytorch_config.get("compile_backend", "inductor"),
                 )
 
             default_model_preset = DEFAULT_MODEL_PRESETS.get(model_generation_variant, DEFAULT_MODEL_PRESET)

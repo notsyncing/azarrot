@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI
 from starlette.responses import StreamingResponse
+from typing_extensions import override
 
 from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager
@@ -22,13 +23,14 @@ from azarrot.common_data import (
     TextGenerationMessageContent,
     TextGenerationRequest,
     ToolCallRequestMessageContent,
-    ToolCallRequestMessageContentList,
+    ToolCallRequestMessageContents,
     ToolCallResponseMessageContent,
     WorkingDirectories,
 )
 from azarrot.config import DEFAULT_MAX_TOKENS, OpenAIFrontendConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
+from azarrot.frontends.base import Frontend
 from azarrot.frontends.openai_support.openai_assistant_messages import (
     OpenAIAssistantMessages,
 )
@@ -54,7 +56,7 @@ from azarrot.utils.downloader import download_file_to_store
 from azarrot.vector_store import VectorStoreManager
 
 
-class OpenAIFrontend:
+class OpenAIFrontend(Frontend):
     _log = logging.getLogger(__name__)
     _openai_config: OpenAIFrontendConfig
     _model_manager: ModelManager
@@ -98,6 +100,10 @@ class OpenAIFrontend:
         self._api = api
 
         self.__init_routes()
+
+    @override
+    def id(self) -> str:
+        return "OpenAI"
 
     def __init_routes(self) -> None:  # noqa: PLR0915
         router = APIRouter()
@@ -285,7 +291,7 @@ class OpenAIFrontend:
             message = {"role": "assistant", "content": content}
         elif isinstance(content, ToolCallResponseMessageContent):
             message = {"role": "tool", "content": content.result, "tool_call_id": content.to_id}
-        elif isinstance(content, ToolCallRequestMessageContentList):
+        elif isinstance(content, ToolCallRequestMessageContents):
             tool_calls = to_openai_tool_calls(content)
             message = {"role": "assistant", "tool_calls": tool_calls}
 

@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from typing import Any
 
-import dataclass_wizard
 from fastapi import HTTPException
 from pydantic import BaseModel
 from starlette.status import HTTP_404_NOT_FOUND
 
-from azarrot.chats.thread_manager import ChatThreadAgentToolPresetParams, ChatThreadManager
+from azarrot.agents.common_data import AgentToolResourceRequest
+from azarrot.chats.thread_manager import ChatThreadAgentToolResource, ChatThreadManager
 from azarrot.config import OpenAIFrontendConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.openai_support.openai_assistant_messages import (
@@ -16,15 +16,12 @@ from azarrot.frontends.openai_support.openai_assistant_messages import (
 from azarrot.frontends.openai_support.openai_assistants import (
     OpenAIFileSearchToolVectorStoreCreationRequest,
     OpenAIToolResources,
+    OpenAIUpdateToolResources,
     create_openai_requested_vector_stores,
-    to_agent_code_interpreter_tool_options,
-    to_agent_file_search_tool_options,
+    to_agent_tool_resource_requests,
 )
-from azarrot.frontends.openai_support.openai_data import OpenAICodeInterpreterToolResource, OpenAIFileSearchToolResource
+from azarrot.frontends.utils import to_openai_assistant_tool_resources
 from azarrot.models.model_manager import ModelManager
-from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_RAG_SEARCH
-from azarrot.tools.internal.tool_code_file_search import FileSearchToolConfigs
-from azarrot.tools.internal.tool_code_interpreter import CodeInterpreterToolConfigs
 from azarrot.vector_store.manager import VectorStoreManager
 
 
@@ -49,37 +46,19 @@ class OpenAIAssistantUpdateThreadRequest(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
-def to_chat_thread_tool_preset_params(
-    openai_tool_resources: OpenAIToolResources | None, reranker_model_id: str | None = None
-) -> tuple[list[ChatThreadAgentToolPresetParams] | None, list[OpenAIFileSearchToolVectorStoreCreationRequest] | None]:
-    if openai_tool_resources is None:
+def to_chat_thread_tool_resources(
+    openai_tool_resources: OpenAIToolResources | OpenAIUpdateToolResources | None,
+) -> tuple[list[ChatThreadAgentToolResource] | None, list[OpenAIFileSearchToolVectorStoreCreationRequest] | None]:
+    agent_tool_res, new_vs = to_agent_tool_resource_requests(openai_tool_resources)
+
+    if agent_tool_res is None:
         return None, None
 
-    agent_tool_params = []
-    new_vector_stores = None
+    chat_tool_res = [
+        ChatThreadAgentToolResource(tool_name=a.tool_name, tool_resources=a.tool_resources) for a in agent_tool_res
+    ]
 
-    if openai_tool_resources.code_interpreter is not None:
-        code_interpreter_params = ChatThreadAgentToolPresetParams(
-            tool_name=INTERNAL_TOOL_CODE_INTERPRETER,
-            tool_additional_preset_params=dataclass_wizard.asdict(
-                to_agent_code_interpreter_tool_options(openai_tool_resources)
-            ),
-        )
-
-        agent_tool_params.append(code_interpreter_params)
-
-    if openai_tool_resources.file_search is not None:
-        tool_params, new_vector_stores = to_agent_file_search_tool_options(
-            None, openai_tool_resources, reranker_model_id=reranker_model_id
-        )
-
-        file_search_params = ChatThreadAgentToolPresetParams(
-            tool_name=INTERNAL_TOOL_RAG_SEARCH, tool_additional_preset_params=dataclass_wizard.asdict(tool_params)
-        )
-
-        agent_tool_params.append(file_search_params)
-
-    return agent_tool_params, new_vector_stores
+    return chat_tool_res, new_vs
 
 
 class OpenAIAssistantThreads:
@@ -104,13 +83,9 @@ class OpenAIAssistantThreads:
         self._file_store = file_store
 
     def create_thread(self, request: OpenAIAssistantCreateThreadRequest) -> OpenAIAssistantThread:
-        tool_params, new_vector_stores = to_chat_thread_tool_preset_params(
-            request.tool_resources, reranker_model_id=self._config.assistant_file_search_reranker_default_model_id
-        )
+        tool_res, new_vector_stores = to_chat_thread_tool_resources(request.tool_resources)
 
-        thread_info = self._chat_thread_manager.create(
-            additional_data=request.metadata, additional_tool_preset_parameters=tool_params
-        )
+        thread_info = self._chat_thread_manager.create(additional_data=request.metadata, tool_resources=tool_res)
 
         if request.messages is not None:
             message_items, image_upload_requests = to_chat_message_input_items(request.messages)
@@ -133,36 +108,14 @@ class OpenAIAssistantThreads:
         )
 
     def __to_openai_tool_resources(
-        self, thread_tool_preset_params: list[ChatThreadAgentToolPresetParams]
+        self, thread_tool_resources: list[ChatThreadAgentToolResource]
     ) -> OpenAIToolResources | None:
-        if len(thread_tool_preset_params) <= 0:
-            return None
+        tool_resources = [
+            AgentToolResourceRequest(tool_name=t.tool_name, tool_resources=t.tool_resources or {})
+            for t in thread_tool_resources
+        ]
 
-        res = OpenAIToolResources()
-
-        for params in thread_tool_preset_params:
-            if params.tool_name == INTERNAL_TOOL_CODE_INTERPRETER:
-                code_interpreter_params = dataclass_wizard.fromdict(
-                    CodeInterpreterToolConfigs, params.tool_additional_preset_params
-                )
-
-                res.code_interpreter = OpenAICodeInterpreterToolResource(
-                    file_ids=[str(f) for f in code_interpreter_params.exposed_files]
-                    if code_interpreter_params.exposed_files is not None
-                    else []
-                )
-            elif params.tool_name == INTERNAL_TOOL_RAG_SEARCH:
-                file_search_params = dataclass_wizard.fromdict(
-                    FileSearchToolConfigs, params.tool_additional_preset_params
-                )
-
-                res.file_search = OpenAIFileSearchToolResource(
-                    vector_store_ids=[str(f) for f in file_search_params.vector_stores]
-                    if file_search_params.vector_stores is not None
-                    else []
-                )
-
-        return res
+        return to_openai_assistant_tool_resources(tool_resources)
 
     def get_thread(self, thread_id: str) -> OpenAIAssistantThread:
         thread_info = self._chat_thread_manager.get(thread_id)
@@ -170,20 +123,20 @@ class OpenAIAssistantThreads:
         if thread_info is None:
             raise HTTPException(HTTP_404_NOT_FOUND)
 
-        thread_tool_preset_params = self._chat_thread_manager.get_thread_tool_preset_params(thread_id)
+        thread_tool_res = self._chat_thread_manager.get_thread_tool_resources(thread_id)
 
         return OpenAIAssistantThread(
             id=thread_info.id,
             created_at=int(thread_info.create_time.timestamp()),
-            tool_resources=self.__to_openai_tool_resources(thread_tool_preset_params),
+            tool_resources=self.__to_openai_tool_resources(thread_tool_res),
             metadata=thread_info.additional_data,
         )
 
     def update_thread(self, thread_id: str, request: OpenAIAssistantUpdateThreadRequest) -> OpenAIAssistantThread:
-        params, new_vector_stores = to_chat_thread_tool_preset_params(request.tool_resources)
+        params, new_vector_stores = to_chat_thread_tool_resources(request.tool_resources)
 
         thread_info = self._chat_thread_manager.update(
-            thread_id, new_metadata=request.metadata, new_tool_preset_params=params
+            thread_id, new_metadata=request.metadata, new_tool_resources=params
         )
 
         if thread_info is None:
@@ -194,12 +147,12 @@ class OpenAIAssistantThreads:
                 self._config, self._model_manager, self._vector_store, new_vector_stores
             )
 
-        thread_tool_preset_params = self._chat_thread_manager.get_thread_tool_preset_params(thread_id)
+        thread_tool_res = self._chat_thread_manager.get_thread_tool_resources(thread_id)
 
         return OpenAIAssistantThread(
             id=thread_info.id,
             created_at=int(thread_info.create_time.timestamp()),
-            tool_resources=self.__to_openai_tool_resources(thread_tool_preset_params),
+            tool_resources=self.__to_openai_tool_resources(thread_tool_res),
             metadata=thread_info.additional_data,
         )
 

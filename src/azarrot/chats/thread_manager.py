@@ -2,7 +2,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from sqlakeyset import select_page
 from sqlalchemy import Engine, and_, delete, select, update
@@ -15,6 +15,7 @@ from azarrot.chats.common_data import (
     ChatMessageInputItem,
     ChatMessageItem,
     ChatMessageToolOutputsPart,
+    ChatMessageToolRequestsPart,
 )
 from azarrot.common_data import PageResult
 from azarrot.common_types import MessageContentType
@@ -25,21 +26,19 @@ from azarrot.database_schemas import (
     ChatMessageAttachmentToolExposure,
     ChatMessageContent,
     ChatThread,
-    ChatThreadToolPresetParams,
+    ChatThreadToolResources,
 )
 from azarrot.utils import sanitize_uuid
 
 
 @dataclass
-class ChatThreadAgentToolPresetParams:
+class ChatThreadAgentToolResource:
     tool_name: str
-    tool_additional_preset_params: dict[str, Any]
+    tool_resources: dict[str, Any] | None
 
     @staticmethod
-    def from_db(dbo: ChatThreadToolPresetParams) -> "ChatThreadAgentToolPresetParams":
-        return ChatThreadAgentToolPresetParams(
-            tool_name=dbo.tool_name, tool_additional_preset_params=json.loads(dbo.tool_preset_parameters)
-        )
+    def from_db(dbo: ChatThreadToolResources) -> "ChatThreadAgentToolResource":
+        return ChatThreadAgentToolResource(tool_name=dbo.tool_name, tool_resources=json.loads(dbo.tool_resources))
 
 
 @dataclass
@@ -67,27 +66,37 @@ class ChatMessageListPagedQuery:
     after_id: str | uuid.UUID | None = None
 
 
+class ChatThreadMessageListener(Protocol):
+    def on_message_added(self, message: ChatMessageItem) -> None:
+        pass
+
+
 class ChatThreadManager:
     _database: Engine
+    _message_listeners: list[ChatThreadMessageListener]
 
     def __init__(self, database: Engine) -> None:
         self._database = database
+        self._message_listeners = []
 
-    def __insert_tool_preset_params(
+    def register_message_listener(self, listener: ChatThreadMessageListener) -> None:
+        self._message_listeners.append(listener)
+
+    def __insert_tool_resources(
         self,
         db: Session,
         thread_id: uuid.UUID,
         now: datetime,
-        additional_tool_preset_parameters: list[ChatThreadAgentToolPresetParams] | None,
+        tool_resources: list[ChatThreadAgentToolResource] | None,
     ) -> None:
-        if additional_tool_preset_parameters is None:
+        if tool_resources is None:
             return
 
-        for params in additional_tool_preset_parameters:
-            tool = ChatThreadToolPresetParams(
+        for params in tool_resources:
+            tool = ChatThreadToolResources(
                 thread_id=thread_id,
                 tool_name=params.tool_name,
-                tool_preset_parameters=json.dumps(params.tool_additional_preset_params),
+                tool_resources=json.dumps(params.tool_resources),
                 create_time=now,
                 update_time=now,
             )
@@ -97,7 +106,7 @@ class ChatThreadManager:
     def create(
         self,
         additional_data: dict[str, Any] | None = None,
-        additional_tool_preset_parameters: list[ChatThreadAgentToolPresetParams] | None = None,
+        tool_resources: list[ChatThreadAgentToolResource] | None = None,
     ) -> ChatThreadInfo:
         thread_id = uuid.uuid4()
         now = datetime.now()
@@ -113,7 +122,7 @@ class ChatThreadManager:
 
             db.add(thread)
 
-            self.__insert_tool_preset_params(db, thread_id, now, additional_tool_preset_parameters)
+            self.__insert_tool_resources(db, thread_id, now, tool_resources)
 
             db.commit()
 
@@ -142,7 +151,7 @@ class ChatThreadManager:
 
             return ChatThreadInfo.from_db(thread)
 
-    def get_thread_tool_preset_params(self, thread_id: str | uuid.UUID) -> list[ChatThreadAgentToolPresetParams]:
+    def get_thread_tool_resources(self, thread_id: str | uuid.UUID) -> list[ChatThreadAgentToolResource]:
         thread_id = sanitize_uuid(thread_id)
 
         with Session(self._database) as db:
@@ -150,18 +159,18 @@ class ChatThreadManager:
                 return []
 
             params = (
-                db.execute(select(ChatThreadToolPresetParams).where(ChatThreadToolPresetParams.thread_id == thread_id))
+                db.execute(select(ChatThreadToolResources).where(ChatThreadToolResources.thread_id == thread_id))
                 .scalars()
                 .all()
             )
 
-            return [ChatThreadAgentToolPresetParams.from_db(p) for p in params]
+            return [ChatThreadAgentToolResource.from_db(p) for p in params]
 
     def update(
         self,
         thread_id: str | uuid.UUID,
         new_metadata: dict[str, Any] | None = None,
-        new_tool_preset_params: list[ChatThreadAgentToolPresetParams] | None = None,
+        new_tool_resources: list[ChatThreadAgentToolResource] | None = None,
     ) -> ChatThreadInfo | None:
         thread_id = sanitize_uuid(thread_id)
         now = datetime.now()
@@ -188,10 +197,10 @@ class ChatThreadManager:
                 thread.additional_data = json.dumps(new_metadata)
                 updated = True
 
-            if new_tool_preset_params is not None:
-                db.execute(delete(ChatThreadToolPresetParams).where(ChatThreadToolPresetParams.thread_id == thread_id))
+            if new_tool_resources is not None:
+                db.execute(delete(ChatThreadToolResources).where(ChatThreadToolResources.thread_id == thread_id))
 
-                self.__insert_tool_preset_params(db, thread_id, now, new_tool_preset_params)
+                self.__insert_tool_resources(db, thread_id, now, new_tool_resources)
 
             if updated:
                 thread.update_time = now
@@ -226,12 +235,19 @@ class ChatThreadManager:
             return "text"
         elif isinstance(msg_content, ChatMessageContentImagePart):
             return "image_file"
+        elif isinstance(msg_content, ChatMessageToolRequestsPart):
+            return "tool_requests"
         elif isinstance(msg_content, ChatMessageToolOutputsPart):
             return "tool_outputs"
         else:
             raise ValueError(f"Unsupported message content part type {type(msg_content)}")
 
-    def add_messages(self, thread_id: str | uuid.UUID, messages: list[ChatMessageInputItem]) -> list[ChatMessageItem]:
+    def add_messages(
+        self,
+        thread_id: str | uuid.UUID,
+        messages: list[ChatMessageInputItem],
+        sender: ChatThreadMessageListener | None = None,
+    ) -> list[ChatMessageItem]:
         thread_id = sanitize_uuid(thread_id)
         now = datetime.now()
 
@@ -308,10 +324,19 @@ class ChatThreadManager:
 
             db.commit()
 
+            for r in result:
+                for listener in self._message_listeners:
+                    if listener == sender:
+                        continue
+
+                    listener.on_message_added(r)
+
             return result
 
-    def add_message(self, thread_id: str | uuid.UUID, message: ChatMessageInputItem) -> ChatMessageItem | None:
-        msg_list = self.add_messages(thread_id, [message])
+    def add_message(
+        self, thread_id: str | uuid.UUID, message: ChatMessageInputItem, sender: ChatThreadMessageListener | None = None
+    ) -> ChatMessageItem | None:
+        msg_list = self.add_messages(thread_id, [message], sender)
 
         if len(msg_list) <= 0:
             return None
@@ -447,6 +472,36 @@ class ChatThreadManager:
 
             return ChatMessageItem.from_db(db_msg, db_msg_contents, db_msg_attachments, db_msg_attachment_tools)
 
+    def get_latest_messages(self, thread_id: str | uuid.UUID, count: int = 1) -> list[ChatMessageItem]:
+        thread_id = sanitize_uuid(thread_id)
+
+        with Session(self._database) as db:
+            latest_msg_id_list = (
+                db.execute(
+                    select(ChatMessage.id)
+                    .where(and_(ChatMessage.thread_id == thread_id, ChatMessage.deleted == False))
+                    .order_by(ChatMessage.create_time.desc(), ChatMessage.order.desc())
+                    .limit(count)
+                )
+                .scalars()
+                .all()
+            )
+
+        if latest_msg_id_list is None:
+            return []
+
+        results: list[ChatMessageItem] = []
+
+        for msg_id in reversed(latest_msg_id_list):
+            msg = self.get_message(msg_id, thread_id)
+
+            if msg is None:
+                continue
+
+            results.append(msg)
+
+        return results
+
     def update_message(
         self,
         message_id: str | uuid.UUID,
@@ -504,7 +559,7 @@ class ChatThreadManager:
     def clear_database(self) -> None:
         with Session(self._database) as db:
             db.execute(delete(ChatThread))
-            db.execute(delete(ChatThreadToolPresetParams))
+            db.execute(delete(ChatThreadToolResources))
             db.execute(delete(ChatMessage))
             db.execute(delete(ChatMessageContent))
             db.execute(delete(ChatMessageAttachment))

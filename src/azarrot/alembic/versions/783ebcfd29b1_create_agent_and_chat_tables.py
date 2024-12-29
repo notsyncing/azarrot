@@ -43,11 +43,20 @@ def upgrade() -> None:
     )
 
     op.create_table(
+        "agent_tool_resources",
+        sa.Column("agent_id", sa.Uuid(as_uuid=True), primary_key=True),
+        sa.Column("tool_name", sa.String(256), primary_key=True),
+        sa.Column("tool_resources", sa.Text, nullable=False),
+        sa.Column("create_time", sa.DateTime, nullable=False),
+        sa.Column("update_time", sa.DateTime, nullable=False),
+    )
+
+    op.create_table(
         "agent_chat_tasks",
         sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("agent_id", sa.Uuid(as_uuid=True), index=True),
         sa.Column("thread_id", sa.Uuid(as_uuid=True), index=True),
-        sa.Column("model_id", sa.String(256), nullable=False),
+        sa.Column("model_id", sa.String(256)),
         sa.Column("model_instruction", sa.Text),
         sa.Column("status", sa.String(32), nullable=False),
         sa.Column("current_required_action", sa.String(64)),
@@ -108,10 +117,10 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "chat_thread_tool_preset_params",
+        "chat_thread_tool_resources",
         sa.Column("thread_id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("tool_name", sa.String(256), primary_key=True),
-        sa.Column("tool_preset_parameters", sa.Text, nullable=False),
+        sa.Column("tool_resources", sa.Text, nullable=False),
         sa.Column("create_time", sa.DateTime, nullable=False),
         sa.Column("update_time", sa.DateTime, nullable=False),
     )
@@ -159,12 +168,13 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("agents")
     op.drop_table("agent_tools")
+    op.drop_table("agent_tool_resources")
     op.drop_table("agent_chat_tasks")
     op.drop_table("agent_chat_task_tools")
     op.drop_table("agent_chat_task_details")
     op.drop_table("agent_chat_messages")
     op.drop_table("chat_threads")
-    op.drop_table("chat_thread_tool_preset_params")
+    op.drop_table("chat_thread_tool_resources")
     op.drop_table("chat_messages")
     op.drop_table("chat_message_contents")
     op.drop_table("chat_message_attachments")

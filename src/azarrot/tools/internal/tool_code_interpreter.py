@@ -2,12 +2,14 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from typing_extensions import override
+
 from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
 
 @dataclass
-class CodeInterpreterToolConfigs:
+class CodeInterpreterToolResources:
     exposed_files: list[str] | None = None
 
 
@@ -18,7 +20,9 @@ class CodeInterpreterOutputs:
 
 
 class CodeInterpreterTool(Tool):
-    def description(self) -> ToolDescription:
+    @override
+    @staticmethod
+    def description() -> ToolDescription:
         return ToolDescription(
             name=INTERNAL_TOOL_CODE_INTERPRETER,
             default_locale="zh-cn",
@@ -36,5 +40,6 @@ class CodeInterpreterTool(Tool):
             ],
         )
 
+    @override
     def execute(self, **kwargs: Any) -> Any:
-        return kwargs["code"]
+        raise NotImplementedError

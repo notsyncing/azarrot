@@ -163,7 +163,8 @@ class OpenVINOBackend(TransformersBasedBackend):
             else:
                 self._log.info(
                     "OpenVINO model file does not exist at %s. Will export it to %s",
-                    openvino_model_file_path, openvino_export_path
+                    openvino_model_file_path,
+                    openvino_export_path,
                 )
 
         need_load_in_4bit = need_export and not model.use_original_precision
@@ -206,7 +207,7 @@ class OpenVINOBackend(TransformersBasedBackend):
         model: Model,
         loaded_model: PreTrainedModel,
         loaded_tokenizer: PreTrainedTokenizer,
-        model_kwargs: dict[str, Any]
+        model_kwargs: dict[str, Any],
     ) -> PreTrainedModel:
         if model_kwargs.get("export", False):
             ov_model_export_path = self.__make_openvino_export_path(model)

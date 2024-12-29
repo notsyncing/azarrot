@@ -4,7 +4,7 @@ VectorStoreExpireBaseline = Literal["create_time", "access_time", "update_time"]
 VectorStoreFileState = Literal["pending", "processing", "completed", "failed", "cancelled"]
 VectorStoreFileFailedReason = Literal["system_error"]
 
-MessageContentType = Literal["text", "image_file", "tool_outputs"]
+MessageContentType = Literal["text", "image_file", "tool_requests", "tool_outputs"]
 
 AgentChatTaskStatus = Literal[
     "pending", "in_progress", "requires_action", "expired", "completed", "truncated", "failed", "cancelled"

@@ -12,14 +12,16 @@ from azarrot.agents.chat_task_manager import (
     AgentChatTaskCreationRequest,
     AgentChatTaskDetailItem,
     AgentChatTaskDetailsListPagedQuery,
-    AgentChatTaskDetailToolCallItem,
     AgentChatTaskInfo,
-    AgentChatTaskLastMessageThreadHistoryStrategyParams,
     AgentChatTaskListPagedQuery,
     AgentChatTaskManager,
     AgentChatTaskMessageDetailsData,
     AgentChatTaskThreadHistoryStrategyParams,
     AgentChatTaskToolCallDetailsData,
+)
+from azarrot.agents.common_data import (
+    AgentChatTaskDetailToolCallItem,
+    AgentChatTaskLastMessageThreadHistoryStrategyParams,
 )
 from azarrot.agents.manager import AgentGenerationParameters
 from azarrot.chats.common_data import ChatMessageInputItem, ChatMessageToolOutputItem, ChatMessageToolOutputsPart
@@ -53,8 +55,8 @@ from azarrot.frontends.utils import (
     to_openai_tool_choice,
 )
 from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_RAG_SEARCH
-from azarrot.tools.internal.tool_code_file_search import FileSearchOutputs
 from azarrot.tools.internal.tool_code_interpreter import CodeInterpreterOutputs
+from azarrot.tools.internal.tool_rag_search import RagSearchOutputs
 
 OpenAIAssistantRunStatus = Literal[
     "queued",
@@ -401,7 +403,7 @@ class OpenAIAssistantRuns:
             elif agent_chat_task_info.status == "failed":
                 failed_at = completed_at
 
-        tools, _ = to_openai_assistant_tools(agent_chat_task_info.agent_id, agent_chat_task_info.tools)
+        tools = to_openai_assistant_tools(agent_chat_task_info.agent_id, agent_chat_task_info.tools)
 
         return OpenAIAssistantRun(
             id=agent_chat_task_info.id,
@@ -421,7 +423,7 @@ class OpenAIAssistantRuns:
             incomplete_details=OpenAIAssistantMessageIncompleteDetails(reason=agent_chat_task_info.error_message or "")
             if agent_chat_task_info.status == "truncated"
             else None,
-            model=agent_chat_task_info.model_id,
+            model=agent_chat_task_info.model_id or "",
             instructions=agent_chat_task_info.model_instruction or "",
             tools=tools or [],
             metadata=agent_chat_task_info.additional_data or {},
@@ -442,7 +444,7 @@ class OpenAIAssistantRuns:
             raise ValueError("You have specified to create a run, so you cannot specify new thread details!")
 
         ths, ths_params = self.__to_thread_history_strategy(request.truncation_strategy)
-        tools, _ = to_agent_tool_requests(request.tools, None)
+        tools = to_agent_tool_requests(request.tools, None)
 
         req = AgentChatTaskCreationRequest(
             agent_id=request.assistant_id,
@@ -577,7 +579,7 @@ class OpenAIAssistantRuns:
                 code_interpreter=CodeInterpreterToolCall(input=tool_call.tool_input, outputs=openai_outputs),
             )
         elif tool_call.tool_name == INTERNAL_TOOL_RAG_SEARCH:
-            rs_outputs = dataclass_wizard.fromdict(FileSearchOutputs, json.loads(tool_call.tool_output))
+            rs_outputs = dataclass_wizard.fromdict(RagSearchOutputs, json.loads(tool_call.tool_output))
 
             openai_results = [
                 FileSearchToolCallResult(

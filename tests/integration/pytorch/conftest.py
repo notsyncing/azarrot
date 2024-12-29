@@ -23,9 +23,7 @@ def pytorch_server() -> Generator[Server, Any, Any]:
 
     server = create_server(
         config=ServerConfig(
-            models_dir=tmp_path / "models",
-            working_dir=tmp_path / "working",
-            huggingface_download_to_home=True
+            models_dir=tmp_path / "models", working_dir=tmp_path / "working", huggingface_download_to_home=True
         ),
         enable_backends=[PyTorchBackend],
         enable_schedule_thread=False,

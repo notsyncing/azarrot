@@ -1,20 +1,26 @@
 from dataclasses import dataclass
 from typing import Any
 
+from typing_extensions import override
+
 from azarrot.tools.internal import INTERNAL_TOOL_RAG_SEARCH
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
 
 @dataclass
-class FileSearchToolConfigs:
-    vector_stores: list[str]
+class RagSearchToolConfigs:
     max_result_count: int = 20
     reranker_model_id: str | None = None
     reranker_score_threshold: float = 0.0
 
 
 @dataclass
-class FileSearchResult:
+class RagSearchToolResources:
+    vector_stores: list[str]
+
+
+@dataclass
+class RagSearchResult:
     file_id: str
     file_name: str | None
     score: float
@@ -22,13 +28,15 @@ class FileSearchResult:
 
 
 @dataclass
-class FileSearchOutputs:
-    current_configs: FileSearchToolConfigs
-    search_results: list[FileSearchResult]
+class RagSearchOutputs:
+    current_configs: RagSearchToolConfigs
+    search_results: list[RagSearchResult]
 
 
-class FileSearchTool(Tool):
-    def description(self) -> ToolDescription:
+class RagSearchTool(Tool):
+    @override
+    @staticmethod
+    def description() -> ToolDescription:
         return ToolDescription(
             name=INTERNAL_TOOL_RAG_SEARCH,
             default_locale="zh-cn",
@@ -46,5 +54,6 @@ class FileSearchTool(Tool):
             ],
         )
 
+    @override
     def execute(self, **kwargs: Any) -> Any:
-        return kwargs["query"]
+        raise NotImplementedError

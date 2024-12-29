@@ -7,10 +7,10 @@ import pytest
 from openai.types.beta.thread_update_params import ToolResources, ToolResourcesCodeInterpreter
 
 from azarrot.chats.common_data import ChatMessageContentTextPart
-from azarrot.chats.thread_manager import ChatMessageListPagedQuery, ChatThreadAgentToolPresetParams
+from azarrot.chats.thread_manager import ChatMessageListPagedQuery, ChatThreadAgentToolResource
 from azarrot.server import Server
 from azarrot.tools.internal import INTERNAL_TOOL_RAG_SEARCH
-from azarrot.tools.internal.tool_code_file_search import FileSearchToolConfigs
+from azarrot.tools.internal.tool_rag_search import RagSearchToolResources
 from tests.integration.openai_other_apis.fixture_utils import do_clear_database, make_no_backend_server
 from tests.integration.utils import create_openai_client
 
@@ -76,11 +76,11 @@ def test_retrieve_thread(no_backend_server: Server) -> None:
 
     thread_info = no_backend_server.chat_thread_manager.create(
         additional_data={"a": 1},
-        additional_tool_preset_parameters=[
-            ChatThreadAgentToolPresetParams(
+        tool_resources=[
+            ChatThreadAgentToolResource(
                 tool_name=INTERNAL_TOOL_RAG_SEARCH,
-                tool_additional_preset_params=dataclass_wizard.asdict(
-                    FileSearchToolConfigs(vector_stores=[str(vs_id1), str(vs_id2)])
+                tool_resources=dataclass_wizard.asdict(
+                    RagSearchToolResources(vector_stores=[str(vs_id1), str(vs_id2)])
                 ),
             )
         ],
@@ -109,11 +109,11 @@ def test_modify_thread(no_backend_server: Server) -> None:
 
     thread_info = no_backend_server.chat_thread_manager.create(
         additional_data={"a": 1},
-        additional_tool_preset_parameters=[
-            ChatThreadAgentToolPresetParams(
+        tool_resources=[
+            ChatThreadAgentToolResource(
                 tool_name=INTERNAL_TOOL_RAG_SEARCH,
-                tool_additional_preset_params=dataclass_wizard.asdict(
-                    FileSearchToolConfigs(vector_stores=[str(vs_id1), str(vs_id2)])
+                tool_resources=dataclass_wizard.asdict(
+                    RagSearchToolResources(vector_stores=[str(vs_id1), str(vs_id2)])
                 ),
             )
         ],

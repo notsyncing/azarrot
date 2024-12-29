@@ -142,8 +142,9 @@ class ToolCallRequestMessageContent(GenerationMessageContent):
     function_arguments: dict[str, Any]
 
 
-class ToolCallRequestMessageContentList(list[ToolCallRequestMessageContent]):
-    pass
+@dataclass
+class ToolCallRequestMessageContents:
+    tool_requests: list[ToolCallRequestMessageContent]
 
 
 @dataclass

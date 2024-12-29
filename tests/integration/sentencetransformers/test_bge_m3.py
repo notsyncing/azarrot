@@ -1,3 +1,5 @@
+import logging
+
 from openai import OpenAI
 
 from azarrot.backends.sentences_transformers_backend import BACKEND_ID_SENTENCE_TRANSFORMERS
@@ -5,6 +7,8 @@ from azarrot.server import Server
 
 BGE_M3_MODEL = "BAAI/bge-m3"
 BGE_M3_EMBEDDING_DIMENSION = 1024
+
+log = logging.getLogger(__name__)
 
 
 def test_bge_m3_embedding(sentence_transformers_server: Server) -> None:
@@ -14,12 +18,13 @@ def test_bge_m3_embedding(sentence_transformers_server: Server) -> None:
 
     client = OpenAI(
         base_url=f"http://{sentence_transformers_server.config.host}:{sentence_transformers_server.config.port}/openai/v1",
-        api_key="__TEST__"
+        api_key="__TEST__",
     )
 
     embeddings = client.embeddings.create(model=BGE_M3_MODEL, input="这是一行测试文字", encoding_format="float")
 
     result = embeddings.data[0]
+    log.info("Output: %s", result)
     assert result is not None
     assert result.embedding is not None
     assert len(result.embedding) == BGE_M3_EMBEDDING_DIMENSION
@@ -35,7 +40,7 @@ def test_bge_m3_embedding_multiple(sentence_transformers_server: Server) -> None
 
     client = OpenAI(
         base_url=f"http://{sentence_transformers_server.config.host}:{sentence_transformers_server.config.port}/openai/v1",
-        api_key="__TEST__"
+        api_key="__TEST__",
     )
 
     embeddings = client.embeddings.create(

@@ -72,8 +72,9 @@ class ToolDescription:
 
 
 class Tool(ABC):
+    @staticmethod
     @abstractmethod
-    def description(self) -> ToolDescription:
+    def description() -> ToolDescription:
         pass
 
     @abstractmethod

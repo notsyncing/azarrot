@@ -1,10 +1,9 @@
 import json
 import uuid
-from collections.abc import Sequence
 from datetime import datetime
 
-from azarrot.agents.common_data import AgentToolRequest
-from azarrot.database_schemas import AgentChatTaskTool, AgentTool
+from azarrot.agents.common_data import AgentToolRequest, AgentToolResourceRequest
+from azarrot.database_schemas import AgentChatTaskTool, AgentTool, AgentToolResource
 
 
 def convert_agent_tool_request_to_database(
@@ -32,6 +31,25 @@ def convert_agent_tool_request_to_database(
     return agent_tools
 
 
+def convert_agent_tool_resource_request_to_database(
+    agent_id: uuid.UUID, tool_resources: list[AgentToolResourceRequest], create_time: datetime, update_time: datetime
+) -> list[AgentToolResource]:
+    results = []
+
+    for tool_res in tool_resources:
+        agent_tool_res = AgentToolResource(
+            agent_id=agent_id,
+            tool_name=tool_res.tool_name,
+            tool_resources=json.dumps(tool_res.tool_resources),
+            create_time=create_time,
+            update_time=update_time,
+        )
+
+        results.append(agent_tool_res)
+
+    return results
+
+
 def convert_agent_chat_task_tool_request_to_database(
     agent_chat_task_id: uuid.UUID, tool_requests: list[AgentToolRequest], create_time: datetime, update_time: datetime
 ) -> list[AgentChatTaskTool]:
@@ -55,25 +73,3 @@ def convert_agent_chat_task_tool_request_to_database(
         agent_tools.append(agent_tool)
 
     return agent_tools
-
-
-def convert_database_to_agent_tool_request(
-    dbo: Sequence[AgentChatTaskTool] | Sequence[AgentTool] | None,
-) -> list[AgentToolRequest] | None:
-    if dbo is None:
-        return None
-
-    agent_tool_requests = []
-
-    for item in dbo:
-        tool_preset_parameters = json.loads(item.tool_preset_parameters) if item.tool_preset_parameters else None
-
-        agent_tool_request = AgentToolRequest(
-            tool_name=item.tool_name,
-            is_internal_tool=item.is_internal_tool,
-            tool_preset_parameters=tool_preset_parameters,
-        )
-
-        agent_tool_requests.append(agent_tool_request)
-
-    return agent_tool_requests

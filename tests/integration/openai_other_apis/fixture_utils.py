@@ -30,7 +30,7 @@ def make_no_backend_server() -> Generator[Server, Any, Any]:
             models_dir=tmp_path / "models",
             working_dir=tmp_path / "working",
             huggingface_download_to_home=True,
-            openai_configs=OpenAIFrontendConfig(vector_store_default_embedding_model_id="dummy_model")
+            openai_configs=OpenAIFrontendConfig(vector_store_default_embedding_model_id="dummy_model"),
         ),
         enable_backends=[],
     )

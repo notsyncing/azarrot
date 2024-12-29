@@ -109,10 +109,10 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
     def _customize_loaded_model(
         self,
-        model: Model,     # noqa: ARG002
+        model: Model,  # noqa: ARG002
         loaded_model: PreTrainedModel,
         loaded_tokenizer: PreTrainedTokenizer,  # noqa: ARG002
-        model_kwargs: dict[str, Any]    # noqa: ARG002
+        model_kwargs: dict[str, Any],  # noqa: ARG002
     ) -> PreTrainedModel:
         return loaded_model
 

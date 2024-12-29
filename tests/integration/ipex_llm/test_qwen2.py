@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from openai import OpenAI
+from typing_extensions import override
 
 from azarrot.backends.ipex_llm_backend import BACKEND_ID_IPEX_LLM
 from azarrot.models.model_manager import DEFAULT_MODEL_PRESETS
@@ -140,7 +141,9 @@ def test_qwen2_tool_calling(ipex_llm_server: Server) -> None:
 
 
 class RRRTool(Tool):
-    def description(self) -> ToolDescription:
+    @override
+    @staticmethod
+    def description() -> ToolDescription:
         return ToolDescription(
             name="rrr-calc",
             default_locale="zh-cn",
@@ -177,7 +180,7 @@ def test_qwen2_internal_tool_calling(ipex_llm_server: Server) -> None:
         messages=[
             {"role": "user", "content": "193与27的RRR运算结果是多少？请通过工具得到结果，不要用自己认为的结果。"}
         ],
-        seed=100
+        seed=100,
     )
 
     result = completion.choices[0].message

@@ -36,7 +36,7 @@ class PyTorchBackend(TransformersBasedBackend):
         model: Model,
         loaded_model: PreTrainedModel,
         loaded_tokenizer: PreTrainedTokenizer,
-        model_kwargs: dict[str, Any]
+        model_kwargs: dict[str, Any],
     ) -> PreTrainedModel:
         if model.pytorch is not None:
             if model.pytorch.compile:

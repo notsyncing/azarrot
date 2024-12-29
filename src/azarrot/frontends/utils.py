@@ -4,8 +4,9 @@ from typing import Any, Literal
 
 import dataclass_wizard
 
-from azarrot.agents.manager import AgentToolInfo, AgentToolRequest
-from azarrot.common_data import CallableToolsInfo, GenerationStatistics, ToolCallRequestMessageContentList
+from azarrot.agents.common_data import AgentToolResourceRequest
+from azarrot.agents.manager import AgentToolInfo, AgentToolRequest, AgentToolResourceInfo
+from azarrot.common_data import CallableToolsInfo, GenerationStatistics, ToolCallRequestMessageContents
 from azarrot.frontends.openai_support.openai_assistants import (
     OpenAIAssistantTool,
     OpenAICodeInterpreterTool,
@@ -28,8 +29,8 @@ from azarrot.frontends.openai_support.openai_data import (
     ToolInfo,
 )
 from azarrot.tools.internal import INTERNAL_TOOL_CODE_INTERPRETER, INTERNAL_TOOL_RAG_SEARCH
-from azarrot.tools.internal.tool_code_file_search import FileSearchToolConfigs
-from azarrot.tools.internal.tool_code_interpreter import CodeInterpreterToolConfigs
+from azarrot.tools.internal.tool_code_interpreter import CodeInterpreterToolResources
+from azarrot.tools.internal.tool_rag_search import RagSearchToolConfigs, RagSearchToolResources
 from azarrot.tools.tool import LocalizedToolDescription, LocalizedToolParameter
 
 
@@ -120,7 +121,7 @@ def to_openai_tool_choice(tools_info: CallableToolsInfo | None) -> OpenAIToolCho
         return ToolChoice(type=tool_type, function=function)
 
 
-def to_openai_tool_calls(content: ToolCallRequestMessageContentList) -> list[OpenAIToolCallRequest]:
+def to_openai_tool_calls(content: ToolCallRequestMessageContents) -> list[OpenAIToolCallRequest]:
     return [
         OpenAIToolCallRequest(
             id=tool_call_req.id,
@@ -130,19 +131,17 @@ def to_openai_tool_calls(content: ToolCallRequestMessageContentList) -> list[Ope
                 arguments=json.dumps(tool_call_req.function_arguments),
             ),
         )
-        for tool_call_req in content
+        for tool_call_req in content.tool_requests
     ]
 
 
 def to_openai_assistant_tools(
     agent_id: str | uuid.UUID, agent_tools: list[AgentToolInfo] | list[AgentToolRequest] | None
-) -> tuple[list[OpenAIAssistantTool] | None, OpenAIToolResources | None]:
+) -> list[OpenAIAssistantTool] | None:
     if agent_tools is None:
-        return None, None
+        return None
 
     tools: list[OpenAIAssistantTool] = []
-
-    tool_resources = OpenAIToolResources()
 
     for agent_tool in agent_tools:
         tool_params_dict = agent_tool.tool_preset_parameters
@@ -150,18 +149,11 @@ def to_openai_assistant_tools(
 
         if agent_tool.tool_name == INTERNAL_TOOL_CODE_INTERPRETER:
             tool = OpenAICodeInterpreterTool()
-
-            if tool_params_dict is not None:
-                configs = dataclass_wizard.fromdict(CodeInterpreterToolConfigs, tool_params_dict)
-
-                tool_resources.code_interpreter = OpenAICodeInterpreterToolResource(
-                    file_ids=[str(f) for f in configs.exposed_files] if configs.exposed_files is not None else []
-                )
         elif agent_tool.tool_name == INTERNAL_TOOL_RAG_SEARCH:
             if tool_params_dict is None:
                 raise ValueError(f"Agent {agent_id} enabled file-search tool, but it has no preset parameter!")
 
-            rag_search_params = dataclass_wizard.fromdict(FileSearchToolConfigs, tool_params_dict)
+            rag_search_params = dataclass_wizard.fromdict(RagSearchToolConfigs, tool_params_dict)
 
             tool = OpenAIFileSearchTool(
                 file_search=OpenAIFileSearchToolOptions(
@@ -171,10 +163,6 @@ def to_openai_assistant_tools(
                         score_threshold=rag_search_params.reranker_score_threshold,
                     ),
                 )
-            )
-
-            tool_resources.file_search = OpenAIFileSearchToolResource(
-                vector_store_ids=[str(v) for v in rag_search_params.vector_stores],
             )
         else:
             if tool_params_dict is None:
@@ -195,7 +183,36 @@ def to_openai_assistant_tools(
 
         tools.append(tool)
 
-    return tools, tool_resources
+    return tools
+
+
+def to_openai_assistant_tool_resources(
+    agent_tool_resources: list[AgentToolResourceInfo] | list[AgentToolResourceRequest] | None,
+) -> OpenAIToolResources | None:
+    if agent_tool_resources is None or len(agent_tool_resources) <= 0:
+        return None
+
+    tool_resources = OpenAIToolResources()
+
+    for agent_tr in agent_tool_resources:
+        tool_resource_dict = agent_tr.tool_resources
+
+        if agent_tr.tool_name == INTERNAL_TOOL_CODE_INTERPRETER:
+            configs = dataclass_wizard.fromdict(CodeInterpreterToolResources, tool_resource_dict)
+
+            tool_resources.code_interpreter = OpenAICodeInterpreterToolResource(
+                file_ids=[str(f) for f in configs.exposed_files] if configs.exposed_files is not None else []
+            )
+        elif agent_tr.tool_name == INTERNAL_TOOL_RAG_SEARCH:
+            rag_search_params = dataclass_wizard.fromdict(RagSearchToolResources, tool_resource_dict)
+
+            tool_resources.file_search = OpenAIFileSearchToolResource(
+                vector_store_ids=[str(v) for v in rag_search_params.vector_stores],
+            )
+        else:
+            continue
+
+    return tool_resources
 
 
 def to_openai_token_usage(gen_stats: GenerationStatistics) -> OpenAITokenUsage:

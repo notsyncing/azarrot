@@ -61,6 +61,22 @@ class ChatMessageContentImagePart(ChatMessageContentPart):
 
 
 @dataclass
+class ChatMessageToolRequestItem:
+    id: str
+    function_name: str
+    function_arguments: dict[str, Any]
+
+
+@dataclass
+class ChatMessageToolRequestsPart(ChatMessageContentPart):
+    tool_requests: list[ChatMessageToolRequestItem]
+
+    @override
+    def to_persist_content(self) -> str:
+        return json.dumps(dataclass_wizard.asdict(self))
+
+
+@dataclass
 class ChatMessageToolOutputItem:
     tool_call_id: str
     output: str
@@ -72,7 +88,7 @@ class ChatMessageToolOutputsPart(ChatMessageContentPart):
 
     @override
     def to_persist_content(self) -> str:
-        return json.dumps(dataclass_wizard.asdict(self.tool_outputs))
+        return json.dumps(dataclass_wizard.asdict(self))
 
 
 @dataclass
@@ -134,6 +150,16 @@ class ChatMessageItem:
                 )
             elif db_content.type == "image_file":
                 content = ChatMessageContentImagePart(uuid.UUID(db_content.content))
+            elif db_content.type == "tool_requests":
+                if db_content.content is None:
+                    raise ValueError(f"Message id {dbo.id} type is {db_content.type}, but no content was found!")
+
+                content = dataclass_wizard.fromdict(ChatMessageToolRequestsPart, json.loads(db_content.content))
+            elif db_content.type == "tool_outputs":
+                if db_content.content is None:
+                    raise ValueError(f"Message id {dbo.id} type is {db_content.type}, but no content was found!")
+
+                content = dataclass_wizard.fromdict(ChatMessageToolOutputsPart, json.loads(db_content.content))
             else:
                 raise ValueError(f"Unsupported chat message content type {db_content.type} on message id {dbo.id}")
 

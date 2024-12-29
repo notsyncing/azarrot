@@ -98,15 +98,17 @@ class ChatTemplateManager:
         model_preset: ModelPreset,
         runtime_configs: ChatTemplateRuntimeConfigs,
         tools_info: CallableToolsInfo | None,
+        *,
+        base_sys_prompt: str | None = None,
     ) -> str:
-        base_sys_prompts = BASE_SYSTEM_PROMPTS.get(generation_variant, DEFAULT_SYSTEM_PROMPT)
-
         locale = DEFAULT_LOCALE
 
         if model_preset.preferred_locale is not None:
             locale = model_preset.preferred_locale
 
-        base_sys_prompt = base_sys_prompts.get(locale, base_sys_prompts.get(DEFAULT_LOCALE))
+        if base_sys_prompt is None:
+            base_sys_prompts = BASE_SYSTEM_PROMPTS.get(generation_variant, DEFAULT_SYSTEM_PROMPT)
+            base_sys_prompt = base_sys_prompts.get(locale, base_sys_prompts.get(DEFAULT_LOCALE))
 
         if base_sys_prompt is None:
             raise ValueError(f"Locale {locale} is not found for {generation_variant}")

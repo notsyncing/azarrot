@@ -200,6 +200,23 @@ class AgentTool(Base):
         )
 
 
+class AgentToolResource(Base):
+    __tablename__ = "agent_tool_resources"
+
+    agent_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    tool_name: Mapped[str] = mapped_column(primary_key=True)
+    tool_resources: Mapped[str]
+    create_time: Mapped[datetime]
+    update_time: Mapped[datetime]
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(agent_id={self.agent_id}, tool_name={self.tool_name}, "
+            f"tool_resources={self.tool_resources}, "
+            f"create_time={self.create_time}, update_time={self.update_time})"
+        )
+
+
 class ChatThread(Base):
     __tablename__ = "chat_threads"
 
@@ -217,19 +234,19 @@ class ChatThread(Base):
         )
 
 
-class ChatThreadToolPresetParams(Base):
-    __tablename__ = "chat_thread_tool_preset_params"
+class ChatThreadToolResources(Base):
+    __tablename__ = "chat_thread_tool_resources"
 
     thread_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     tool_name: Mapped[str] = mapped_column(primary_key=True)
-    tool_preset_parameters: Mapped[str]
+    tool_resources: Mapped[str]
     create_time: Mapped[datetime]
     update_time: Mapped[datetime]
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(thread_id={self.thread_id}, tool_name={self.tool_name}, "
-            f"tool_preset_parameters={self.tool_preset_parameters}, "
+            f"tool_resources={self.tool_resources}, "
             f"create_time={self.create_time}, update_time={self.update_time})"
         )
 
@@ -240,7 +257,7 @@ class AgentChatTask(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     agent_id: Mapped[uuid.UUID]
     thread_id: Mapped[uuid.UUID]
-    model_id: Mapped[str]
+    model_id: Mapped[str | None]
     model_instruction: Mapped[str | None]
     status: Mapped[AgentChatTaskStatus]
     current_required_action: Mapped[AgentChatTaskRequiredAction | None]
@@ -313,7 +330,7 @@ class AgentChatTaskDetail(Base):
     type: Mapped[AgentChatTaskDetailType]
     data: Mapped[str]
     status: Mapped[AgentChatTaskDetailStatus]
-    complete_time: Mapped[datetime]
+    complete_time: Mapped[datetime | None]
     error_message: Mapped[str | None]
     generation_statistics: Mapped[str | None]
     create_time: Mapped[datetime]

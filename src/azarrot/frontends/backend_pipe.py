@@ -21,7 +21,7 @@ from azarrot.common_data import (
     TextGenerationMessageContent,
     TextGenerationRequest,
     ToolCallRequestMessageContent,
-    ToolCallRequestMessageContentList,
+    ToolCallRequestMessageContents,
     ToolCallResponseMessageContent,
 )
 from azarrot.models.chat_templates import (
@@ -101,7 +101,7 @@ class BackendPipe:
                         "The model called both internal and external tools. Internal tool calls will be ignored."
                     )
 
-                streamer.put_object(ToolCallRequestMessageContentList(external_req_list))
+                streamer.put_object(ToolCallRequestMessageContents(external_req_list))
                 return True, CTIS_HAS_OBJECT
 
         return False, None

@@ -27,14 +27,10 @@ def test_bge_reranker_m3_jina_reranking(sentence_transformers_server: Server) ->
         "今天可能要下雨",
         "明天天气不太好",
         "昨天我们去了成都玩，那边出太阳了",
-        "今天中午吃什么？"
+        "今天中午吃什么？",
     ]
 
-    data = {
-        "model": BGE_RERANKER_M3_MODEL,
-        "query": "今天的天气",
-        "documents": documents
-    }
+    data = {"model": BGE_RERANKER_M3_MODEL, "query": "今天的天气", "documents": documents}
 
     response = requests.post(url, headers=headers, json=data, timeout=60)
     r = response.json()
@@ -79,15 +75,10 @@ def test_bge_reranker_m3_cohere_reranking(sentence_transformers_server: Server) 
         "今天可能要下雨",
         "明天天气不太好",
         "昨天我们去了成都玩，那边出太阳了",
-        "今天中午吃什么？"
+        "今天中午吃什么？",
     ]
 
-    resp = co.rerank(
-        query="今天的天气",
-        model=BGE_RERANKER_M3_MODEL,
-        documents=documents,
-        return_documents=True
-    )
+    resp = co.rerank(query="今天的天气", model=BGE_RERANKER_M3_MODEL, documents=documents, return_documents=True)
 
     log.info("Output: %s", resp)
     assert resp.id is not None

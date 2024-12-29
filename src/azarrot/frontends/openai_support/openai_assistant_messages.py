@@ -17,6 +17,7 @@ from azarrot.chats.common_data import (
     ChatMessageInputItem,
     ChatMessageItem,
     ChatMessageToolOutputsPart,
+    ChatMessageToolRequestsPart,
 )
 from azarrot.chats.thread_manager import ChatMessageListPagedQuery, ChatThreadManager
 from azarrot.file_store import FileStore
@@ -278,7 +279,7 @@ class OpenAIAssistantMessages:
                 result = OpenAIAssistantMessagePartImageFile(
                     image_file=OpenAIAssistantMessagePartImageFileInfo(file_id=str(msg_content.image_file_id))
                 )
-            elif isinstance(msg_content, ChatMessageToolOutputsPart):
+            elif isinstance(msg_content, ChatMessageToolRequestsPart | ChatMessageToolOutputsPart):
                 continue
             else:
                 raise ValueError(f"Unsupported chat message content type {msg_content}")

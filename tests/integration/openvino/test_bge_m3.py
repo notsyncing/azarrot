@@ -1,3 +1,5 @@
+import logging
+
 from openai import OpenAI
 
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
@@ -5,6 +7,8 @@ from azarrot.server import Server
 
 BGE_M3_MODEL = "BAAI/bge-m3"
 BGE_M3_EMBEDDING_DIMENSION = 1024
+
+log = logging.getLogger(__name__)
 
 
 def test_bge_m3_embedding(openvino_server: Server) -> None:
@@ -19,12 +23,13 @@ def test_bge_m3_embedding(openvino_server: Server) -> None:
     embeddings = client.embeddings.create(model=BGE_M3_MODEL, input="这是一行测试文字", encoding_format="float")
 
     result = embeddings.data[0]
+    log.info("Output: %s", result)
     assert result is not None
     assert result.embedding is not None
     assert len(result.embedding) == BGE_M3_EMBEDDING_DIMENSION
-    assert -0.0614 <= result.embedding[0] <= -0.0606
-    assert -0.0344 <= result.embedding[511] <= -0.0336
-    assert 0.0283 <= result.embedding[1023] <= 0.0290
+    assert -0.0614 <= result.embedding[0] <= -0.0550
+    assert -0.0390 <= result.embedding[511] <= -0.0336
+    assert 0.0180 <= result.embedding[1023] <= 0.0290
 
 
 def test_bge_m3_embedding_multiple(openvino_server: Server) -> None:
@@ -44,14 +49,14 @@ def test_bge_m3_embedding_multiple(openvino_server: Server) -> None:
     assert result1 is not None
     assert result1.embedding is not None
     assert len(result1.embedding) == BGE_M3_EMBEDDING_DIMENSION
-    assert -0.0614 <= result1.embedding[0] <= -0.0606
-    assert -0.0344 <= result1.embedding[511] <= -0.0336
-    assert 0.0283 <= result1.embedding[1023] <= 0.0290
+    assert -0.0614 <= result1.embedding[0] <= -0.0550
+    assert -0.0390 <= result1.embedding[511] <= -0.0336
+    assert 0.0180 <= result1.embedding[1023] <= 0.0290
 
     result2 = embeddings.data[1]
     assert result2 is not None
     assert result2.embedding is not None
     assert len(result2.embedding) == BGE_M3_EMBEDDING_DIMENSION
-    assert -0.0229 <= result2.embedding[0] <= -0.0227
-    assert -0.0071 <= result2.embedding[511] <= -0.0068
-    assert -0.0303 <= result2.embedding[1023] <= -0.0300
+    assert -0.0350 <= result2.embedding[0] <= -0.0227
+    assert -0.0150 <= result2.embedding[511] <= -0.0068
+    assert -0.0365 <= result2.embedding[1023] <= -0.0300

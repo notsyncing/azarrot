@@ -10,17 +10,11 @@ from sqlakeyset import select_page
 from sqlalchemy import Engine, delete, select
 from sqlalchemy.orm import Session
 
-from azarrot.agents.common_data import AgentToolRequest
-from azarrot.agents.utils import convert_agent_tool_request_to_database
+from azarrot.agents.common_data import AgentGenerationParameters, AgentToolRequest, AgentToolResourceRequest
+from azarrot.agents.utils import convert_agent_tool_request_to_database, convert_agent_tool_resource_request_to_database
 from azarrot.common_data import PageResult
-from azarrot.database_schemas import Agent, AgentTool
+from azarrot.database_schemas import Agent, AgentTool, AgentToolResource
 from azarrot.utils import sanitize_uuid
-
-
-@dataclass
-class AgentGenerationParameters:
-    temperature: float = 1
-    top_p: float = 1
 
 
 @dataclass
@@ -79,6 +73,25 @@ class AgentToolInfo:
 
 
 @dataclass
+class AgentToolResourceInfo:
+    agent_id: str
+    tool_name: str
+    tool_resources: dict[str, Any]
+    create_time: datetime
+    update_time: datetime
+
+    @classmethod
+    def from_db_agent_tool_resource(cls, dbo: AgentToolResource) -> "AgentToolResourceInfo":
+        return cls(
+            agent_id=str(dbo.agent_id),
+            tool_name=dbo.tool_name,
+            tool_resources=json.loads(dbo.tool_resources),
+            create_time=dbo.create_time,
+            update_time=dbo.update_time,
+        )
+
+
+@dataclass
 class AgentListPagedQuery:
     create_time_desc_order: bool = False
     page_size: int = 20
@@ -100,6 +113,7 @@ class AgentManager:
         instructions: str | None = None,
         default_generation_parameters: AgentGenerationParameters | None = None,
         tools: list[AgentToolRequest] | None = None,
+        tool_resources: list[AgentToolResourceRequest] | None = None,
         additional_data: dict[str, Any] | None = None,
     ) -> AgentInfo:
         agent_id = uuid.uuid4()
@@ -131,6 +145,13 @@ class AgentManager:
                 agent_tools = convert_agent_tool_request_to_database(agent_id, tools, now, now)
                 db.add_all(agent_tools)
 
+            if tool_resources is not None:
+                agent_tool_resources = convert_agent_tool_resource_request_to_database(
+                    agent_id, tool_resources, now, now
+                )
+
+                db.add_all(agent_tool_resources)
+
             db.commit()
 
             return AgentInfo.from_db_agent(agent)
@@ -142,6 +163,14 @@ class AgentManager:
             agent_tools = db.query(AgentTool).filter(AgentTool.agent_id == agent_id).all()
 
             return [AgentToolInfo.from_db_agent_tool(tool) for tool in agent_tools]
+
+    def get_enabled_tool_resources(self, agent_id: str | uuid.UUID) -> list[AgentToolResourceInfo]:
+        agent_id = sanitize_uuid(agent_id)
+
+        with Session(self._database) as db:
+            agent_tool_resources = db.query(AgentToolResource).filter(AgentToolResource.agent_id == agent_id).all()
+
+            return [AgentToolResourceInfo.from_db_agent_tool_resource(tool) for tool in agent_tool_resources]
 
     def get_list(self, query: AgentListPagedQuery) -> PageResult[AgentInfo]:
         if query.before_id is not None and query.after_id is not None:
@@ -204,6 +233,7 @@ class AgentManager:
         instructions: str | None = None,
         default_generation_parameters: AgentGenerationParameters | None = None,
         tools: list[AgentToolRequest] | None = None,
+        tool_resources: list[AgentToolResourceRequest] | None = None,
         additional_data: dict[str, Any] | None = None,
     ) -> AgentInfo:
         agent_id = sanitize_uuid(agent_id)
@@ -250,6 +280,15 @@ class AgentManager:
 
                 agent_tools = convert_agent_tool_request_to_database(agent.id, tools, now, now)
                 db.add_all(agent_tools)
+
+            if tool_resources is not None:
+                db.execute(delete(AgentToolResource).where(AgentToolResource.agent_id == agent.id))
+
+                agent_tool_resources = convert_agent_tool_resource_request_to_database(
+                    agent.id, tool_resources, now, now
+                )
+
+                db.add_all(agent_tool_resources)
 
             if additional_data is not None:
                 agent.additional_data = json.dumps(additional_data)
