@@ -475,17 +475,17 @@ class ChatThreadManager:
     def get_latest_messages(self, thread_id: str | uuid.UUID, count: int = 1) -> list[ChatMessageItem]:
         thread_id = sanitize_uuid(thread_id)
 
+        query = (
+            select(ChatMessage.id)
+            .where(and_(ChatMessage.thread_id == thread_id, ChatMessage.deleted == False))
+            .order_by(ChatMessage.create_time.desc(), ChatMessage.order.desc())
+        )
+
+        if count > 0:
+            query = query.limit(count)
+
         with Session(self._database) as db:
-            latest_msg_id_list = (
-                db.execute(
-                    select(ChatMessage.id)
-                    .where(and_(ChatMessage.thread_id == thread_id, ChatMessage.deleted == False))
-                    .order_by(ChatMessage.create_time.desc(), ChatMessage.order.desc())
-                    .limit(count)
-                )
-                .scalars()
-                .all()
-            )
+            latest_msg_id_list = db.execute(query).scalars().all()
 
         if latest_msg_id_list is None:
             return []

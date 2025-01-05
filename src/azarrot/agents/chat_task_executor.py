@@ -13,8 +13,10 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from azarrot.agents.common_data import (
+    AgentChatTaskAutoThreadHistoryStrategyParams,
     AgentChatTaskDetailToolCallItem,
     AgentChatTaskInfo,
+    AgentChatTaskLastMessageThreadHistoryStrategyParams,
     AgentChatTaskMessageDetailsData,
     AgentChatTaskToolCallDetailsData,
     AgentToolRequest,
@@ -49,6 +51,7 @@ from azarrot.common_types import (
     AgentChatTaskRequiredAction,
     AgentChatTaskStatus,
 )
+from azarrot.config import ServerConfig
 from azarrot.database_schemas import AgentChatTask, AgentChatTaskDetail, AgentChatTaskTool
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
@@ -65,6 +68,7 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
     _log: Logger = logging.getLogger(__name__)
 
     _database: Engine
+    _server_config: ServerConfig
     _chat_template_manager: ChatTemplateManager
     _agent_manager: AgentManager
     _model_manager: ModelManager
@@ -78,6 +82,7 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
     def __init__(
         self,
         database: Engine,
+        server_config: ServerConfig,
         chat_template_manager: ChatTemplateManager,
         agent_manager: AgentManager,
         model_manager: ModelManager,
@@ -86,6 +91,7 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
         backend_pipe: BackendPipe,
     ) -> None:
         self._database = database
+        self._server_config = server_config
         self._chat_template_manager = chat_template_manager
         self._agent_manager = agent_manager
         self._model_manager = model_manager
@@ -261,8 +267,23 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
 
         return results
 
+    def __determine_fetch_msg_count(self, task: AgentChatTaskInfo) -> int:
+        fetch_msg_count = -1
+
+        if task.thread_history_strategy == "auto":
+            # TODO: Implement truncating with head_preserve_count
+            assert isinstance(task.thread_history_strategy_params, AgentChatTaskAutoThreadHistoryStrategyParams)
+            fetch_msg_count = task.thread_history_strategy_params.tail_preserve_count
+        elif task.thread_history_strategy == "last_messages":
+            assert isinstance(task.thread_history_strategy_params, AgentChatTaskLastMessageThreadHistoryStrategyParams)
+            fetch_msg_count = task.thread_history_strategy_params.count
+
+        return fetch_msg_count
+
     def __execute_task(self, task: AgentChatTaskInfo) -> None:
-        latest_messages = self._chat_thread_manager.get_latest_messages(task.thread_id)
+        latest_messages = self._chat_thread_manager.get_latest_messages(
+            task.thread_id, count=self.__determine_fetch_msg_count(task)
+        )
 
         if len(latest_messages) <= 0:
             raise ValueError(f"No message on thread {task.thread_id}")
@@ -382,12 +403,15 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
         if result is None:
             result = content
 
+        if self._server_config.log_generation_details:
+            self._log.info("Generation response: %s", result)
+
         gen_stats.end_time = datetime.now()
         self._log.info(gen_stats.to_stats_text())
 
-        self.__handle_generation_result(task, result)
+        self.__handle_generation_result(task, result, gen_stats)
 
-    def __handle_generation_result(self, task: AgentChatTaskInfo, result: Any) -> None:
+    def __handle_generation_result(self, task: AgentChatTaskInfo, result: Any, gen_stats: GenerationStatistics) -> None:
         task_id = UUID(task.id)
 
         if isinstance(result, str):
@@ -403,6 +427,7 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
                 detail_type="message",
                 detail_status="completed",
                 data=AgentChatTaskMessageDetailsData(message_id=msg.id),
+                generation_statistics=gen_stats,
             )
 
             self.__update_task_status(task_id, "in_progress", "completed")
@@ -438,6 +463,7 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
                         for c in result.tool_requests
                     ]
                 ),
+                generation_statistics=gen_stats,
             )
 
             self.__update_task_required_action(task_id, "tool_call_request", result)

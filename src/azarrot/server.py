@@ -175,6 +175,7 @@ class Server:
     vector_store: VectorStoreManager
     vector_store_worker: VectorStoreWorker
     chat_thread_manager: ChatThreadManager
+    chat_task_manager: AgentChatTaskManager
     chat_task_executor: AgentChatTaskExecutor
     api: FastAPI
 
@@ -283,7 +284,7 @@ def create_server(
     chat_thread_manager = ChatThreadManager(db)
 
     agent_chat_task_executor = AgentChatTaskExecutor(
-        db, chat_template_manager, agent_manager, model_manager, file_store, chat_thread_manager, backend_pipe
+        db, config, chat_template_manager, agent_manager, model_manager, file_store, chat_thread_manager, backend_pipe
     )
 
     agent_chat_task_manager = AgentChatTaskManager(db, agent_chat_task_executor)
@@ -296,7 +297,7 @@ def create_server(
 
     frontends = [
         OpenAIFrontend(
-            config.openai_configs,
+            config,
             model_manager,
             backend_pipe,
             file_store,
@@ -330,6 +331,7 @@ def create_server(
         vector_store=vector_store,
         vector_store_worker=vector_store_worker,
         chat_thread_manager=chat_thread_manager,
+        chat_task_manager=agent_chat_task_manager,
         chat_task_executor=agent_chat_task_executor,
         api=api,
         enable_schedule_thread=enable_schedule_thread,

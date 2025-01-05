@@ -69,6 +69,8 @@ def make_openvino_server(
                 worker_file_process_scan_interval=worker_file_process_scan_interval,
                 worker_store_cleanup_scan_interval=worker_store_cleanup_scan_interval,
             ),
+            default_seed=100,
+            log_generation_details=True,
         ),
         enable_backends=[OpenVINOBackend],
     )

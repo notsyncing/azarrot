@@ -10,7 +10,6 @@ import dataclass_wizard
 from azarrot.common_data import (
     CallableToolsInfo,
     GenerationStatistics,
-    ToolCallRequestMessageContent,
     ToolCallRequestMessageContents,
 )
 from azarrot.common_types import (
@@ -109,11 +108,11 @@ class AgentChatTaskInfo:
         current_req_action = dbo.current_required_action
 
         if current_req_action == "tool_call_request" and dbo.current_required_action_data is not None:
-            req_list = dataclass_wizard.fromlist(
-                ToolCallRequestMessageContent, json.loads(dbo.current_required_action_data)
+            reqs = dataclass_wizard.fromdict(
+                ToolCallRequestMessageContents, json.loads(dbo.current_required_action_data)
             )
 
-            current_req_action_data = ToolCallRequestMessageContents(req_list)
+            current_req_action_data = ToolCallRequestMessageContents(reqs.tool_requests)
         else:
             current_req_action_data = None
 

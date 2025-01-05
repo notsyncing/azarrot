@@ -27,7 +27,7 @@ from azarrot.common_data import (
     ToolCallResponseMessageContent,
     WorkingDirectories,
 )
-from azarrot.config import DEFAULT_MAX_TOKENS, OpenAIFrontendConfig
+from azarrot.config import DEFAULT_MAX_TOKENS, ServerConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.base import Frontend
@@ -58,7 +58,7 @@ from azarrot.vector_store import VectorStoreManager
 
 class OpenAIFrontend(Frontend):
     _log = logging.getLogger(__name__)
-    _openai_config: OpenAIFrontendConfig
+    _server_config: ServerConfig
     _model_manager: ModelManager
     _backend_pipe: BackendPipe
     _working_dirs: WorkingDirectories
@@ -72,7 +72,7 @@ class OpenAIFrontend(Frontend):
 
     def __init__(
         self,
-        openai_config: OpenAIFrontendConfig,
+        server_config: ServerConfig,
         model_manager: ModelManager,
         backend_pipe: BackendPipe,
         file_store: FileStore,
@@ -83,19 +83,19 @@ class OpenAIFrontend(Frontend):
         api: FastAPI,
         working_dirs: WorkingDirectories,
     ) -> None:
-        self._openai_config = openai_config
+        self._server_config = server_config
         self._model_manager = model_manager
         self._working_dirs = working_dirs
         self._backend_pipe = backend_pipe
         self._openai_files = OpenAIFiles(file_store)
-        self._assistants = OpenAIAssistants(openai_config, agent_manager, vector_store, model_manager)
+        self._assistants = OpenAIAssistants(server_config.openai_configs, agent_manager, vector_store, model_manager)
 
         self._threads = OpenAIAssistantThreads(
-            openai_config, chat_thread_manager, vector_store, model_manager, file_store
+            server_config.openai_configs, chat_thread_manager, vector_store, model_manager, file_store
         )
 
         self._messages = OpenAIAssistantMessages(file_store, chat_thread_manager, agent_chat_task_manager)
-        self._vstores = OpenAIVectorStores(openai_config, model_manager, vector_store)
+        self._vstores = OpenAIVectorStores(server_config.openai_configs, model_manager, vector_store)
         self._runs = OpenAIAssistantRuns(agent_chat_task_manager, chat_thread_manager, self._threads)
         self._api = api
 
@@ -140,6 +140,7 @@ class OpenAIFrontend(Frontend):
 
         # Assistants - Threads API
         router.add_api_route("/v1/threads", self._threads.create_thread, methods=["POST"])
+        router.add_api_route("/v1/threads/runs", self._runs.run_assistant_with_thread, methods=["POST"])
         router.add_api_route("/v1/threads/{thread_id}", self._threads.get_thread, methods=["GET"])
         router.add_api_route("/v1/threads/{thread_id}", self._threads.update_thread, methods=["POST"])
         router.add_api_route("/v1/threads/{thread_id}", self._threads.delete_thread, methods=["DELETE"])
@@ -153,9 +154,8 @@ class OpenAIFrontend(Frontend):
 
         r_url = "/v1/threads/{tid}/runs"
 
-        # Assistants - Run API
+        # Assistants - Runs API
         router.add_api_route(r_url, self._runs.run_assistant, methods=["POST"])
-        router.add_api_route("/v1/threads/runs", self._runs.run_assistant_with_thread, methods=["POST"])
         router.add_api_route(r_url, self._runs.get_run_list, methods=["GET"])
         router.add_api_route(r_url + "/{rid}", self._runs.get_run, methods=["GET"])
         router.add_api_route(r_url + "/{rid}", self._runs.update_run, methods=["POST"])
@@ -410,6 +410,9 @@ class OpenAIFrontend(Frontend):
 
         if result is None:
             result = content
+
+        if self._server_config.log_generation_details:
+            self._log.info("Generation response: %s", result)
 
         gen_stats.end_time = datetime.now()
         self.__log_generation_statistics(gen_stats)

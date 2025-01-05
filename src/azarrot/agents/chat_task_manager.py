@@ -33,6 +33,7 @@ from azarrot.common_data import (
 from azarrot.common_types import (
     AgentChatTaskDetailStatus,
     AgentChatTaskDetailType,
+    AgentChatTaskStatus,
     AgentChatTaskThreadHistoryStrategy,
 )
 from azarrot.database_schemas import (
@@ -53,6 +54,7 @@ class AgentChatTaskCreationRequest:
     thread_id: str | uuid.UUID
     model_id: str | None = None
     model_instruction: str | None = None
+    status: AgentChatTaskStatus | None = None
     generation_parameters: AgentGenerationParameters | None = None
     thread_history_strategy: AgentChatTaskThreadHistoryStrategy | None = None
     thread_history_strategy_params: AgentChatTaskThreadHistoryStrategyParams | None = None
@@ -163,7 +165,7 @@ class AgentChatTaskManager:
             gen_params = None
 
             if request.generation_parameters is not None:
-                gen_params = json.dumps(request.generation_parameters)
+                gen_params = json.dumps(dataclass_wizard.asdict(request.generation_parameters))
 
             thread_history_strategy = request.thread_history_strategy
 
@@ -171,9 +173,20 @@ class AgentChatTaskManager:
                 thread_history_strategy = "auto"
 
             if request.thread_history_strategy_params is not None:
-                thread_history_strategy_params = json.dumps(request.thread_history_strategy_params)
+                thread_history_strategy_params = json.dumps(
+                    dataclass_wizard.asdict(request.thread_history_strategy_params)
+                )
             else:
-                thread_history_strategy_params = json.dumps(AgentChatTaskAutoThreadHistoryStrategyParams())
+                thread_history_strategy_params = json.dumps(
+                    dataclass_wizard.asdict(AgentChatTaskAutoThreadHistoryStrategyParams())
+                )
+
+            if request.tools_info is not None:
+                tools_info = json.dumps(dataclass_wizard.asdict(request.tools_info))
+            else:
+                tools_info = None
+
+            status = request.status if request.status is not None else "pending"
 
             db_task = AgentChatTask(
                 id=task_id,
@@ -181,7 +194,7 @@ class AgentChatTaskManager:
                 thread_id=thread_id,
                 model_id=model_id,
                 model_instruction=model_instruction,
-                status="pending",
+                status=status,
                 current_required_action=None,
                 current_required_action_data=None,
                 start_time=None,
@@ -191,7 +204,7 @@ class AgentChatTaskManager:
                 thread_history_strategy=thread_history_strategy,
                 thread_history_strategy_params=thread_history_strategy_params,
                 max_tokens=request.max_tokens if request.max_tokens is not None else -1,
-                tools_info=json.dumps(request.tools_info) if request.tools_info is not None else None,
+                tools_info=tools_info,
                 parallel_tool_calling=request.parallel_tool_calling,
                 additional_data=json.dumps(request.additional_data) if request.additional_data is not None else None,
                 create_time=now,
@@ -209,7 +222,10 @@ class AgentChatTaskManager:
             db.commit()
 
             info = AgentChatTaskInfo.from_db(db_task, agent_tools)
-            self._executor.add_task(info)
+
+            if status == "pending":
+                self._executor.add_task(info)
+
             return info
 
     def get_current_tasks_by_messages(self, message_id_list: Sequence[str | uuid.UUID]) -> dict[str, AgentChatTaskInfo]:
@@ -371,6 +387,8 @@ class AgentChatTaskManager:
             return True
 
     def cancel(self, thread_id: str | uuid.UUID, agent_chat_task_id: str | uuid.UUID) -> bool:
+        # TODO: Implement cancelling in_progress run
+
         thread_id = sanitize_uuid(thread_id)
         agent_chat_task_id = sanitize_uuid(agent_chat_task_id)
 

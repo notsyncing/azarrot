@@ -252,6 +252,8 @@ class DeviceWorker:
 
 
 class BaseBackend(ABC):
+    _log: logging.Logger = logging.getLogger(__name__)
+
     _device_queues: ClassVar[dict[str, DeviceWorker]] = {}
     _device_queue_lock: ClassVar[threading.Lock] = threading.Lock()
 
@@ -318,6 +320,9 @@ class BaseBackend(ABC):
     def generate(
         self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+        if self._server_config.log_generation_details:
+            self._log.info("Generation request: %s", request)
+
         task, streamer, gen_stats = self._generate(request, generation_handlers)
         self.__submit_task_to_device(task)
 

@@ -47,7 +47,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Assistants (v2)|Assistants|☑️|`response_format` not implemented yet|
 |Assistants (v2)|Threads|✅||
 |Assistants (v2)|Messages|✅||
-|Assistants (v2)|Runs & Run steps|🚧|`include[]`, `response_format` not implemented yet, tools not implemented yet, `stream` not implemented yet|
+|Assistants (v2)|Runs & Run steps|🚧|`include[]`, `response_format` not implemented yet, tools not implemented yet, `stream` not implemented yet, some other small parts may also not implemented|
 |Assistants (v2)|Vector stores|✅|Vector store bytes used is estimated|
 |Assistants (v2)|Vector store files|✅|Vector store bytes used is estimated|
 |Assistants (v2)|Vector store file batches|✅|Vector store bytes used is estimated|

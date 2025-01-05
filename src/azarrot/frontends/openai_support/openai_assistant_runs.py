@@ -268,7 +268,7 @@ OpenAIAssistantRunStepDetails = OpenAIAssistantMessageCreationRunStep | OpenAIAs
 
 
 @dataclass
-class OpenAIAssistantRunStep(BaseModel):
+class OpenAIAssistantRunStep:
     id: str
     created_at: int
     assistant_id: str

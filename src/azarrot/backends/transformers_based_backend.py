@@ -247,6 +247,11 @@ class TransformersBasedBackend(BaseBackend, ABC):
             }
         )
 
+        seed = request.seed
+
+        if seed is None:
+            seed = self._server_config.default_seed
+
         return TransformersGenerationMethods(
             model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
         )
