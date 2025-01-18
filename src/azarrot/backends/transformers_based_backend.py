@@ -136,7 +136,9 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
-        model_kwargs: dict[str, Any] = {}
+        model_kwargs: dict[str, Any] = {
+            "use_cache": True
+        }
 
         self._customize_model_and_kwargs(model, model_kwargs)
 
@@ -146,13 +148,8 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         generation_variant = model.generation_variant
 
-        model_kwargs["use_cache"] = True
-
         model_kwargs_quirks = MODEL_PYTORCH_QUIRKS.get(generation_variant, {})
         model_kwargs.update(model_kwargs_quirks)
-
-        if "use_cache" in model_kwargs and not model_kwargs.get("use_cache"):
-            del model_kwargs["use_cache"]
 
         transformers_model: Any = model_class.from_pretrained(
             model_path,
