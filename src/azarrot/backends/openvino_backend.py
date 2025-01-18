@@ -171,7 +171,7 @@ class OpenVINOBackend(TransformersBasedBackend):
         model_kwargs["export"] = need_export
 
         if model.openvino is not None:
-            if model.openvino.quantization_configs is not None:
+            if need_export and model.openvino.quantization_configs is not None:
                 model_kwargs["quantization_config"] = OVWeightQuantizationConfig(
                     bits=model.openvino.quantization_configs.bits,
                     sym=model.openvino.quantization_configs.sym,
