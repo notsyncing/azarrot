@@ -58,6 +58,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 - Auto-batching on OpenAI Chat API
 - Auto model downloading from huggingface
 - Jina and Cohere(v2) Rerank API support on SentenceTransformers backend
+- Assisted generation on 🤗Transformers-based backends (IPEX-LLM, OpenVINO, PyTorch)
 
 ## Tested models
 

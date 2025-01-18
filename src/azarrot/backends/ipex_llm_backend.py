@@ -13,6 +13,7 @@ from azarrot.common_data import (
 
 IPEX_LLM_TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
+    "text-generation-with-past": AutoModelForCausalLM,
 }
 
 BACKEND_ID_IPEX_LLM = "ipex-llm"

@@ -244,6 +244,22 @@ class TransformersBasedBackend(BaseBackend, ABC):
             }
         )
 
+        if loaded_model.data.transformers is not None:
+            assistant_model_id = loaded_model.data.transformers.assistant_model
+
+            if assistant_model_id is not None:
+                assistant_model = self._models.get(assistant_model_id)
+
+                if assistant_model is None:
+                    raise ValueError(
+                        f"Model {loaded_model.data.id} wants to use assistant model {assistant_model_id}, "
+                        f"but it is not loaded in current backend {self.id()}"
+                    )
+
+                generation_kwargs["tokenizer"] = loaded_model.tokenizer
+                generation_kwargs["assistant_model"] = assistant_model.model
+                generation_kwargs["assistant_tokenizer"] = assistant_model.tokenizer
+
         seed = request.seed
 
         if seed is None:

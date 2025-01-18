@@ -4,6 +4,7 @@ The following are change log of each versions.
 
 ## 0.4.0 (2024-12-??)
 
+- Support 🤗Transformers assisted generation.
 - [BREAKING] All OpenAI endpoints are prefixed with `/openai/`
 - Support Jina and Cohere Rerank API
 - Add sentence-transformers backend

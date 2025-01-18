@@ -16,6 +16,11 @@ class WorkingDirectories:
 
 
 @dataclass
+class TransformersModelConfig:
+    assistant_model: str | None = None
+
+
+@dataclass
 class OpenVINOQuantizationConfigs:
     bits: int
     sym: bool
@@ -108,6 +113,8 @@ class Model:
     preset: ModelPreset
     use_original_precision: bool
     is_for_raw_completion: bool
+
+    transformers: TransformersModelConfig | None
 
     openvino: OpenVINOModelConfig | None
     ipex_llm: IPEXLLMModelConfig | None

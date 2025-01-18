@@ -20,6 +20,7 @@ from azarrot.common_data import (
     OpenVINOModelConfig,
     OpenVINOQuantizationConfigs,
     PyTorchModelConfig,
+    TransformersModelConfig,
 )
 from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
@@ -131,6 +132,15 @@ class ModelManager:
                 "generation_variant", self.__determine_model_generation_variant(model_path)
             )
 
+            transformers = None
+
+            if model_backend in (BACKEND_ID_OPENVINO, BACKEND_ID_IPEX_LLM, BACKEND_ID_PYTORCH):
+                transformers_config = model_info.get("transformers", {})
+
+                transformers = TransformersModelConfig(
+                    assistant_model=transformers_config.get("assistant_model")
+                )
+
             openvino = None
 
             if model_backend == BACKEND_ID_OPENVINO:
@@ -184,6 +194,7 @@ class ModelManager:
                 preset=model_preset,
                 use_original_precision=model_info.get("use_original_precision", False),
                 is_for_raw_completion=model_info.get("is_for_raw_completion", False),
+                transformers=transformers,
                 openvino=openvino,
                 ipex_llm=ipex_llm,
                 pytorch=pytorch,
@@ -263,6 +274,7 @@ class ModelManager:
             preset=preset,
             use_original_precision=use_original_precision,
             is_for_raw_completion=is_for_raw_completion,
+            transformers=None,
             openvino=None,
             ipex_llm=None,
             pytorch=None,
