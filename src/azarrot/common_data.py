@@ -216,11 +216,14 @@ class GenerationStatistics:
         ftt = (self.first_token_time - self.start_time) / timedelta(milliseconds=1)
 
         total_tokens = self.prompt_tokens + self.completion_tokens
-        speed = (self.completion_tokens) / time_delta * 1000
+        speed = self.completion_tokens / time_delta * 1000
+        prefill_speed = self.prompt_tokens / ftt * 1000
+        decode_speed = self.completion_tokens / (time_delta - ftt) * 1000
 
         return (
             f"Total tokens: {total_tokens} (prompt {self.prompt_tokens}, completion {self.completion_tokens}), "
-            f"first token latency: {ftt} ms, cost {time_delta} ms, {speed:.3f} tok/s"
+            f"first token latency: {ftt} ms, cost {time_delta} ms, {speed:.3f} tok/s (prefill {prefill_speed:.3f} "
+            f"tok/s, decode {decode_speed:.3f} tok/s)"
         )
 
 
