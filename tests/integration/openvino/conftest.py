@@ -27,7 +27,7 @@ def openvino_server() -> Generator[Server, Any, Any]:
 
     server = create_server(
         config=config,
-        enable_backends=[OpenVINOBackend(config, auto_use_igpu=False)],
+        enable_backends=[OpenVINOBackend(config)],
         enable_schedule_thread=False,
     )
 

@@ -1,29 +1,43 @@
 import logging
-from typing import Any
+from typing import Any, override
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
-from typing_extensions import override
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import Model
+from azarrot.config import ServerConfig
 
 BACKEND_ID_PYTORCH = "pytorch"
 
 
 class PyTorchBackend(TransformersBasedBackend):
     _log = logging.getLogger(__name__)
+    _force_use_device: str | None = None
+
+    def __init__(self, config: ServerConfig, force_use_device: str | None = None) -> None:
+        self._force_use_device = force_use_device
+
+        super().__init__(config)
+
+    @override
+    def _determine_default_device(self, accel_device_count: int) -> str:
+        if self._force_use_device is not None:
+            self._log.info("Forced to use device %s", self._force_use_device)
+            return self._force_use_device
+
+        return super()._determine_default_device(accel_device_count)
 
     @override
     def id(self) -> str:
         return BACKEND_ID_PYTORCH
 
     @override
-    def _customize_model_and_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
         model_kwargs["low_cpu_mem_usage"] = True
 
         # TODO: Enable this when bitsandbytes is usable
-        # if not model.use_original_precision:
+        # if not model.use_original_precision and "quantization_config" not in model_config:
         #     model_kwargs["quantization_config"] = BitsAndBytesConfig(
         #         load_in_4bit=True,
         #         bnb_4bit_quant_type="nf4",

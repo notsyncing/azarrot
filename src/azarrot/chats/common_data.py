@@ -4,10 +4,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, override
 
 import dataclass_wizard
-from typing_extensions import override
 
 from azarrot.database_schemas import (
     ChatMessage,

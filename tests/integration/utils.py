@@ -1,14 +1,16 @@
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from openai import OpenAI
 
 from azarrot.common_data import EmbeddingModelInfo, Model, ModelPreset
 from azarrot.file_store import FileStore
-from azarrot.frontends.openai_frontend import OpenAIFrontend
 from azarrot.server import Server
+
+if TYPE_CHECKING:
+    from azarrot.frontends.openai_frontend import OpenAIFrontend
 
 
 def create_openai_client(server: Server) -> OpenAI:
@@ -22,7 +24,7 @@ def create_temp_file(content: str):  # type: ignore[no-untyped-def]    # noqa: A
 
 
 def get_file_store(server: Server) -> FileStore:
-    return cast(OpenAIFrontend, server.frontends[0])._openai_files._file_store
+    return cast("OpenAIFrontend", server.frontends[0])._openai_files._file_store
 
 
 def create_fake_embedding_model(model_id: str) -> Model:
@@ -38,7 +40,6 @@ def create_fake_embedding_model(model_id: str) -> Model:
         preset=ModelPreset(preferred_locale=None, supports_tool_calling=False, enable_internal_tools=False),
         transformers=None,
         openvino=None,
-        ipex_llm=None,
         pytorch=None,
         info=EmbeddingModelInfo(1024),
         create_time=datetime.now(),

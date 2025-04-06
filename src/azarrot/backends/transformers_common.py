@@ -1,10 +1,9 @@
 import logging
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, cast, override
 
 import torch
 from transformers import PreTrainedModel, set_seed
-from typing_extensions import override
 
 from azarrot.backends.common import (
     BatchedCustomTextIteratorStreamer,
@@ -41,8 +40,8 @@ class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMet
         if key not in self.generation_kwargs:
             return
 
-        self_tensor = cast(torch.Tensor, self.generation_kwargs[key])
-        other_tensor_list = [cast(torch.Tensor, gm.generation_kwargs[key]) for gm in others]
+        self_tensor = cast("torch.Tensor", self.generation_kwargs[key])
+        other_tensor_list = [cast("torch.Tensor", gm.generation_kwargs[key]) for gm in others]
         nested_tensor = torch.nested.as_nested_tensor([self_tensor, *other_tensor_list])
         self.generation_kwargs[key] = torch.squeeze(nested_tensor.to_padded_tensor(0))
 
@@ -50,8 +49,8 @@ class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMet
         if key not in self.generation_kwargs:
             return
 
-        self_tensor = cast(torch.Tensor, self.generation_kwargs[key])
-        other_tensor_list = [cast(torch.Tensor, gm.generation_kwargs[key]) for gm in others]
+        self_tensor = cast("torch.Tensor", self.generation_kwargs[key])
+        other_tensor_list = [cast("torch.Tensor", gm.generation_kwargs[key]) for gm in others]
         self.generation_kwargs[key] = torch.cat((self_tensor, *other_tensor_list), dim=0)
 
     @override

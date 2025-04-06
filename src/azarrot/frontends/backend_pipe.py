@@ -64,7 +64,7 @@ class BackendPipe:
         new_request = copy(original_request)
 
         new_request.messages.append(
-            GenerationMessage(role="tool", contents=cast(list[GenerationMessageContent], tool_calling_responses))
+            GenerationMessage(role="tool", contents=cast("list[GenerationMessageContent]", tool_calling_responses))
         )
 
         new_streamer, _ = self.generate(model, new_request)
@@ -146,14 +146,14 @@ class BackendPipe:
                 message.contents = [
                     TextGenerationMessageContent(
                         text=self._chat_template_manager.format_tool_calling_request(
-                            cast(list[ToolCallRequestMessageContent], tool_call_contents), model.generation_variant
+                            cast("list[ToolCallRequestMessageContent]", tool_call_contents), model.generation_variant
                         )
                     )
                 ]
 
                 messages.append(message)
             elif isinstance(message.contents[0], ToolCallResponseMessageContent):
-                tool_call_responses.extend(cast(list[ToolCallResponseMessageContent], message.contents))
+                tool_call_responses.extend(cast("list[ToolCallResponseMessageContent]", message.contents))
             else:
                 messages.append(message)
 

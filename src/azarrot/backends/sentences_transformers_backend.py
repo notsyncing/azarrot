@@ -4,11 +4,10 @@ import logging
 import operator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import cast
+from typing import cast, override
 
 import torch
 from sentence_transformers import CrossEncoder, SentenceTransformer
-from typing_extensions import override
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
@@ -161,7 +160,7 @@ class CrossEncoderGenerationMethods(GenerationMethods["CrossEncoderGenerationMet
             return False, []
 
         results = [
-            RerankResultItem(input_index=cast(int, rank["corpus_id"]), score=float(rank["score"])) for rank in ranks
+            RerankResultItem(input_index=cast("int", rank["corpus_id"]), score=float(rank["score"])) for rank in ranks
         ]
 
         self._gen_stats.end_time = datetime.now()
@@ -177,13 +176,16 @@ class SentenceTransformersBackend(BaseBackend):
     _default_device: str = "xpu"
     _models: dict[str, LoadedSentenceTransformersModel]
 
-    def __init__(self, server_config: ServerConfig) -> None:
+    def __init__(self, server_config: ServerConfig, force_use_device: str | None = None) -> None:
         super().__init__(server_config)
 
         self._models = {}
 
-        accel_device_count = print_pytorch_device_list(self._log, self.id())
-        self._default_device = self._determine_default_device(accel_device_count)
+        if force_use_device is None:
+            accel_device_count = print_pytorch_device_list(self._log, self.id())
+            self._default_device = self._determine_default_device(accel_device_count)
+        else:
+            self._default_device = force_use_device
 
         self._log.info("Using default device: %s", self._default_device)
 

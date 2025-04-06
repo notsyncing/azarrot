@@ -1,6 +1,6 @@
 # Azarrot
 
-(Early WIP) An OpenAI compatible LLM inference server, focusing on OpenVINO™ and IPEX-LLM usage.
+(Early WIP) An OpenAI compatible LLM inference server, focusing on OpenVINO™ usage.
 
 The name `azarrot` is combined from `azalea` and `parrot`.
 
@@ -81,15 +81,15 @@ Azarrot supports CPUs and Intel GPUs.
 Tested GPUs:
 
 - Intel A770 16GB
-- Intel Xe 96EU (i7 12700H)
+- Intel Xe 96EU (i7 12700H) (more stable under OpenVINO)
 
 ### Software
 
-Due to `ipex-llm` does not support `intel_extension_for_pytorch 2.5.10+xpu`, we have to use `Python 3.11` or below.
+We use `Python 3.12`.
 
 You also have to install oneAPI Toolkit (at least 2024.2) and Intel GPU drivers.
 
-Azarrot is tested on Ubuntu 22.04 and python 3.10.
+Azarrot is tested on Ubuntu 24.04 and python 3.12.
 
 ## Usage
 

@@ -8,7 +8,9 @@ from threading import Thread
 import alembic
 import alembic.command
 import alembic.config
+import intel_extension_for_pytorch as ipex
 import schedule
+import torch
 import uvicorn
 import yaml
 from fastapi import FastAPI
@@ -19,7 +21,6 @@ from azarrot.agents.chat_task_executor import AgentChatTaskExecutor
 from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager
 from azarrot.backends.backend_base import BaseBackend
-from azarrot.backends.ipex_llm_backend import IPEXLLMBackend
 from azarrot.backends.openvino_backend import OpenVINOBackend
 from azarrot.backends.pytorch_backend import PyTorchBackend
 from azarrot.backends.sentences_transformers_backend import SentenceTransformersBackend
@@ -268,7 +269,6 @@ def create_server(
         backends = [b if isinstance(b, BaseBackend) else b(config) for b in enable_backends]
     else:
         backends = [
-            IPEXLLMBackend(config),
             OpenVINOBackend(config),
             PyTorchBackend(config),
             SentenceTransformersBackend(config),
@@ -340,6 +340,9 @@ def create_server(
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
+
+    log.info("IPEX version: %s", ipex.ipex_version)
+    log.info("XPU count: %d", torch.xpu.device_count())
 
     server = create_server()
     server.start()

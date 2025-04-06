@@ -10,11 +10,9 @@ import yaml
 from optimum.intel.openvino.configuration import OVQuantizationMethod
 
 from azarrot.backends.backend_base import BaseBackend
-from azarrot.backends.ipex_llm_backend import BACKEND_ID_IPEX_LLM
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
 from azarrot.common_data import (
-    IPEXLLMModelConfig,
     Model,
     ModelPreset,
     OpenVINOModelConfig,
@@ -134,28 +132,16 @@ class ModelManager:
 
             transformers = None
 
-            if model_backend in (BACKEND_ID_OPENVINO, BACKEND_ID_IPEX_LLM, BACKEND_ID_PYTORCH):
+            if model_backend in (BACKEND_ID_OPENVINO, BACKEND_ID_PYTORCH):
                 transformers_config = model_info.get("transformers", {})
 
-                transformers = TransformersModelConfig(
-                    assistant_model=transformers_config.get("assistant_model")
-                )
+                transformers = TransformersModelConfig(assistant_model=transformers_config.get("assistant_model"))
 
             openvino = None
 
             if model_backend == BACKEND_ID_OPENVINO:
                 openvino_config = model_info.get("openvino", {})
                 openvino = self.__parse_openvino_model_config(openvino_config)
-
-            ipex_llm = None
-
-            if model_backend == BACKEND_ID_IPEX_LLM:
-                ipex_llm_config = model_info.get("ipex_llm", {})
-
-                ipex_llm = IPEXLLMModelConfig(
-                    use_cache=ipex_llm_config.get("use_cache", False),
-                    quantization_mode=ipex_llm_config.get("quantization_mode", "default"),
-                )
 
             pytorch = None
 
@@ -196,7 +182,6 @@ class ModelManager:
                 is_for_raw_completion=model_info.get("is_for_raw_completion", False),
                 transformers=transformers,
                 openvino=openvino,
-                ipex_llm=ipex_llm,
                 pytorch=pytorch,
                 info=None,
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
@@ -276,7 +261,6 @@ class ModelManager:
             is_for_raw_completion=is_for_raw_completion,
             transformers=None,
             openvino=None,
-            ipex_llm=None,
             pytorch=None,
             info=None,
             create_time=datetime.now(),

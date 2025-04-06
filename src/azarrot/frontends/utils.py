@@ -167,7 +167,7 @@ def to_openai_assistant_tools(
         else:
             if tool_params_dict is None:
                 raise ValueError(
-                    f"Agent {agent_id} enabled function tool {agent_tool.tool_name}, " "but it has no preset parameter!"
+                    f"Agent {agent_id} enabled function tool {agent_tool.tool_name}, but it has no preset parameter!"
                 )
 
             function_params = dataclass_wizard.fromdict(LocalizedToolDescription, tool_params_dict)

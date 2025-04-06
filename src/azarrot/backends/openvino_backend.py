@@ -3,7 +3,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from types import MethodType
-from typing import Any, cast
+from typing import Any, cast, override
 
 import openvino
 import psutil
@@ -15,7 +15,6 @@ from transformers import (
     PreTrainedTokenizer,
     pipeline,
 )
-from typing_extensions import override
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import (
@@ -60,7 +59,7 @@ class ThreadLocalAwareInferRequest:
         req = self.__get_request()
         req.wait()
 
-    def get_tensor(self, *args, **kwargs) -> openvino.runtime.Tensor:  # type: ignore[no-untyped-def]    # noqa: ANN002, ANN003
+    def get_tensor(self, *args, **kwargs) -> openvino.Tensor:  # type: ignore[no-untyped-def]    # noqa: ANN002, ANN003
         req = self.__get_request()
         return req.get_tensor(*args, **kwargs)
 
@@ -75,7 +74,7 @@ def patched_compile(self) -> None:  # type: ignore[no-untyped-def]    # noqa: AN
     if self.request is None:
         super(type(self), self).compile()  # type: ignore[unused-ignore]
 
-        if isinstance(self.request, openvino.runtime.InferRequest):
+        if isinstance(self.request, openvino.InferRequest):
             self.compiled_model = self.request.get_compiled_model()
         else:
             self.compiled_model = self.request
@@ -136,7 +135,7 @@ class OpenVINOBackend(TransformersBasedBackend):
         return "CPU"
 
     def __patch_model(self, original_model: Any) -> Any:
-        cast(Any, original_model).compiled_model = None
+        cast("Any", original_model).compiled_model = None
         original_model.compile = MethodType(patched_compile, original_model)
         return original_model
 
@@ -148,7 +147,7 @@ class OpenVINOBackend(TransformersBasedBackend):
         return self._server_config.models_dir / "openvino_exports" / f"{model.id}-{model.revision}"
 
     @override
-    def _customize_model_and_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
         model_path = model.path.absolute()
         openvino_model_file_path = model_path / Path("openvino_model.xml")
         need_export = not openvino_model_file_path.exists()

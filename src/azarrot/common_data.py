@@ -117,7 +117,6 @@ class Model:
     transformers: TransformersModelConfig | None
 
     openvino: OpenVINOModelConfig | None
-    ipex_llm: IPEXLLMModelConfig | None
     pytorch: PyTorchModelConfig | None
 
     # The following properties are computed at runtime

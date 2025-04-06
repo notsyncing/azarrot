@@ -27,7 +27,7 @@ def sentence_transformers_server() -> Generator[Server, Any, Any]:
 
     server = create_server(
         config=config,
-        enable_backends=[SentenceTransformersBackend],
+        enable_backends=[SentenceTransformersBackend(config, force_use_device="cpu")],
         enable_schedule_thread=False,
     )
 

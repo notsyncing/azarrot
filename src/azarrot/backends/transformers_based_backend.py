@@ -4,11 +4,10 @@ from abc import ABC
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, cast, override
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
-from typing_extensions import override
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
@@ -43,7 +42,7 @@ TRANSFORMERS_TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
 }
 
-MODEL_PYTORCH_QUIRKS = {"internvl2": {"use_cache": False}}
+MODEL_PYTORCH_QUIRKS = {"internvl2": {"use_cache": None}}
 
 
 @dataclass
@@ -104,7 +103,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _get_model_class(self, task: str) -> Any | None:
         return TRANSFORMERS_TASK_MODEL_MAP.get(task)
 
-    def _customize_model_and_kwargs(self, model: Model, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
         pass
 
     def _customize_loaded_model(
@@ -136,11 +135,11 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
-        model_kwargs: dict[str, Any] = {
-            "use_cache": True
-        }
+        model_config = AutoConfig.from_pretrained(model.path.absolute(), trust_remote_code=True)
 
-        self._customize_model_and_kwargs(model, model_kwargs)
+        model_kwargs: dict[str, Any] = {"use_cache": True}
+
+        self._customize_model_and_kwargs(model, model_config, model_kwargs)
 
         model_path = model.path.absolute()
 
@@ -150,6 +149,10 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         model_kwargs_quirks = MODEL_PYTORCH_QUIRKS.get(generation_variant, {})
         model_kwargs.update(model_kwargs_quirks)
+
+        for k, v in dict(model_kwargs).items():
+            if v is None:
+                del model_kwargs[k]
 
         transformers_model: Any = model_class.from_pretrained(
             model_path,
@@ -210,7 +213,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
                 to_transformers_chat_messages(request.messages), return_tensors="pt", return_dict=True
             )
 
-            result = cast(dict[str, Any], result)
+            result = cast("dict[str, Any]", result)
         else:
             first_user_msg = self.__get_first_text_message_with_role("user", request.messages)
 
@@ -225,7 +228,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         inputs: Any = result["input_ids"]
         attention_mask = result.get("attention_mask")
 
-        gen_stats.prompt_tokens = len(cast(torch.Tensor, inputs[0]))
+        gen_stats.prompt_tokens = len(cast("torch.Tensor", inputs[0]))
 
         generation_kwargs = common_generation_kwargs.copy()
 
@@ -283,7 +286,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
             loaded_model.model, loaded_model.tokenizer, request.messages
         )
 
-        text_input_length = len(cast(torch.Tensor, inputs[0]))
+        text_input_length = len(cast("torch.Tensor", inputs[0]))
         image_input_length = len(pixel_values) if pixel_values is not None else 0
         gen_stats.prompt_tokens = text_input_length + image_input_length
 
@@ -331,7 +334,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.data.generation_variant)
 
         streamer = CustomTextIteratorStreamer(
-            cast(AutoTokenizer, loaded_model.tokenizer),
+            cast("AutoTokenizer", loaded_model.tokenizer),
             gen_stats,
             skip_prompt=True,
             timeout=self._server_config.single_token_generation_timeout / 1000,

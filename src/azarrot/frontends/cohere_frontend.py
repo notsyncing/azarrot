@@ -1,12 +1,11 @@
 import logging
 from dataclasses import dataclass
 from logging import Logger
-from typing import Any
+from typing import Any, override
 from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel
-from typing_extensions import override
 
 from azarrot.common_data import Model, ReranksGenerationRequest
 from azarrot.frontends.backend_pipe import BackendPipe

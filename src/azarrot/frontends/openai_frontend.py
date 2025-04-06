@@ -3,11 +3,10 @@ import logging
 import uuid
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any
+from typing import Any, override
 
 from fastapi import APIRouter, FastAPI
 from starlette.responses import StreamingResponse
-from typing_extensions import override
 
 from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager

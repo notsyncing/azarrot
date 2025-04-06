@@ -1,8 +1,7 @@
 import logging
-from typing import Any
+from typing import Any, override
 
 from openai import OpenAI
-from typing_extensions import override
 
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.models.model_manager import DEFAULT_MODEL_PRESETS

@@ -4,13 +4,12 @@ from datetime import datetime
 from logging import Logger
 from queue import Empty, Queue
 from threading import Thread
-from typing import Any
+from typing import Any, override
 from uuid import UUID, uuid4
 
 import dataclass_wizard
 from sqlalchemy import Engine, and_, update
 from sqlalchemy.orm import Session
-from typing_extensions import override
 
 from azarrot.agents.common_data import (
     AgentChatTaskAutoThreadHistoryStrategyParams,

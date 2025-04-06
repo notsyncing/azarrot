@@ -1,7 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
-
-from typing_extensions import override
+from typing import Any, override
 
 from azarrot.tools.internal import INTERNAL_TOOL_RAG_SEARCH
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
