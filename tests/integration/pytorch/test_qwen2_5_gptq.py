@@ -1,9 +1,13 @@
+import logging
+
 from openai import OpenAI
 
 from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
 from azarrot.server import Server
 
 QWEN2_CHAT_MODEL = "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4"
+
+log = logging.getLogger(__name__)
 
 
 def test_qwen2_5_gptq_hello(pytorch_server: Server) -> None:
@@ -24,4 +28,5 @@ def test_qwen2_5_gptq_hello(pytorch_server: Server) -> None:
     result = completion.choices[0].message
     assert result is not None
     assert result.content is not None
+    log.info("Output: %s", result.content)
     assert result.content.find("你好！") >= 0
