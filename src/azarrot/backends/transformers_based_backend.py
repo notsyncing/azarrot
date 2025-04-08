@@ -156,6 +156,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         transformers_model: Any = model_class.from_pretrained(
             model_path,
+            config=model_config,
             trust_remote_code=True,
             **model_kwargs,
         ).to(device)
