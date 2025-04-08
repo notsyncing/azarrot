@@ -1,0 +1,17 @@
+id: Qwen2.5-Coder-1.5B-Instruct
+# backend: pytorch
+backend: openvino
+path: huggingface://Qwen/Qwen2.5-Coder-1.5B-Instruct-GPTQ-Int4
+task: text-generation
+# task: text-generation-with-past
+
+# pytorch:
+#   compile: True
+#   compile_backend: inductor
+
+# openvino:
+#   quantization_configs:
+#     bits: 4
+#     sym: False
+#     all_layers: True
+

@@ -1,4 +1,0 @@
-id: CodeQwen1.5-7B-ipex-llm
-backend: ipex-llm
-path: huggingface://Qwen/CodeQwen1.5-7B
-task: text-generation

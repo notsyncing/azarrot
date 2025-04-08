@@ -6,7 +6,7 @@
 Welcome to Azarrot's documentation!
 ===================================
 
-**Azarrot** is an OpenAI compatible LLM inference server, focusing on OpenVINO™ and IPEX-LLM usage.
+**Azarrot** is an OpenAI compatible LLM inference server, focusing on OpenVINO™ usage.
 
 The name `azarrot` is combined from `azalea` and `parrot`.
 

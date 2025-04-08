@@ -2,18 +2,18 @@
 
 The following are change log of each versions.
 
-## 0.4.0 (2024-12-??)
+## 0.4.0 (2025-04-??)
 
+- Removed IPEX-LLM backend
+- Update OpenVINO to 2025.0.0
 - Support 🤗Transformers assisted generation.
 - [BREAKING] All OpenAI endpoints are prefixed with `/openai/`
 - Support Jina and Cohere Rerank API
 - Add sentence-transformers backend
-- Update transformers to 4.46.3
+- Update transformers to 4.49.0
+- Add PyTorch backend
 - [WIP] Support assistant API
-- Support loading GPTQ model on IPEX-LLM backend
-- Update OpenVINO to 2024.6.0
-- Update IPEX-LLM to 2.1.0b20241220 (with torch 2.3.110+xpu)
-- Support specifying quantization mode in ipex-llm backend
+- Support loading GPTQ model with `gptqmodel`
 - Support vector store API
 - Support uploads API
 - Support files API

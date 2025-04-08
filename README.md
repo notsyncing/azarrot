@@ -4,16 +4,6 @@
 
 The name `azarrot` is combined from `azalea` and `parrot`.
 
-## Motivation
-
-NVIDIA sucks on Linux, and AMD does not like people running ROCm on their consumer cards (sadly my RX 5500 XT is not supported).
-Meanwhile, Intel consumer cards are cheap, and have good fundamental software support, Intel is also actively maintaining and upstreaming many AI libraries.
-
-So I bought an A770, but all the existing inference servers are lacking on Intel cards: some lacks quantization, some only support a few models, some does not run at all... and they are all lacking on OpenAI API features.
-
-Finally, I decided to create my own inference server, focusing on Intel cards, and targeting full OpenAI API features.
-Let's see how far could I go.
-
 ## Changelog
 
 See [CHANGELOG](./CHANGELOG.md) for more details.
@@ -28,13 +18,13 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 
 ### Backend-specific features
 
-|Feature|Subfeature|IPEX-LLM|OpenVINO|PyTorch|SentenceTransformers|Remarks|
+|Feature|Subfeature|OpenVINO|PyTorch|SentenceTransformers|Remarks|
 |-------|----------|--------|--------|-------|--------------------|-------|
-|Chat|Basic chat completion|☑️|☑️|☑️|❌|Text generation works, some advanced parameters (like `frequency_penalty`, `n`, `logprobs`, etc) not implemented yet|
-|Chat|Seeding|✅|✅|✅|❌||
-|Chat|Streaming response|✅|✅|✅|❌||
-|Chat|Image input|✅|❌|✅|❌|InternVL2.5 supported|
-|Embeddings|Create embeddings|❌|☑️|❌|✅|`encoding_format` not implemented yet|
+|Chat|Basic chat completion|☑️|☑️|❌|Text generation works, some advanced parameters (like `frequency_penalty`, `n`, `logprobs`, etc) not implemented yet|
+|Chat|Seeding|✅|✅|❌||
+|Chat|Streaming response|✅|✅|❌||
+|Chat|Image input|❌|✅|❌|InternVL2.5 supported|
+|Embeddings|Create embeddings|☑️|❌|✅|`encoding_format` not implemented yet|
 
 ### Backend-agnostic features
 
@@ -58,17 +48,17 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 - Auto-batching on OpenAI Chat API
 - Auto model downloading from huggingface
 - Jina and Cohere(v2) Rerank API support on SentenceTransformers backend
-- Assisted generation on 🤗Transformers-based backends (IPEX-LLM, OpenVINO, PyTorch)
+- Assisted generation on 🤗Transformers-based backends (OpenVINO, PyTorch)
 
 ## Tested models
 
 |Model|Repository|Device|Backend|Remarks|
 |-----|----------|------|-------|-------|
-|CodeQwen1.5-7B|https://huggingface.co/Qwen/CodeQwen1.5-7B|Intel GPU|IPEX-LLM, OpenVINO||
-|InternVL2.5-8B|https://huggingface.co/OpenGVLab/InternVL2_5-8B|Intel GPU|IPEX-LLM|Image input supported|
+|CodeQwen1.5-7B|https://huggingface.co/Qwen/CodeQwen1.5-7B|Intel GPU|PyTorch, OpenVINO||
+|InternVL2.5-8B|https://huggingface.co/OpenGVLab/InternVL2_5-8B|Intel GPU|PyTorch|Image input supported|
 |bge-m3|https://huggingface.co/BAAI/bge-m3|Intel GPU, CPU|OpenVINO, SentenceTransformers|Accuracy may decrease if quantized to int8|
-|Qwen2-7B-Instruct|https://huggingface.co/Qwen/Qwen2-7B-Instruct|Intel GPU|IPEX-LLM|Tool calling supported|
-|Qwen2.5-Coder-7B-Instruct|https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct|Intel GPU|IPEX-LLM||
+|Qwen2-7B-Instruct|https://huggingface.co/Qwen/Qwen2-7B-Instruct|Intel GPU|PyTorch|Tool calling supported|
+|Qwen2.5-Coder-7B-Instruct|https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct|Intel GPU|PyTorch||
 
 Other untested models may work or not.
 
@@ -132,7 +122,7 @@ mkdir models
 And copy an example model file into the models directory:
 
 ```bash
-cp <SOURCE_ROOT>/examples/CodeQwen1.5-7B-ipex-llm.model.yml models/
+cp <SOURCE_ROOT>/examples/Qwen2.5-Coder-1.5B-Instruct.model.yml models/
 ```
 
 Azarrot will load all `.model.yml` files in this directory.
@@ -140,7 +130,6 @@ Azarrot will load all `.model.yml` files in this directory.
 Now we can start the server:
 
 ```bash
-source /opt/intel/oneapi/setvars.sh
 python -m azarrot
 ```
 

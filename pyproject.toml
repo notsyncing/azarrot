@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "azarrot"
-description = "An OpenAI compatible server, focusing on OpenVINO and IPEX-LLM usage."
+description = "An OpenAI compatible server, focusing on OpenVINO usage."
 license = {file = "LICENSE"}
 authors = [
   {name = "notsyncing", email = "song.fc@gmail.com"},

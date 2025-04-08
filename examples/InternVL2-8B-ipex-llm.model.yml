@@ -1,4 +1,0 @@
-id: InternVL2-8B-ipex-llm
-backend: ipex-llm
-path: ./InternVL2-8B
-task: text-generation
