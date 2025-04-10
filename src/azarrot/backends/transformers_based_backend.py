@@ -42,7 +42,7 @@ TRANSFORMERS_TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
 }
 
-MODEL_PYTORCH_QUIRKS = {"internvl2": {"use_cache": None}}
+MODEL_PYTORCH_QUIRKS = {}
 
 
 @dataclass
@@ -137,7 +137,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         model_config = AutoConfig.from_pretrained(model.path.absolute(), trust_remote_code=True)
 
-        model_kwargs: dict[str, Any] = {"use_cache": True}
+        model_kwargs: dict[str, Any] = {}
 
         self._customize_model_and_kwargs(model, model_config, model_kwargs)
 
