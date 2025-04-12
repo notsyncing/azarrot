@@ -2,8 +2,8 @@ id: Qwen2.5-Coder-7B-Instruct
 # backend: pytorch
 backend: openvino
 path: huggingface://Qwen/Qwen2.5-Coder-7B-Instruct-GPTQ-Int4
-task: text-generation
-# task: text-generation-with-past
+# task: text-generation
+task: text-generation-with-past
 
 # pytorch:
 #   compile: True

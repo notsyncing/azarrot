@@ -40,6 +40,7 @@ from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
 TRANSFORMERS_TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
+    "text-generation-with-past": AutoModelForCausalLM,
 }
 
 MODEL_PYTORCH_QUIRKS = {}
