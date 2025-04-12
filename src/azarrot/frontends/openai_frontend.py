@@ -5,6 +5,7 @@ from collections.abc import Generator
 from datetime import datetime
 from typing import Any, override
 
+import dataclass_wizard
 from fastapi import APIRouter, FastAPI
 from starlette.responses import StreamingResponse
 
@@ -292,7 +293,7 @@ class OpenAIFrontend(Frontend):
             message = {"role": "tool", "content": content.result, "tool_call_id": content.to_id}
         elif isinstance(content, ToolCallRequestMessageContents):
             tool_calls = to_openai_tool_calls(content)
-            message = {"role": "assistant", "tool_calls": tool_calls}
+            message = {"role": "assistant", "tool_calls": [dataclass_wizard.asdict(tc) for tc in tool_calls]}
 
             is_delta = False
         else:
