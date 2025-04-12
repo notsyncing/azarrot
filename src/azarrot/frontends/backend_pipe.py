@@ -1,6 +1,6 @@
 import json
 import logging
-from copy import copy
+from copy import copy, deepcopy
 from typing import Any, cast
 
 from azarrot.backends.backend_base import BaseBackend
@@ -124,7 +124,23 @@ class BackendPipe:
 
             messages.append(GenerationMessage("system", [TextGenerationMessageContent(system_prompt)]))
         else:
-            messages.append(request.messages[0])
+            system_msg = deepcopy(request.messages[0])
+
+            if request.tools_info is not None:
+                if not isinstance(system_msg.contents[0], TextGenerationMessageContent):
+                    raise ValueError(f"Invalid system prompt message type {system_msg.contents[0]}")
+
+                runtime_configs = ChatTemplateRuntimeConfigs(enable_parallel_tool_calling=request.parallel_tool_calling)
+
+                system_msg.contents[0].text += self._chat_template_manager.get_system_prompt(
+                    generation_variant=model.generation_variant,
+                    model_preset=model.preset,
+                    runtime_configs=runtime_configs,
+                    tools_info=request.tools_info,
+                    base_sys_prompt=""
+                )
+
+            messages.append(system_msg)
             next_index = 1
 
         tool_call_responses: list[ToolCallResponseMessageContent] = []
