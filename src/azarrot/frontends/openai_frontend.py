@@ -294,8 +294,6 @@ class OpenAIFrontend(Frontend):
         elif isinstance(content, ToolCallRequestMessageContents):
             tool_calls = to_openai_tool_calls(content)
             message = {"role": "assistant", "tool_calls": [dataclass_wizard.asdict(tc) for tc in tool_calls]}
-
-            is_delta = False
         else:
             message = {}
 
