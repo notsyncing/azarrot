@@ -306,7 +306,7 @@ requires-dist = [
     { name = "myst-parser", marker = "extra == 'doc'" },
     { name = "oneccl-bind-pt", specifier = "==2.6.0+xpu" },
     { name = "openai", marker = "extra == 'test'", specifier = "==1.58.1" },
-    { name = "openvino", specifier = "==2025.0" },
+    { name = "openvino", specifier = "==2025.1" },
     { name = "optimum", extras = ["openvino"], specifier = "==1.24.0" },
     { name = "optimum-intel", git = "https://github.com/huggingface/optimum-intel.git" },
     { name = "psutil", specifier = "==6.1.1" },
@@ -2188,7 +2188,7 @@ wheels = [
 
 [[package]]
 name = "openvino"
-version = "2025.0.0"
+version = "2025.1.0"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
     { name = "numpy" },
@@ -2196,11 +2196,11 @@ dependencies = [
     { name = "packaging" },
 ]
 wheels = [
-    { url = "https://mirrors.aliyun.com/pypi/packages/1e/f6/7b6876cab3936aa6f78e08e767cfa0ded361193e4c36814982953df7f7c8/openvino-2025.0.0-17942-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:2820748165827827a340bce5283d6c296c08678194be6b5534b839190e4798a3" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/35/16/84612c4ef954737931381e747d9d722bebacc3b91394d9e93bcdfd9ba1c2/openvino-2025.0.0-17942-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:0df613f30632289102e67fad27bce21f4804e76c94d96244ba04d78dd3e1f0f7" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/0e/e5/a6fd238c7195c30c5b2ea9dd3d3476731daecf8863772a066a6963b96de3/openvino-2025.0.0-17942-cp312-cp312-manylinux2014_x86_64.whl", hash = "sha256:0e5557c9fe0ab6f90e2099ff787c4f8efcfa89c770ccf92dac73664404ca551a" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/84/3c/4fbb473439bca6fc5a0493c704d1ad0459044fca1d18dfafa0a1ba138c55/openvino-2025.0.0-17942-cp312-cp312-manylinux_2_31_aarch64.whl", hash = "sha256:13be6158fdc11f249d9f0ccd799746e785f38a0a28c38694217165b2972801f1" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/88/28/4f8d9501370cdec0739c8683bdf3cb43a6f4d2fb91db2564647fe24945d5/openvino-2025.0.0-17942-cp312-cp312-win_amd64.whl", hash = "sha256:625a7d548a5200bd37f57b6e93a2bb50851b9e91ec36cf9a3122c6985ed26f01" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/97/35/12834eae67d9173d2247fc6f8c0a695b7a02e7a053e9cddac4200cca77a8/openvino-2025.1.0-18503-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:e3ee900e0890e295ddb236edd00631b4afc1e6bc76d94fd818319ae73853caa0" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/a8/5f/ba478cabff69b3fc12ae50c0de1ff7d2b7b1b31fd6c1a4d06d97fb00441c/openvino-2025.1.0-18503-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:30e5585775671676ac6eb37ef0738ac70c4ff3bfd983175ff01dd7dcff3bc7c6" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/aa/c4/9c0d03c9e65ced1d60fe003c99a795aee044822cdfe71ee18cc62daf2279/openvino-2025.1.0-18503-cp312-cp312-manylinux2014_x86_64.whl", hash = "sha256:0ef5e48d565d78885fc98eb2cf59904cc8e6477102fa68d7ff0d6f8ba89eb5a8" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/e4/d8/3090d124751c20733d2a3181d050c629fb06dc4dc939d7fd2092bb3a31e2/openvino-2025.1.0-18503-cp312-cp312-manylinux_2_31_aarch64.whl", hash = "sha256:c9a1350d494c612495c58e6ef9f4935d4dba03d0e89911cd9d2add6b9da17485" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/d1/8c/49f8ce231983ee47c9aa38bb660ee4161f6cd606c4c4aa7279285e4d48d9/openvino-2025.1.0-18503-cp312-cp312-win_amd64.whl", hash = "sha256:fd19a0660e04228f8710e832b2d8cbc2134325f553b9c265e212032241596ace" },
 ]
 
 [[package]]
@@ -2214,17 +2214,17 @@ wheels = [
 
 [[package]]
 name = "openvino-tokenizers"
-version = "2025.0.0.0"
+version = "2025.1.0.0"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
     { name = "openvino" },
 ]
 wheels = [
-    { url = "https://mirrors.aliyun.com/pypi/packages/4c/21/b979c16ef29b54d39c955710e1be4698af4757ae6a4e48240c547fd8ddf7/openvino_tokenizers-2025.0.0.0-py3-none-macosx_10_15_x86_64.whl", hash = "sha256:0d3f05497d98ca5388e6b7cdb8052cffdd26e9ca3eff466760a53d8bd18889e5" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/8d/45/2062a65af84f744a73dad395477a6e28491500455c310b7ce9fbe182615b/openvino_tokenizers-2025.0.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:dcafb22d02fdf458725f072a46a72042389989815aff4efe78b3afb29ab9b8f4" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/ca/f6/e610a66efff58e408256cbe312ad8b7c6e64ea43541d301c51804c87ed70/openvino_tokenizers-2025.0.0.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:1d26bd9fec811d6f6804dc30dadbd81d30d3e8f816a265349c43c35436e273a9" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/38/8e/5bcec90c032b483f4e4a644509a553a5414f38fa870f7c7d018fb6e2ab15/openvino_tokenizers-2025.0.0.0-py3-none-manylinux_2_31_aarch64.whl", hash = "sha256:34fa854ca2460db84df5781dc8b16172931496ab572305fc8ddb7b8895ee68eb" },
-    { url = "https://mirrors.aliyun.com/pypi/packages/17/d2/8cf157ffc4e4647c28e3212806e74921e2bf680a62d9f97796dc7f2b5a87/openvino_tokenizers-2025.0.0.0-py3-none-win_amd64.whl", hash = "sha256:360e7d94b7603f9987ddd76c5b59388d5af974f09f7a22d8f3f5bb2d6eb1891d" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/43/8a/ce09e7f17564e732f8e4e61014663bb6e437a0439f5148e3afa819377f4d/openvino_tokenizers-2025.1.0.0-py3-none-macosx_10_15_x86_64.whl", hash = "sha256:9fa463cbc9727e45af5ab9388dece8ac2a9cabec901aea43588758f730d0a52b" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/ed/c8/d9fceff6018dde51f8120e4c402b75d28a93556212690388be9822ad7616/openvino_tokenizers-2025.1.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a0407175e847a791d9659b0c91edb6697652221c1e29c0095807d5fe4f3952f0" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/a1/16/bd3201b10c9bdd7f1bd11ddc131a925ae82cf8b7bd15cefed0b910f2fde7/openvino_tokenizers-2025.1.0.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:0bbbaf9abaa203e7d00cf6aec331464c65f46a1d7f3f101082d41a54b6159f4d" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/15/5b/dd569d72c5d4b36ffbcdefe8c392c5f03721640ad2058d074b6153a9a8ff/openvino_tokenizers-2025.1.0.0-py3-none-manylinux_2_31_aarch64.whl", hash = "sha256:5faa49e0616aee7ae01fef610d70f2d3077e4b6d74fc688c642af887df061bb8" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/bf/36/e1cec57663e4069ffdc4940d53c2f0c3a703bd95ed84db76fbce6c0f0702/openvino_tokenizers-2025.1.0.0-py3-none-win_amd64.whl", hash = "sha256:efbf5da395678e7f9fe24ed327f9ef7f0f331ae71e5eee811c7e3df964ff4edf" },
 ]
 
 [[package]]

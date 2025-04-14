@@ -90,12 +90,18 @@ class OpenVINOBackend(TransformersBasedBackend):
     _cpu_phy_core_count: int = 0
 
     def __init__(self, config: ServerConfig, auto_use_igpu: bool = True) -> None:
+        self.__patch_openvino()
+
         self._auto_use_igpu = auto_use_igpu
 
         super().__init__(config)
 
         self._cpu_phy_core_count = psutil.cpu_count(logical=False) or 0
         self._log.info("CPU has %d physical cores.", self._cpu_phy_core_count)
+
+    def __patch_openvino(self) -> None:
+        from openvino.frontend.pytorch import gptq as ov_pt_gptq
+        ov_pt_gptq.supported_quant_types.append("ipex")
 
     @override
     def id(self) -> str:
