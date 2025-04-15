@@ -1,10 +1,12 @@
 import logging
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from types import MethodType
+from types import MethodType, ModuleType
 from typing import Any, cast, override
 
+import gptqmodel
 import openvino
 import psutil
 import torch
@@ -88,6 +90,7 @@ class OpenVINOBackend(TransformersBasedBackend):
     _default_device: str = "CPU"
     _auto_use_igpu: bool = True
     _cpu_phy_core_count: int = 0
+    _auto_gptq_faked: bool = False
 
     def __init__(self, config: ServerConfig, auto_use_igpu: bool = True) -> None:
         self.__patch_openvino()
@@ -153,6 +156,21 @@ class OpenVINOBackend(TransformersBasedBackend):
     def __make_openvino_export_path(self, model: Model) -> Path:
         return self._server_config.models_dir / "openvino_exports" / f"{model.id}-{model.revision}"
 
+    def __workaround_optimum_intel_gptqmodel_export_begin(self) -> None:
+        if "auto_gptq" in sys.modules:
+            return
+
+        fake_auto_gptq = ModuleType("auto_gptq")
+        cast("Any", fake_auto_gptq).exllama_set_max_input_length = gptqmodel.exllama_set_max_input_length
+        sys.modules["auto_gptq"] = fake_auto_gptq
+        self._auto_gptq_faked = True
+
+    def __workaround_optimum_intel_gptqmodel_export_end(self) -> None:
+        if not self._auto_gptq_faked:
+            return
+
+        del sys.modules["auto_gptq"]
+
     @override
     def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
         model_path = model.path.absolute()
@@ -207,6 +225,9 @@ class OpenVINOBackend(TransformersBasedBackend):
 
         model_kwargs["use_cache"] = model.task == "text-generation-with-past"
 
+        if need_export:
+            self.__workaround_optimum_intel_gptqmodel_export_begin()
+
     @override
     def _customize_loaded_model(
         self,
@@ -216,6 +237,8 @@ class OpenVINOBackend(TransformersBasedBackend):
         model_kwargs: dict[str, Any],
     ) -> PreTrainedModel:
         if model_kwargs.get("export", False):
+            self.__workaround_optimum_intel_gptqmodel_export_end()
+
             ov_model_export_path = self.__make_openvino_export_path(model)
             loaded_model.save_pretrained(ov_model_export_path)
             loaded_tokenizer.save_pretrained(ov_model_export_path)
