@@ -146,7 +146,7 @@ class OpenVINOBackend(TransformersBasedBackend):
     def __patch_model(self, original_model: Any) -> Any:
         cast("Any", original_model).compiled_model = None
         original_model.compile = MethodType(patched_compile, original_model)
-        original_model._is_stateful = original_model.stateful   # noqa: SLF001
+
         return original_model
 
     @override
