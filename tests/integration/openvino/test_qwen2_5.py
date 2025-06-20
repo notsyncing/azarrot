@@ -9,7 +9,7 @@ from azarrot.server import Server
 from azarrot.tools import GLOBAL_TOOL_MANAGER
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
-QWEN2_CHAT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+QWEN2_CHAT_MODEL = "Qwen/Qwen2.5-3B-Instruct-AWQ"
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def test_qwen2_5_hello(openvino_server: Server) -> None:
     assert result is not None
     assert result.content is not None
     log.info("Output: %s", result.content)
-    assert result.content.find("您好") >= 0
+    assert result.content.find("你好") >= 0 or result.content.find("您好") >= 0
 
 
 def test_qwen2_5_conversation(openvino_server: Server) -> None:

@@ -8,8 +8,7 @@ from azarrot.common_data import (
     ToolCallRequestMessageContent,
     ToolCallResponseMessageContent,
 )
-from azarrot.models.supports.qwen2_chat_support import QWEN2_MODEL_TOOL_CALL_CONFIG
-from azarrot.models.supports.qwen3_chat_support import QWEN3_MODEL_TOOL_CALL_CONFIG
+from azarrot.models.supports.default_chat_support import DEFAULT_MODEL_TOOL_CALL_CONFIG
 from azarrot.tools.tool_manager import ToolManager
 
 DEFAULT_LOCALE = "zh-cn"
@@ -23,8 +22,6 @@ BASE_SYSTEM_PROMPTS = {
 }
 
 MODEL_TOOL_CALL_CONFIGS = {
-    "qwen2": QWEN2_MODEL_TOOL_CALL_CONFIG,
-    "qwen3": QWEN3_MODEL_TOOL_CALL_CONFIG,
 }
 
 
@@ -49,7 +46,7 @@ class ChatTemplateManager:
         locale: str,
         runtime_configs: ChatTemplateRuntimeConfigs,
     ) -> str | None:
-        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
+        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG)
 
         if config is None:
             raise ValueError("No tool calling config found for %s", generation_variant)
@@ -132,7 +129,7 @@ class ChatTemplateManager:
     def format_tool_calling_request(
         self, tool_calling_requests: list[ToolCallRequestMessageContent], generation_variant: str
     ) -> str | None:
-        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
+        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG)
 
         if config is None:
             raise ValueError("No tool calling config found for %s", generation_variant)
@@ -148,7 +145,7 @@ class ChatTemplateManager:
         if not model_preset.supports_tool_calling:
             return False, None
 
-        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
+        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG)
 
         if config is None:
             raise ValueError("No tool calling config found for %s", generation_variant)
@@ -166,7 +163,7 @@ class ChatTemplateManager:
     def format_tool_calling_response(
         self, tool_calling_responses: list[ToolCallResponseMessageContent], generation_variant: str
     ) -> str:
-        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
+        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG)
 
         if config is None:
             raise ValueError("No tool calling config found for %s", generation_variant)
