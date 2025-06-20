@@ -1,0 +1,18 @@
+id: Qwen3-8B
+# backend: pytorch
+backend: openvino
+path: huggingface://Qwen/Qwen3-8B-AWQ
+# task: text-generation
+task: text-generation-with-past
+is_reasoning_model: True
+
+# pytorch:
+#   compile: True
+#   compile_backend: inductor
+
+# openvino:
+#   quantization_configs:
+#     bits: 4
+#     sym: False
+#     all_layers: True
+

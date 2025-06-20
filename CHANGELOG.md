@@ -2,15 +2,17 @@
 
 The following are change log of each versions.
 
-## 0.4.0 (2025-04-??)
+## 0.4.0 (2025-06-??)
 
+- Support Qwen3 reasoning
+- Support loading AWQ model with OpenVINO
 - Removed IPEX-LLM backend
-- Update OpenVINO to 2025.0.0
+- Update OpenVINO to 2025.2.0
 - Support 🤗Transformers assisted generation.
 - [BREAKING] All OpenAI endpoints are prefixed with `/openai/`
 - Support Jina and Cohere Rerank API
 - Add sentence-transformers backend
-- Update transformers to 4.49.0
+- Update transformers to 4.52.4
 - Add PyTorch backend
 - [WIP] Support assistant API
 - Support loading GPTQ model with `gptqmodel`

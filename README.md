@@ -19,7 +19,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 ### Backend-specific features
 
 |Feature|Subfeature|OpenVINO|PyTorch|SentenceTransformers|Remarks|
-|-------|----------|--------|--------|-------|--------------------|-------|
+|-------|----------|--------|--------|--------------------|-------|
 |Chat|Basic chat completion|☑️|☑️|❌|Text generation works, some advanced parameters (like `frequency_penalty`, `n`, `logprobs`, etc) not implemented yet|
 |Chat|Seeding|✅|✅|❌||
 |Chat|Streaming response|✅|✅|❌||
@@ -31,7 +31,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Feature|Subfeature|Supported|Remarks|
 |-------|----------|---------|-------|
 |Models|List models|✅||
-|Chat|Tool calling|✅|Qwen2 supported|
+|Chat|Tool calling|✅|`<tool_call>`  flavors supported|
 |Files|Upload, list, retrieve, delete, retrieve content|✅||
 |Uploads|Create, upload, complete, cancel|✅||
 |Assistants (v2)|Assistants|☑️|`response_format` not implemented yet|
@@ -59,6 +59,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |bge-m3|https://huggingface.co/BAAI/bge-m3|Intel GPU, CPU|OpenVINO, SentenceTransformers|Accuracy may decrease if quantized to int8|
 |Qwen2-7B-Instruct|https://huggingface.co/Qwen/Qwen2-7B-Instruct|Intel GPU|PyTorch|Tool calling supported|
 |Qwen2.5-Coder-7B-Instruct|https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct|Intel GPU|PyTorch||
+|Qwen3-3B|https://huggingface.co/Qwen/Qwen3-1.7B|Intel GPU, CPU|OpenVINO|Tool calling supported|
 
 Other untested models may work or not.
 
@@ -71,15 +72,13 @@ Azarrot supports CPUs and Intel GPUs.
 Tested GPUs:
 
 - Intel A770 16GB
-- Intel Xe 96EU (i7 12700H) (more stable under OpenVINO)
+- Intel Xe 96EU (i7 12700H) (stable under OpenVINO)
 
 ### Software
 
 We use `Python 3.12`.
 
-You also have to install oneAPI Toolkit (at least 2024.2) and Intel GPU drivers.
-
-Azarrot is tested on Ubuntu 24.04 and python 3.12.
+Azarrot is tested on Fedora 42 and python 3.12.
 
 ## Usage
 
