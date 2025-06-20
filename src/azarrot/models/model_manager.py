@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import huggingface_hub
 import yaml
@@ -23,6 +23,12 @@ from azarrot.common_data import (
 from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
 
+HF_MODEL_PRESET_MAPPING: dict[str, str] = {
+    "InternVLChatModel": "internvl2",
+    "Qwen2ForCausalLM": "qwen2",
+    "Qwen3ForCausalLM": "qwen3",
+}
+
 DEFAULT_MODEL_PRESET = ModelPreset(
     preferred_locale=DEFAULT_LOCALE,  # type: ignore[arg-type]
     supports_tool_calling=False,
@@ -30,7 +36,8 @@ DEFAULT_MODEL_PRESET = ModelPreset(
 )
 
 DEFAULT_MODEL_PRESETS: dict[str, ModelPreset] = {
-    "qwen2": ModelPreset(preferred_locale=DEFAULT_LOCALE, supports_tool_calling=True, enable_internal_tools=False)  # type: ignore[arg-type]
+    "qwen2": ModelPreset(preferred_locale=DEFAULT_LOCALE, supports_tool_calling=True, enable_internal_tools=False),  # type: ignore[arg-type]
+    "qwen3": ModelPreset(preferred_locale=DEFAULT_LOCALE, supports_tool_calling=True, enable_internal_tools=False),  # type: ignore[arg-type]
 }
 
 MODEL_PATH_HUGGINGFACE = "huggingface://"
@@ -56,7 +63,7 @@ class ModelManager:
 
         self.refresh_models()
 
-    def __determine_model_generation_variant(self, model_path: Path) -> Literal["normal", "internvl2", "qwen2"]:
+    def __determine_model_generation_variant(self, model_path: Path) -> str:
         hf_config_file = model_path / "config.json"
 
         if hf_config_file.exists():
@@ -66,10 +73,9 @@ class ModelManager:
 
                 hf_model_archs: list[str] = hf_config.get("architectures", [])
 
-                if "InternVLChatModel" in hf_model_archs:
-                    return "internvl2"
-                elif "Qwen2ForCausalLM" in hf_model_archs:
-                    return "qwen2"
+                for k, v in HF_MODEL_PRESET_MAPPING.items():
+                    if k in hf_model_archs:
+                        return v
             except:
                 self._log.warning("Failed to parse config %s as JSON", hf_config_file)
 

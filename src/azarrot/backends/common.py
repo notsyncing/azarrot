@@ -3,12 +3,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from queue import Empty, Queue
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import torch
-from transformers import AutoTokenizer, TextIteratorStreamer
+from transformers.generation.streamers import TextIteratorStreamer
 
 from azarrot.common_data import GenerationStatistics, ModelQuirks
+
+if TYPE_CHECKING:
+    from transformers import AutoTokenizer
 
 CTIS_HAS_OBJECT = "__ctis_has_object__"
 CTIS_DELEGATE_TO_NEXT = "__ctis_delegate_to_next__"
@@ -251,7 +254,7 @@ GM = TypeVar("GM", bound="GenerationMethods")
 R = TypeVar("R")
 
 
-class GenerationMethods(ABC, Generic[GM, R]):
+class GenerationMethods[GM: "GenerationMethods", R](ABC):
     def is_batching_supported(self) -> bool:
         return True
 
@@ -263,8 +266,8 @@ class GenerationMethods(ABC, Generic[GM, R]):
     def generate(self) -> tuple[bool, list[R]]:
         pass
 
-    def update_start_generation_time(self, time: datetime) -> None:
+    def update_start_generation_time(self, time: datetime) -> None:  # noqa: B027
         pass
 
-    def on_execution_failed(self) -> None:
+    def on_execution_failed(self) -> None:  # noqa: B027
         pass

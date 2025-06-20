@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
 from azarrot.tools.tool import LocalizedToolDescription
 
@@ -79,7 +79,7 @@ class Model:
     task: str
     revision: str
 
-    generation_variant: Literal["normal", "internvl2", "qwen2"]
+    generation_variant: str
     preset: ModelPreset
     use_original_precision: bool
     is_for_raw_completion: bool
@@ -200,18 +200,18 @@ class GenerationStatistics:
 
 @dataclass
 class ModelToolCallConfig:
-    prompts: dict[str, str]
+    prompts: dict[str, str] | None
     indicators: list[str]
     request_parsing_method: Callable[[str], list[ToolCallRequestMessageContent]]
-    request_formatting_method: Callable[[list[ToolCallRequestMessageContent]], str]
-    response_formatting_method: Callable[[list[ToolCallResponseMessageContent]], str]
+    request_formatting_method: Callable[[list[ToolCallRequestMessageContent]], str] | None
+    response_formatting_method: Callable[[list[ToolCallResponseMessageContent]], str] | None
 
 
 PR_T = TypeVar("PR_T")
 
 
 @dataclass
-class PageResult(Generic[PR_T]):
+class PageResult[PR_T]:
     data: list[PR_T]
     is_last_page: bool
 

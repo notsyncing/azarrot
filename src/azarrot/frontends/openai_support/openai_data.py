@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -12,7 +12,7 @@ OPENAI_TOOL_FUNCTION: Literal["function"] = "function"
 
 
 @dataclass
-class OpenAIList(Generic[T]):
+class OpenAIList[T]:
     data: list[T]
     object: str = "list"
 

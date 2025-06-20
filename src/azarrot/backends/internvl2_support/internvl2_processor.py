@@ -1,7 +1,7 @@
 from typing import Any, cast
 
 import torch
-from transformers import PreTrainedTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
 
 from azarrot.backends.internvl2_support.internvl2_tools import load_image
 from azarrot.backends.transformers_common import TransformersGenerationMethods

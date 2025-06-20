@@ -9,6 +9,7 @@ from azarrot.common_data import (
     ToolCallResponseMessageContent,
 )
 from azarrot.models.supports.qwen2_chat_support import QWEN2_MODEL_TOOL_CALL_CONFIG
+from azarrot.models.supports.qwen3_chat_support import QWEN3_MODEL_TOOL_CALL_CONFIG
 from azarrot.tools.tool_manager import ToolManager
 
 DEFAULT_LOCALE = "zh-cn"
@@ -21,7 +22,10 @@ BASE_SYSTEM_PROMPTS = {
     }
 }
 
-MODEL_TOOL_CALL_CONFIGS = {"qwen2": QWEN2_MODEL_TOOL_CALL_CONFIG}
+MODEL_TOOL_CALL_CONFIGS = {
+    "qwen2": QWEN2_MODEL_TOOL_CALL_CONFIG,
+    "qwen3": QWEN3_MODEL_TOOL_CALL_CONFIG,
+}
 
 
 @dataclass
@@ -44,7 +48,7 @@ class ChatTemplateManager:
         tools_info: CallableToolsInfo | None,
         locale: str,
         runtime_configs: ChatTemplateRuntimeConfigs,
-    ) -> str:
+    ) -> str | None:
         config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
 
         if config is None:
@@ -53,7 +57,7 @@ class ChatTemplateManager:
         templates = config.prompts
 
         if templates is None:
-            raise ValueError("No tool calling prompt template configured for %s", generation_variant)
+            return None
 
         template = templates.get(locale)
 
@@ -116,23 +120,27 @@ class ChatTemplateManager:
         final_sys_prompt = base_sys_prompt
 
         if model_preset.supports_tool_calling:
-            final_sys_prompt += "\n\n"
-
-            final_sys_prompt += self.__generate_tools_prompt(
+            tool_calling_prompt = self.__generate_tools_prompt(
                 generation_variant, model_preset.enable_internal_tools, tools_info, locale, runtime_configs
             )
+
+            if tool_calling_prompt is not None:
+                final_sys_prompt += f"\n\n{tool_calling_prompt}"
 
         return final_sys_prompt
 
     def format_tool_calling_request(
         self, tool_calling_requests: list[ToolCallRequestMessageContent], generation_variant: str
-    ) -> str:
+    ) -> str | None:
         config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant)
 
         if config is None:
             raise ValueError("No tool calling config found for %s", generation_variant)
 
-        return config.request_formatting_method(tool_calling_requests)
+        if config.request_formatting_method is not None:
+            return config.request_formatting_method(tool_calling_requests)
+        else:
+            return None
 
     def parse_tool_calling_request(
         self, message: str, generation_variant: str, model_preset: ModelPreset
@@ -164,4 +172,8 @@ class ChatTemplateManager:
             raise ValueError("No tool calling config found for %s", generation_variant)
 
         tool_calling_responses = sorted(tool_calling_responses, key=lambda c: int(c.to_id))
-        return config.response_formatting_method(tool_calling_responses)
+
+        if config.response_formatting_method is not None:
+            return config.response_formatting_method(tool_calling_responses)
+        else:
+            return tool_calling_responses[0].result

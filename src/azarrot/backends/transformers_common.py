@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
-from typing import Any, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import torch
-from transformers import PreTrainedModel, set_seed
+from transformers.trainer_utils import set_seed
 
 from azarrot.backends.common import (
     BatchedCustomTextIteratorStreamer,
@@ -11,7 +11,10 @@ from azarrot.backends.common import (
     GenerationMethods,
     StopGenerationError,
 )
-from azarrot.common_data import GenerationMessage, TextGenerationMessageContent
+from azarrot.common_data import GenerationMessage, TextGenerationMessageContent, ToolCallRequestMessageContent
+
+if TYPE_CHECKING:
+    from transformers.modeling_utils import PreTrainedModel
 
 
 class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMethods", CustomTextIteratorStreamer]):
@@ -20,11 +23,11 @@ class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMet
     streamer: CustomTextIteratorStreamer
     _seed: int | None
     generation_kwargs: dict[str, Any]
-    _model: PreTrainedModel
+    _model: "PreTrainedModel"
 
     def __init__(
         self,
-        model: PreTrainedModel,
+        model: "PreTrainedModel",
         streamer: CustomTextIteratorStreamer,
         seed: int | None,
         generation_kwargs: dict[str, Any],
@@ -102,14 +105,30 @@ def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dic
     c = []
 
     for m in messages:
-        for mc in m.contents:
-            content: str
+        transformers_msg: dict[str, Any]
 
-            if isinstance(mc, TextGenerationMessageContent):
-                content = mc.text
-            else:
-                raise ValueError("Invalid generation message for chat: %s", str(mc))
+        if isinstance(m.contents[0], TextGenerationMessageContent):
+            transformers_msg = {
+                "content": m.contents[0].text
+            }
+        elif isinstance(m.contents[0], ToolCallRequestMessageContent):
+            transformers_msg = {
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": t.id,
+                        "function": {
+                            "name": t.function_name,
+                            "arguments": t.function_arguments
+                        }
+                    }
+                    for t in m.contents if isinstance(t, ToolCallRequestMessageContent)
+                ]
+            }
+        else:
+            raise ValueError(f"Invalid generation message for chat: {m}")
 
-            c.append({"role": m.role, "content": content})
+        transformers_msg["role"] = m.role
+        c.append(transformers_msg)
 
     return c

@@ -137,49 +137,40 @@ class BackendPipe:
                     model_preset=model.preset,
                     runtime_configs=runtime_configs,
                     tools_info=request.tools_info,
-                    base_sys_prompt=""
+                    base_sys_prompt="",
                 )
 
             messages.append(system_msg)
             next_index = 1
 
-        tool_call_responses: list[ToolCallResponseMessageContent] = []
-
         for i in range(next_index, len(request.messages)):
             message = copy(request.messages[i])
 
-            if not isinstance(message.contents[0], ToolCallResponseMessageContent) and len(tool_call_responses) > 0:
+            if isinstance(message.contents[0], ToolCallRequestMessageContent):
+                tool_call_contents = message.contents
+
+                tool_call_text = self._chat_template_manager.format_tool_calling_request(
+                    cast("list[ToolCallRequestMessageContent]", tool_call_contents), model.generation_variant
+                )
+
+                if tool_call_text is not None:
+                    message.contents = [
+                        TextGenerationMessageContent(
+                            text=tool_call_text
+                        )
+                    ]
+
+                messages.append(message)
+            elif isinstance(message.contents[0], ToolCallResponseMessageContent):
+                tool_call_responses = cast("list[ToolCallResponseMessageContent]", message.contents)
+
                 text = self._chat_template_manager.format_tool_calling_response(
                     tool_call_responses, model.generation_variant
                 )
 
                 messages.append(GenerationMessage("tool", [TextGenerationMessageContent(text)]))
-                tool_call_responses = []
-
-            if isinstance(message.contents[0], ToolCallRequestMessageContent):
-                tool_call_contents = message.contents
-
-                message.contents = [
-                    TextGenerationMessageContent(
-                        text=self._chat_template_manager.format_tool_calling_request(
-                            cast("list[ToolCallRequestMessageContent]", tool_call_contents), model.generation_variant
-                        )
-                    )
-                ]
-
-                messages.append(message)
-            elif isinstance(message.contents[0], ToolCallResponseMessageContent):
-                tool_call_responses.extend(cast("list[ToolCallResponseMessageContent]", message.contents))
             else:
                 messages.append(message)
-
-        if len(tool_call_responses) > 0:
-            text = self._chat_template_manager.format_tool_calling_response(
-                tool_call_responses, model.generation_variant
-            )
-
-            messages.append(GenerationMessage("tool", [TextGenerationMessageContent(text)]))
-            tool_call_responses = []
 
         request.messages = messages
 

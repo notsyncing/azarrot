@@ -4,10 +4,10 @@ from abc import ABC
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
@@ -37,6 +37,11 @@ from azarrot.common_data import (
 )
 from azarrot.config import DEFAULT_MAX_TOKENS, DEFAULT_REASONING_MAX_TOKENS, ServerConfig
 from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
+from azarrot.tools.tool import convert_tool_descriptions_to_json_schema
+
+if TYPE_CHECKING:
+    from transformers.modeling_utils import PreTrainedModel
+    from transformers.tokenization_utils import PreTrainedTokenizer
 
 TRANSFORMERS_TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
@@ -49,8 +54,8 @@ MODEL_PYTORCH_QUIRKS = {}
 @dataclass
 class LoadedTransformersModel:
     data: Model
-    model: PreTrainedModel
-    tokenizer: PreTrainedTokenizer
+    model: "PreTrainedModel"
+    tokenizer: "PreTrainedTokenizer"
     device: str
 
 
@@ -95,7 +100,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _print_device_list(self) -> int:
         return print_pytorch_device_list(self._log, self.id())
 
-    def __extract_model_info(self, transformers_model: PreTrainedModel, task: str) -> ModelInfo:
+    def __extract_model_info(self, transformers_model: "PreTrainedModel", task: str) -> ModelInfo:
         if task == "feature-extraction":
             return EmbeddingModelInfo(dimension=transformers_model.config.hidden_size)
         else:
@@ -110,10 +115,10 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _customize_loaded_model(
         self,
         model: Model,  # noqa: ARG002
-        loaded_model: PreTrainedModel,
-        loaded_tokenizer: PreTrainedTokenizer,  # noqa: ARG002
+        loaded_model: "PreTrainedModel",
+        loaded_tokenizer: "PreTrainedTokenizer",  # noqa: ARG002
         model_kwargs: dict[str, Any],  # noqa: ARG002
-    ) -> PreTrainedModel:
+    ) -> "PreTrainedModel":
         return loaded_model
 
     def _should_move_inputs_to_device(self) -> bool:
@@ -219,9 +224,15 @@ class TransformersBasedBackend(BaseBackend, ABC):
         if not loaded_model.data.is_for_raw_completion:
             result = loaded_model.tokenizer.apply_chat_template(
                 to_transformers_chat_messages(request.messages),
+                tools=cast(
+                    "Any",
+                    convert_tool_descriptions_to_json_schema(request.tools_info.tools)
+                    if request.tools_info is not None
+                    else None,
+                ),
                 add_generation_prompt=True,
                 return_tensors="pt",
-                return_dict=True
+                return_dict=True,
             )
 
             result = cast("dict[str, Any]", result)

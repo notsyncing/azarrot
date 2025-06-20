@@ -3,20 +3,21 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from types import MethodType, ModuleType
-from typing import Any, cast, override
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, cast, override
 
 import gptqmodel
 import openvino
 import psutil
 import torch
 from openvino import properties as ov_props
-from optimum.intel import OVModelForCausalLM, OVModelForFeatureExtraction, OVWeightQuantizationConfig
-from transformers import (
-    PreTrainedModel,
-    PreTrainedTokenizer,
-    pipeline,
+from optimum.intel import (
+    OVModelForCausalLM,
+    OVModelForFeatureExtraction,
+    OVModelForVisualCausalLM,
+    OVWeightQuantizationConfig,
 )
+from transformers.pipelines import pipeline
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import (
@@ -26,10 +27,16 @@ from azarrot.common_data import (
 )
 from azarrot.config import ServerConfig
 
+if TYPE_CHECKING:
+    from transformers.modeling_utils import PreTrainedModel
+    from transformers.tokenization_utils import PreTrainedTokenizer
+
 OPENVINO_TASK_MODEL_MAP = {
     "text-generation": OVModelForCausalLM,
     "text-generation-with-past": OVModelForCausalLM,
     "feature-extraction": OVModelForFeatureExtraction,
+    "image-text-to-text": OVModelForVisualCausalLM,
+    "image-text-to-text-with-past": OVModelForVisualCausalLM,
 }
 
 BACKEND_ID_OPENVINO = "openvino"
@@ -103,7 +110,8 @@ class OpenVINOBackend(TransformersBasedBackend):
         self._log.info("CPU has %d physical cores.", self._cpu_phy_core_count)
 
     def __patch_openvino(self) -> None:
-        from openvino.frontend.pytorch import gptq as ov_pt_gptq
+        from openvino.frontend.pytorch import gptq as ov_pt_gptq  # noqa: PLC0415
+
         ov_pt_gptq.supported_quant_types.append("ipex")
 
     @override
@@ -144,8 +152,8 @@ class OpenVINOBackend(TransformersBasedBackend):
         return "CPU"
 
     def __patch_model(self, original_model: Any) -> Any:
-        cast("Any", original_model).compiled_model = None
-        original_model.compile = MethodType(patched_compile, original_model)
+        # cast("Any", original_model).compiled_model = None
+        # original_model.compile = MethodType(patched_compile, original_model)
 
         return original_model
 
@@ -209,7 +217,7 @@ class OpenVINOBackend(TransformersBasedBackend):
         if "quantization_config" not in model_kwargs and need_load_in_4bit:
             model_kwargs["quantization_config"] = OVWeightQuantizationConfig(bits=4)
 
-        ov_config = {
+        ov_config: dict[str, Any] = {
             "PERFORMANCE_HINT": ov_props.hint.PerformanceMode.LATENCY,
         }
 
@@ -223,7 +231,7 @@ class OpenVINOBackend(TransformersBasedBackend):
 
         model_kwargs["ov_config"] = ov_config
 
-        model_kwargs["use_cache"] = model.task == "text-generation-with-past"
+        model_kwargs["use_cache"] = model.task.endswith("-with-past")
 
         if need_export:
             self.__workaround_optimum_intel_gptqmodel_export_begin()
@@ -232,10 +240,10 @@ class OpenVINOBackend(TransformersBasedBackend):
     def _customize_loaded_model(
         self,
         model: Model,
-        loaded_model: PreTrainedModel,
-        loaded_tokenizer: PreTrainedTokenizer,
+        loaded_model: "PreTrainedModel",
+        loaded_tokenizer: "PreTrainedTokenizer",
         model_kwargs: dict[str, Any],
-    ) -> PreTrainedModel:
+    ) -> "PreTrainedModel":
         if model_kwargs.get("export", False):
             self.__workaround_optimum_intel_gptqmodel_export_end()
 

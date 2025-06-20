@@ -80,3 +80,18 @@ class Tool(ABC):
     @abstractmethod
     def execute(self, **kwargs: dict[str, Any]) -> Any:
         pass
+
+
+def convert_tool_descriptions_to_json_schema(tools: list[LocalizedToolDescription]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": {
+                "type": "object",
+                "properties": {p.name: {"description": p.description, "type": p.type} for p in tool.parameters},
+                "required": [p.name for p in tool.parameters if p.required],
+            },
+        }
+        for tool in tools
+    ]

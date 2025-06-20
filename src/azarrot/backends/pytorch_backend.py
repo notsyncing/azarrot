@@ -1,12 +1,15 @@
 import logging
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 import torch
-from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import Model
 from azarrot.config import ServerConfig
+
+if TYPE_CHECKING:
+    from transformers.modeling_utils import PreTrainedModel
+    from transformers.tokenization_utils import PreTrainedTokenizer
 
 BACKEND_ID_PYTORCH = "pytorch"
 
@@ -48,10 +51,10 @@ class PyTorchBackend(TransformersBasedBackend):
     def _customize_loaded_model(
         self,
         model: Model,
-        loaded_model: PreTrainedModel,
-        loaded_tokenizer: PreTrainedTokenizer,
+        loaded_model: "PreTrainedModel",
+        loaded_tokenizer: "PreTrainedTokenizer",
         model_kwargs: dict[str, Any],
-    ) -> PreTrainedModel:
+    ) -> "PreTrainedModel":
         if model.pytorch is not None:
             if model.pytorch.compile:
                 self._log.info("Compiling model %s with backend %s", model.id, model.pytorch.compile_backend)
