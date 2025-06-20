@@ -212,7 +212,10 @@ class TransformersBasedBackend(BaseBackend, ABC):
     ) -> GenerationMethods:
         if not loaded_model.data.is_for_raw_completion:
             result = loaded_model.tokenizer.apply_chat_template(
-                to_transformers_chat_messages(request.messages), return_tensors="pt", return_dict=True
+                to_transformers_chat_messages(request.messages),
+                add_generation_prompt=True,
+                return_tensors="pt",
+                return_dict=True
             )
 
             result = cast("dict[str, Any]", result)
