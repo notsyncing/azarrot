@@ -3,7 +3,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from types import ModuleType
+from types import MethodType, ModuleType
 from typing import TYPE_CHECKING, Any, cast, override
 
 import gptqmodel
@@ -152,8 +152,8 @@ class OpenVINOBackend(TransformersBasedBackend):
         return "CPU"
 
     def __patch_model(self, original_model: Any) -> Any:
-        # cast("Any", original_model).compiled_model = None
-        # original_model.compile = MethodType(patched_compile, original_model)
+        cast("Any", original_model).compiled_model = None
+        original_model.compile = MethodType(patched_compile, original_model)
 
         return original_model
 

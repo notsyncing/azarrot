@@ -21,8 +21,7 @@ BASE_SYSTEM_PROMPTS = {
     }
 }
 
-MODEL_TOOL_CALL_CONFIGS = {
-}
+MODEL_TOOL_CALL_CONFIGS = {}
 
 
 @dataclass
@@ -93,6 +92,14 @@ class ChatTemplateManager:
             }
         )
 
+    def determine_model_locale(self, model_preset: ModelPreset) -> str:
+        locale = DEFAULT_LOCALE
+
+        if model_preset.preferred_locale is not None:
+            locale = model_preset.preferred_locale
+
+        return locale
+
     def get_system_prompt(
         self,
         generation_variant: str,
@@ -101,11 +108,9 @@ class ChatTemplateManager:
         tools_info: CallableToolsInfo | None,
         *,
         base_sys_prompt: str | None = None,
+        internal_tools_appended: bool = False,
     ) -> str:
-        locale = DEFAULT_LOCALE
-
-        if model_preset.preferred_locale is not None:
-            locale = model_preset.preferred_locale
+        locale = self.determine_model_locale(model_preset)
 
         if base_sys_prompt is None:
             base_sys_prompts = BASE_SYSTEM_PROMPTS.get(generation_variant, DEFAULT_SYSTEM_PROMPT)
@@ -118,7 +123,11 @@ class ChatTemplateManager:
 
         if model_preset.supports_tool_calling:
             tool_calling_prompt = self.__generate_tools_prompt(
-                generation_variant, model_preset.enable_internal_tools, tools_info, locale, runtime_configs
+                generation_variant,
+                not internal_tools_appended and model_preset.enable_internal_tools,
+                tools_info,
+                locale,
+                runtime_configs,
             )
 
             if tool_calling_prompt is not None:

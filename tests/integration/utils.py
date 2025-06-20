@@ -37,6 +37,7 @@ def create_fake_embedding_model(model_id: str) -> Model:
         generation_variant="normal",
         use_original_precision=True,
         is_for_raw_completion=False,
+        is_reasoning_model=False,
         preset=ModelPreset(preferred_locale=None, supports_tool_calling=False, enable_internal_tools=False),
         transformers=None,
         openvino=None,

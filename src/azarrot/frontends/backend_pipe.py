@@ -11,6 +11,7 @@ from azarrot.backends.common import (
     GenerationHandlers,
 )
 from azarrot.common_data import (
+    CallableToolsInfo,
     EmbeddingsGenerationRequest,
     GenerationMessage,
     GenerationMessageContent,
@@ -64,8 +65,13 @@ class BackendPipe:
         new_request = copy(original_request)
 
         new_request.messages.append(
-            GenerationMessage(role="tool", contents=cast("list[GenerationMessageContent]", tool_calling_responses))
+            GenerationMessage(role="assistant", contents=cast("list[GenerationMessageContent]", tool_calling_requests))
         )
+
+        for tool_calling_response in tool_calling_responses:
+            new_request.messages.append(
+                GenerationMessage(role="tool", contents=cast("list[GenerationMessageContent]", [tool_calling_response]))
+            )
 
         new_streamer, _ = self.generate(model, new_request)
         return new_streamer
@@ -106,11 +112,29 @@ class BackendPipe:
 
         return False, None
 
+    def __append_internal_tools_to_request(self, model: Model, request: TextGenerationRequest) -> None:
+        if model.preset.enable_internal_tools:
+            locale = self._chat_template_manager.determine_model_locale(model.preset)
+            internal_tools = self._tool_manager.get_tool_list()
+            localized_internal_tools = [t.description().to_localized(locale) for t in internal_tools]
+
+            if request.tools_info is None:
+                request.tools_info = CallableToolsInfo(
+                    tools=localized_internal_tools,
+                    force_use_no_tool=False,
+                    force_use_any_tool=False,
+                    force_use_tool_name=None,
+                )
+            else:
+                request.tools_info.tools.extend(localized_internal_tools)
+
     def generate(
         self, model: Model, request: TextGenerationRequest
     ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
         messages = []
         next_index = 0
+
+        self.__append_internal_tools_to_request(model, request)
 
         if request.messages[0].role != "system":
             runtime_configs = ChatTemplateRuntimeConfigs(enable_parallel_tool_calling=request.parallel_tool_calling)
@@ -120,6 +144,7 @@ class BackendPipe:
                 model_preset=model.preset,
                 runtime_configs=runtime_configs,
                 tools_info=request.tools_info,
+                internal_tools_appended=True,
             )
 
             messages.append(GenerationMessage("system", [TextGenerationMessageContent(system_prompt)]))
@@ -138,6 +163,7 @@ class BackendPipe:
                     runtime_configs=runtime_configs,
                     tools_info=request.tools_info,
                     base_sys_prompt="",
+                    internal_tools_appended=True,
                 )
 
             messages.append(system_msg)
@@ -154,11 +180,7 @@ class BackendPipe:
                 )
 
                 if tool_call_text is not None:
-                    message.contents = [
-                        TextGenerationMessageContent(
-                            text=tool_call_text
-                        )
-                    ]
+                    message.contents = [TextGenerationMessageContent(text=tool_call_text)]
 
                 messages.append(message)
             elif isinstance(message.contents[0], ToolCallResponseMessageContent):

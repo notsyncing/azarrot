@@ -182,7 +182,7 @@ def test_qwen3_internal_tool_calling(openvino_server: Server) -> None:
         "text-generation-with-past",
         skip_if_loaded=True,
         is_reasoning_model=True,
-        model_preset=DEFAULT_MODEL_PRESETS["qwen2"].with_enable_internal_tools(),
+        model_preset=DEFAULT_MODEL_PRESETS["qwen3"].with_enable_internal_tools(),
     )
 
     GLOBAL_TOOL_MANAGER.clear_registered_tools()

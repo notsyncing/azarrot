@@ -108,21 +108,17 @@ def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dic
         transformers_msg: dict[str, Any]
 
         if isinstance(m.contents[0], TextGenerationMessageContent):
-            transformers_msg = {
-                "content": m.contents[0].text
-            }
+            transformers_msg = {"content": m.contents[0].text}
         elif isinstance(m.contents[0], ToolCallRequestMessageContent):
             transformers_msg = {
                 "tool_calls": [
                     {
                         "type": "function",
                         "id": t.id,
-                        "function": {
-                            "name": t.function_name,
-                            "arguments": t.function_arguments
-                        }
+                        "function": {"name": t.function_name, "arguments": t.function_arguments},
                     }
-                    for t in m.contents if isinstance(t, ToolCallRequestMessageContent)
+                    for t in m.contents
+                    if isinstance(t, ToolCallRequestMessageContent)
                 ]
             }
         else:
