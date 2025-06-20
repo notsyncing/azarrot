@@ -2,7 +2,7 @@ from collections.abc import Generator
 from typing import Any
 
 import pytest
-from openai.types.beta.vector_store_create_params import ExpiresAfter
+from openai.types.vector_store_create_params import ExpiresAfter
 
 from azarrot.server import Server
 from tests.integration.openai_other_apis.fixture_utils import do_clear_database, make_no_backend_server
@@ -24,7 +24,7 @@ def test_create_vector_store(no_backend_server: Server) -> None:
 
     client = create_openai_client(no_backend_server)
 
-    vector_store = client.beta.vector_stores.create(
+    vector_store = client.vector_stores.create(
         name="Support FAQ", expires_after=ExpiresAfter(anchor="last_active_at", days=10)
     )
 
@@ -51,7 +51,7 @@ def test_create_vector_store(no_backend_server: Server) -> None:
 def test_list_vector_stores(no_backend_server: Server) -> None:
     client = create_openai_client(no_backend_server)
 
-    vector_stores = client.beta.vector_stores.list()
+    vector_stores = client.vector_stores.list()
     assert len(vector_stores.data) == 0
     assert vector_stores.model_dump()["has_more"] is False
 
@@ -59,14 +59,14 @@ def test_list_vector_stores(no_backend_server: Server) -> None:
     no_backend_server.vector_store.create("test2", create_fake_embedding_model("model2"))
     no_backend_server.vector_store.create("test3", create_fake_embedding_model("model3"))
 
-    vector_stores = client.beta.vector_stores.list(order="asc")
+    vector_stores = client.vector_stores.list(order="asc")
     assert len(vector_stores.data) == 3
     assert vector_stores.data[0].name == "test1"
     assert vector_stores.data[1].name == "test2"
     assert vector_stores.data[2].name == "test3"
     assert vector_stores.model_dump()["has_more"] is False  # has_next_page() sucks!
 
-    vector_stores = client.beta.vector_stores.list(order="asc", limit=2)
+    vector_stores = client.vector_stores.list(order="asc", limit=2)
     assert len(vector_stores.data) == 2
     assert vector_stores.data[0].name == "test1"
     assert vector_stores.data[1].name == "test2"
@@ -77,7 +77,7 @@ def test_list_vector_stores(no_backend_server: Server) -> None:
     assert vector_stores.data[0].name == "test3"
     assert vector_stores.model_dump()["has_more"] is False
 
-    vector_stores = client.beta.vector_stores.list(order="desc")
+    vector_stores = client.vector_stores.list(order="desc")
     assert vector_stores.data[0].name == "test3"
     assert vector_stores.data[1].name == "test2"
     assert vector_stores.data[2].name == "test1"
@@ -88,7 +88,7 @@ def test_retrieve_vector_store(no_backend_server: Server) -> None:
 
     info = no_backend_server.vector_store.create("test1", create_fake_embedding_model("model1"))
 
-    vector_store = client.beta.vector_stores.retrieve(vector_store_id=info.id)
+    vector_store = client.vector_stores.retrieve(vector_store_id=info.id)
 
     assert vector_store.id == info.id
     assert vector_store.name == info.name
@@ -99,7 +99,7 @@ def test_modify_vector_store(no_backend_server: Server) -> None:
 
     info = no_backend_server.vector_store.create("test1", create_fake_embedding_model("model1"))
 
-    vector_store = client.beta.vector_stores.update(vector_store_id=info.id, name="Support FAQ")
+    vector_store = client.vector_stores.update(vector_store_id=info.id, name="Support FAQ")
 
     info_new = no_backend_server.vector_store.get_store_info(info.id)
     assert info_new is not None
@@ -112,7 +112,7 @@ def test_delete_vector_store(no_backend_server: Server) -> None:
 
     info = no_backend_server.vector_store.create("test1", create_fake_embedding_model("model1"))
 
-    deleted_vector_store = client.beta.vector_stores.delete(vector_store_id=info.id)
+    deleted_vector_store = client.vector_stores.delete(vector_store_id=info.id)
 
     assert deleted_vector_store.deleted is True
 

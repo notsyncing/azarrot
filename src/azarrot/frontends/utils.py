@@ -3,6 +3,8 @@ import uuid
 from typing import Any, Literal
 
 import dataclass_wizard
+import openai.types
+from openai.types.create_embedding_response import Usage
 
 from azarrot.agents.common_data import AgentToolResourceRequest
 from azarrot.agents.manager import AgentToolInfo, AgentToolRequest, AgentToolResourceInfo
@@ -220,4 +222,11 @@ def to_openai_token_usage(gen_stats: GenerationStatistics) -> OpenAITokenUsage:
         prompt_tokens=gen_stats.prompt_tokens,
         completion_tokens=gen_stats.completion_tokens,
         total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,
+    )
+
+
+def to_openai_embedding_token_usage(gen_stats: GenerationStatistics) -> openai.types.create_embedding_response.Usage:
+    return Usage(
+        prompt_tokens=gen_stats.prompt_tokens,
+        total_tokens=gen_stats.prompt_tokens,
     )

@@ -231,13 +231,14 @@ class ModelManager:
         use_original_precision: bool = False,
         is_for_raw_completion: bool = False,
         is_reasoning_model: bool = False,
+        override_model_id: str | None = None,
     ) -> None:
         backend = self._backends.get(backend_id)
 
         if backend is None:
             raise ValueError(f"Unknown backend {backend_id}")
 
-        if huggingface_id in self._models:
+        if (override_model_id or huggingface_id) in self._models:
             if not skip_if_loaded:
                 raise ValueError(f"Model {huggingface_id} from huggingface is already loaded!")
 
@@ -258,7 +259,7 @@ class ModelManager:
         latest_file = max(hf_cache_files, key=os.path.getmtime)
 
         model = Model(
-            id=huggingface_id,
+            id=override_model_id or huggingface_id,
             backend=backend_id,
             path=model_path,
             revision=str(latest_file.lstat().st_mtime),

@@ -3,11 +3,14 @@ import logging
 import uuid
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any, override
+from typing import Any, cast, override
 
 import dataclass_wizard
-from fastapi import APIRouter, FastAPI
+import openai.types
+from fastapi import APIRouter, FastAPI, HTTPException
+from openai.pagination import SyncPage
 from starlette.responses import StreamingResponse
+from starlette.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager
@@ -40,7 +43,6 @@ from azarrot.frontends.openai_support.openai_assistants import OpenAIAssistants
 from azarrot.frontends.openai_support.openai_data import (
     AssistantChatCompletionMessage,
     ChatCompletionRequest,
-    CreateEmbeddingsRequest,
     SystemChatCompletionMessage,
     ToolChatCompletionMessage,
     UserChatCompletionMessage,
@@ -50,7 +52,12 @@ from azarrot.frontends.openai_support.openai_data import (
 )
 from azarrot.frontends.openai_support.openai_files import OpenAIFiles
 from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorStores
-from azarrot.frontends.utils import to_backend_tools_info, to_openai_token_usage, to_openai_tool_calls
+from azarrot.frontends.utils import (
+    to_backend_tools_info,
+    to_openai_embedding_token_usage,
+    to_openai_token_usage,
+    to_openai_tool_calls,
+)
 from azarrot.models.model_manager import ModelManager
 from azarrot.utils.downloader import download_file_to_store
 from azarrot.vector_store import VectorStoreManager
@@ -189,20 +196,25 @@ class OpenAIFrontend(Frontend):
 
         self._api.include_router(router, prefix="/openai")
 
-    def __to_openai_model(self, model: Model) -> dict:
-        return {"id": model.id, "object": "model", "created": int(model.create_time.timestamp()), "owned_by": "openai"}
+    def __to_openai_model(self, model: Model) -> openai.types.Model:
+        return openai.types.Model(
+            id=model.id,
+            created=int(model.create_time.timestamp()),
+            owned_by="openai",
+            object="model"
+        )
 
-    def get_models(self) -> dict:
+    def get_models(self) -> SyncPage[openai.types.Model]:
         models = self._model_manager.get_models()
         data = [self.__to_openai_model(m) for m in models]
 
-        return {"object": "list", "data": data}
+        return SyncPage(data=data, object="list")
 
-    def get_model(self, model_id: str) -> dict:
+    def get_model(self, model_id: str) -> openai.types.Model:
         model = self._model_manager.get_model(model_id)
 
         if model is None:
-            return {}
+            raise HTTPException(HTTP_404_NOT_FOUND)
 
         return self.__to_openai_model(model)
 
@@ -419,18 +431,35 @@ class OpenAIFrontend(Frontend):
             model, result, "stop", contains_usage_info=True, usage_info=gen_stats
         )
 
-    def create_embeddings(self, request: CreateEmbeddingsRequest) -> dict:
-        model = self.__get_model(request.model)
-        gen_req = EmbeddingsGenerationRequest(request.model, request.input)
+    def create_embeddings(self, request: openai.types.EmbeddingCreateParams) -> openai.types.CreateEmbeddingResponse:
+        text: str | list[str]
+
+        if isinstance(request["input"], str):
+            text = request["input"]
+        elif isinstance(request["input"], list):
+            if isinstance(request["input"][0], str):
+                text = cast("list[str]", request["input"])
+            else:
+                raise HTTPException(HTTP_400_BAD_REQUEST, f"Unsupported input type {type(request["input"])}")
+        else:
+            raise HTTPException(HTTP_400_BAD_REQUEST, f"Unsupported input type {type(request["input"])}")
+
+        model = self.__get_model(request["model"])
+        gen_req = EmbeddingsGenerationRequest(request["model"], text)
         data_list, gen_stats = self._backend_pipe.generate_embeddings(model, gen_req)
 
         self.__log_generation_statistics(gen_stats)
 
-        return {
-            "object": "list",
-            "data": [
-                {"object": "embedding", "embedding": data, "index": index} for index, data in enumerate(data_list)
+        return openai.types.CreateEmbeddingResponse(
+            data=[
+                openai.types.Embedding(
+                    embedding=data,
+                    index=index,
+                    object="embedding"
+                )
+                for index, data in enumerate(data_list)
             ],
-            "model": request.model,
-            "usage": to_openai_token_usage(gen_stats),
-        }
+            model=request["model"],
+            object="list",
+            usage=to_openai_embedding_token_usage(gen_stats)
+        )

@@ -57,7 +57,7 @@ def test_create_vector_store_file(openvino_server: Server) -> None:
     store = openvino_server.vector_store.get_store_info(TEST_STORE_ID)
     assert store is not None
 
-    vector_store_file = client.beta.vector_stores.files.create(vector_store_id=store.id, file_id=str(TEST_FILE1_ID))
+    vector_store_file = client.vector_stores.files.create(vector_store_id=store.id, file_id=str(TEST_FILE1_ID))
 
     file1_info = openvino_server.vector_store.get_stored_file_info(store.id, TEST_FILE1_ID)
     assert file1_info is not None
@@ -95,7 +95,7 @@ def test_list_vector_store_files(openvino_server: Server) -> None:
 
     client = create_openai_client(openvino_server)
 
-    vector_store_files = client.beta.vector_stores.files.list(vector_store_id=str(TEST_STORE_ID), order="asc")
+    vector_store_files = client.vector_stores.files.list(vector_store_id=str(TEST_STORE_ID), order="asc")
 
     assert len(vector_store_files.data) == 3
     assert any(d.id == str(TEST_FILE1_ID) for d in vector_store_files.data) is True
@@ -109,7 +109,7 @@ def test_retrieve_vector_store_file(openvino_server: Server) -> None:
 
     client = create_openai_client(openvino_server)
 
-    vector_store_file = client.beta.vector_stores.files.retrieve(
+    vector_store_file = client.vector_stores.files.retrieve(
         vector_store_id=str(TEST_STORE_ID), file_id=str(TEST_FILE1_ID)
     )
 
@@ -128,7 +128,7 @@ def test_delete_vector_store_file(openvino_server: Server) -> None:
 
     client = create_openai_client(openvino_server)
 
-    deleted_vector_store_file = client.beta.vector_stores.files.delete(
+    deleted_vector_store_file = client.vector_stores.files.delete(
         vector_store_id=str(TEST_STORE_ID), file_id=str(TEST_FILE1_ID)
     )
 
@@ -144,7 +144,7 @@ def test_delete_vector_store_file_with_processing_file(openvino_server: Server) 
 
     client = create_openai_client(openvino_server)
 
-    deleted_vector_store_file = client.beta.vector_stores.files.delete(
+    deleted_vector_store_file = client.vector_stores.files.delete(
         vector_store_id=str(TEST_STORE_ID), file_id=str(TEST_FILE1_ID)
     )
 

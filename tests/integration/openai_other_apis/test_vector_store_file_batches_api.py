@@ -55,7 +55,7 @@ def test_create_vector_store_file_batch(openvino_server: Server) -> None:
     store = openvino_server.vector_store.get_store_info(TEST_STORE_ID)
     assert store is not None
 
-    batch = client.beta.vector_stores.file_batches.create(
+    batch = client.vector_stores.file_batches.create(
         vector_store_id=store.id, file_ids=[str(TEST_FILE1_ID), str(TEST_FILE2_ID), str(TEST_FILE3_ID)]
     )
 
@@ -80,7 +80,7 @@ def test_retrieve_vector_store_file_batch(openvino_server: Server) -> None:
 
     client = create_openai_client(openvino_server)
 
-    batch = client.beta.vector_stores.file_batches.retrieve(vector_store_id=str(TEST_STORE_ID), batch_id="batch1")
+    batch = client.vector_stores.file_batches.retrieve(vector_store_id=str(TEST_STORE_ID), batch_id="batch1")
 
     file_info = openvino_server.vector_store.get_stored_file_info(TEST_STORE_ID, TEST_FILE1_ID)
     assert file_info is not None
@@ -101,7 +101,7 @@ def test_cancel_vector_store_file_batch(openvino_server: Server) -> None:
 
         client = create_openai_client(openvino_server)
 
-        cancelled_batch = client.beta.vector_stores.file_batches.cancel(
+        cancelled_batch = client.vector_stores.file_batches.cancel(
             vector_store_id=str(TEST_STORE_ID), batch_id="batch1"
         )
 
@@ -118,7 +118,7 @@ def test_list_vector_store_files(openvino_server: Server) -> None:
 
     client = create_openai_client(openvino_server)
 
-    batch_files = client.beta.vector_stores.file_batches.list_files(
+    batch_files = client.vector_stores.file_batches.list_files(
         vector_store_id=str(TEST_STORE_ID), batch_id="batch1", order="asc"
     )
 
