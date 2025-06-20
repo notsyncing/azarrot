@@ -35,7 +35,7 @@ from azarrot.common_data import (
     TextGenerationMessageContent,
     TextGenerationRequest,
 )
-from azarrot.config import ServerConfig
+from azarrot.config import DEFAULT_MAX_TOKENS, DEFAULT_REASONING_MAX_TOKENS, ServerConfig
 from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
 TRANSFORMERS_TASK_MODEL_MAP = {
@@ -202,6 +202,12 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         return None
 
+    def __determine_default_max_tokens(self, model: Model) -> int:
+        if model.is_reasoning_model:
+            return DEFAULT_REASONING_MAX_TOKENS
+        else:
+            return DEFAULT_MAX_TOKENS
+
     def __generate_normal(
         self,
         loaded_model: LoadedTransformersModel,
@@ -248,7 +254,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
                 "input_ids": inputs,
                 "attention_mask": attention_mask,
                 "streamer": streamer,
-                "max_new_tokens": request.max_tokens,
+                "max_new_tokens": request.max_tokens or self.__determine_default_max_tokens(loaded_model.data),
             }
         )
 
@@ -312,7 +318,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
                 "streamer": streamer,
-                "max_new_tokens": request.max_tokens,
+                "max_new_tokens": request.max_tokens or self.__determine_default_max_tokens(loaded_model.data),
             }
         )
 

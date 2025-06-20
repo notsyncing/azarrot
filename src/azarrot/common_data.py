@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Generic, Literal, TypeVar
 
-from azarrot.config import DEFAULT_MAX_TOKENS
 from azarrot.tools.tool import LocalizedToolDescription
 
 
@@ -84,6 +83,7 @@ class Model:
     preset: ModelPreset
     use_original_precision: bool
     is_for_raw_completion: bool
+    is_reasoning_model: bool
 
     transformers: TransformersModelConfig | None
 
@@ -148,7 +148,7 @@ class CallableToolsInfo:
 class TextGenerationRequest:
     model_id: str
     messages: list[GenerationMessage]
-    max_tokens: int = DEFAULT_MAX_TOKENS
+    max_tokens: int | None = None
 
     repetition_penalty: float = 1
     temperature: float = 1

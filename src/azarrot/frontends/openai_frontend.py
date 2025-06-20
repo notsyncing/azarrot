@@ -27,7 +27,7 @@ from azarrot.common_data import (
     ToolCallResponseMessageContent,
     WorkingDirectories,
 )
-from azarrot.config import DEFAULT_MAX_TOKENS, ServerConfig
+from azarrot.config import ServerConfig
 from azarrot.file_store import FileStore
 from azarrot.frontends.backend_pipe import BackendPipe
 from azarrot.frontends.base import Frontend
@@ -377,7 +377,7 @@ class OpenAIFrontend(Frontend):
         generate_request = TextGenerationRequest(
             model_id=request.model,
             messages=self.__to_backend_generation_messages(request.messages),
-            max_tokens=request.max_tokens if request.max_tokens is not None else DEFAULT_MAX_TOKENS,
+            max_tokens=request.max_tokens,
             temperature=request.temperature,
             top_p=request.top_p,
             seed=request.seed,

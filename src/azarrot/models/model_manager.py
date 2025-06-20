@@ -180,6 +180,7 @@ class ModelManager:
                 preset=model_preset,
                 use_original_precision=model_info.get("use_original_precision", False),
                 is_for_raw_completion=model_info.get("is_for_raw_completion", False),
+                is_reasoning_model=model_info.get("is_reasoning_model", False),
                 transformers=transformers,
                 openvino=openvino,
                 pytorch=pytorch,
@@ -223,6 +224,7 @@ class ModelManager:
         model_preset: ModelPreset | None = None,
         use_original_precision: bool = False,
         is_for_raw_completion: bool = False,
+        is_reasoning_model: bool = False,
     ) -> None:
         backend = self._backends.get(backend_id)
 
@@ -259,6 +261,7 @@ class ModelManager:
             preset=preset,
             use_original_precision=use_original_precision,
             is_for_raw_completion=is_for_raw_completion,
+            is_reasoning_model=is_reasoning_model,
             transformers=None,
             openvino=None,
             pytorch=None,
