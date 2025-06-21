@@ -25,7 +25,7 @@ def internvl_patch_model(model: Any, tokenizer: PreTrainedTokenizer) -> None:
 
     image_size = model.config.force_image_size or model.config.vision_config.image_size
     patch_size = model.config.vision_config.patch_size
-    model.num_image_token = int((image_size // patch_size) ** 2 * (model.config.downsample_ratio ** 2))
+    model.num_image_token = int((image_size // patch_size) ** 2 * (model.config.downsample_ratio**2))
 
 
 def internvl_apply_chat_template(

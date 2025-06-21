@@ -78,7 +78,7 @@ class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMet
 
         try:
             with torch.inference_mode():
-                self._model.generate(**self.generation_kwargs)     # type: ignore[reportCallIssue]
+                self._model.generate(**self.generation_kwargs)  # type: ignore[reportCallIssue]
         except StopGenerationError:
             pass
         except:

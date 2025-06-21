@@ -344,10 +344,12 @@ class TransformersBasedBackend(BaseBackend, ABC):
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
         # The processor is actually a Qwen2TokenizerFast
-        internvl_patch_model(loaded_model.model, loaded_model.processor)    # type: ignore[reportArgumentType]
+        internvl_patch_model(loaded_model.model, loaded_model.processor)  # type: ignore[reportArgumentType]
 
         inputs, attention_mask, pixel_values = internvl_apply_chat_template(
-            loaded_model.model, loaded_model.processor, request.messages    # type: ignore[reportArgumentType]
+            loaded_model.model,
+            loaded_model.processor,
+            request.messages,  # type: ignore[reportArgumentType]
         )
 
         text_input_length = len(cast("torch.Tensor", inputs[0]))
@@ -372,7 +374,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
                 "pixel_values": pixel_values,
                 "streamer": streamer,
                 "max_new_tokens": request.max_tokens or self.__determine_default_max_tokens(loaded_model.data),
-                "eos_token_id": [151645]
+                "eos_token_id": [151645],
             }
         )
 
