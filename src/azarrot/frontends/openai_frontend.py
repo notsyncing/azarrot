@@ -198,10 +198,7 @@ class OpenAIFrontend(Frontend):
 
     def __to_openai_model(self, model: Model) -> openai.types.Model:
         return openai.types.Model(
-            id=model.id,
-            created=int(model.create_time.timestamp()),
-            owned_by="openai",
-            object="model"
+            id=model.id, created=int(model.create_time.timestamp()), owned_by="openai", object="model"
         )
 
     def get_models(self) -> SyncPage[openai.types.Model]:
@@ -440,9 +437,9 @@ class OpenAIFrontend(Frontend):
             if isinstance(request["input"][0], str):
                 text = cast("list[str]", request["input"])
             else:
-                raise HTTPException(HTTP_400_BAD_REQUEST, f"Unsupported input type {type(request["input"])}")
+                raise HTTPException(HTTP_400_BAD_REQUEST, f"Unsupported input type {type(request['input'])}")
         else:
-            raise HTTPException(HTTP_400_BAD_REQUEST, f"Unsupported input type {type(request["input"])}")
+            raise HTTPException(HTTP_400_BAD_REQUEST, f"Unsupported input type {type(request['input'])}")
 
         model = self.__get_model(request["model"])
         gen_req = EmbeddingsGenerationRequest(request["model"], text)
@@ -452,14 +449,10 @@ class OpenAIFrontend(Frontend):
 
         return openai.types.CreateEmbeddingResponse(
             data=[
-                openai.types.Embedding(
-                    embedding=data,
-                    index=index,
-                    object="embedding"
-                )
+                openai.types.Embedding(embedding=data, index=index, object="embedding")
                 for index, data in enumerate(data_list)
             ],
             model=request["model"],
             object="list",
-            usage=to_openai_embedding_token_usage(gen_stats)
+            usage=to_openai_embedding_token_usage(gen_stats),
         )

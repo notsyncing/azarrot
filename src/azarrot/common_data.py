@@ -2,7 +2,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, cast
+
+import dataclass_wizard
 
 from azarrot.tools.tool import LocalizedToolDescription
 
@@ -54,10 +56,19 @@ class ModelPreset:
 
 @dataclass
 class ModelQuirks:
-    output_buffering_length = 10
+    output_buffering_length: int = 10
     additional_stop_before_strings: list[str] | None = None
     full_text_indicators: list[str] | None = None
-    does_not_support_batching = False
+    does_not_support_batching: bool = False
+    openvino_dont_patch_model_compile: bool = False
+
+    def extend_with(self, **kwargs: Any) -> "ModelQuirks":
+        current = cast("dict", dataclass_wizard.asdict(self))
+        current.update(kwargs)
+        return ModelQuirks(**current)
+
+
+dataclass_wizard.DumpMeta(key_transform="NONE").bind_to(ModelQuirks)
 
 
 class ModelInfo:

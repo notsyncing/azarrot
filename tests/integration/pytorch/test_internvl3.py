@@ -5,14 +5,14 @@ from openai import OpenAI
 from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
 from azarrot.server import Server
 
-INTERNVL2_CHAT_MODEL = "OpenGVLab/InternVL2_5-1B"
+INTERNVL3_CHAT_MODEL = "OpenGVLab/InternVL3-1B"
 
 log = logging.getLogger(__name__)
 
 
-def test_internvl2_5_hello(pytorch_server: Server) -> None:
+def test_internvl3_hello(pytorch_server: Server) -> None:
     pytorch_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
+        INTERNVL3_CHAT_MODEL, BACKEND_ID_PYTORCH, "image-text-to-text", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -20,7 +20,7 @@ def test_internvl2_5_hello(pytorch_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=INTERNVL2_CHAT_MODEL,
+        model=INTERNVL3_CHAT_MODEL,
         messages=[{"role": "system", "content": "你是一个乐于助人的智能助理。"}, {"role": "user", "content": "你好！"}],
         seed=100,
     )
@@ -32,9 +32,9 @@ def test_internvl2_5_hello(pytorch_server: Server) -> None:
     assert result.content.find("你好！") >= 0
 
 
-def test_internvl2_5_conversation(pytorch_server: Server) -> None:
+def test_internvl3_conversation(pytorch_server: Server) -> None:
     pytorch_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
+        INTERNVL3_CHAT_MODEL, BACKEND_ID_PYTORCH, "image-text-to-text", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -42,7 +42,7 @@ def test_internvl2_5_conversation(pytorch_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=INTERNVL2_CHAT_MODEL,
+        model=INTERNVL3_CHAT_MODEL,
         messages=[
             {"role": "system", "content": "你是一个乐于助人的智能助理。"},
             {"role": "user", "content": "请记住：红=1，绿=2"},
@@ -59,9 +59,9 @@ def test_internvl2_5_conversation(pytorch_server: Server) -> None:
     assert result.content.find("绿=2") >= 0
 
 
-def test_internvl2_5_image_input(pytorch_server: Server) -> None:
+def test_internvl3_image_input(pytorch_server: Server) -> None:
     pytorch_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
+        INTERNVL3_CHAT_MODEL, BACKEND_ID_PYTORCH, "image-text-to-text", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -69,7 +69,7 @@ def test_internvl2_5_image_input(pytorch_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=INTERNVL2_CHAT_MODEL,
+        model=INTERNVL3_CHAT_MODEL,
         messages=[
             {"role": "system", "content": "你是一个乐于助人的智能助理，并且会用中文回答问题。"},
             {
@@ -92,5 +92,4 @@ def test_internvl2_5_image_input(pytorch_server: Server) -> None:
     assert result is not None
     assert result.content is not None
     log.info("Output: %s", result.content)
-    assert result.content.find("红") >= 0
-    assert result.content.find("熊猫") >= 0
+    assert result.content.find("小熊猫") >= 0 or result.content.find("红熊猫") >= 0

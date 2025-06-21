@@ -24,11 +24,7 @@ def cleanup_database(openvino_server: Server) -> Generator[None, Any, Any]:
 @pytest.fixture(autouse=True)
 def prepare_model_and_store(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
-        EMBEDDING_MODEL_ID,
-        BACKEND_ID_OPENVINO,
-        "feature-extraction",
-        skip_if_loaded=True,
-        override_model_id="bge-m3"
+        EMBEDDING_MODEL_ID, BACKEND_ID_OPENVINO, "feature-extraction", skip_if_loaded=True, override_model_id="bge-m3"
     )
 
 

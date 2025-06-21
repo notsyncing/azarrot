@@ -17,3 +17,4 @@ reports/
 .pytest_cache/
 http-requests/
 kernel.errors.txt
+.idea/

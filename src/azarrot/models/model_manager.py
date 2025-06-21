@@ -24,7 +24,7 @@ from azarrot.config import ServerConfig
 from azarrot.models.chat_templates import DEFAULT_LOCALE
 
 HF_MODEL_PRESET_MAPPING: dict[str, str] = {
-    "InternVLChatModel": "internvl2",
+    "InternVLChatModel": "internvl",
     "Qwen2ForCausalLM": "qwen2",
     "Qwen3ForCausalLM": "qwen3",
 }

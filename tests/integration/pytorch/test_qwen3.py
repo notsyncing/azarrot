@@ -9,14 +9,14 @@ from azarrot.server import Server
 from azarrot.tools import GLOBAL_TOOL_MANAGER
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
 
-QWEN2_CHAT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+QWEN3_CHAT_MODEL = "Qwen/Qwen3-1.7B"
 
 log = logging.getLogger(__name__)
 
 
-def test_qwen2_5_hello(pytorch_server: Server) -> None:
+def test_qwen3_hello(pytorch_server: Server) -> None:
     pytorch_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
+        QWEN3_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -24,7 +24,7 @@ def test_qwen2_5_hello(pytorch_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=QWEN2_CHAT_MODEL,
+        model=QWEN3_CHAT_MODEL,
         messages=[{"role": "system", "content": "你是一个乐于助人的智能助理。"}, {"role": "user", "content": "你好！"}],
         seed=100,
     )
@@ -36,9 +36,9 @@ def test_qwen2_5_hello(pytorch_server: Server) -> None:
     assert result.content.find("你好") >= 0
 
 
-def test_qwen2_5_conversation(pytorch_server: Server) -> None:
+def test_qwen3_conversation(pytorch_server: Server) -> None:
     pytorch_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
+        QWEN3_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -46,7 +46,7 @@ def test_qwen2_5_conversation(pytorch_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=QWEN2_CHAT_MODEL,
+        model=QWEN3_CHAT_MODEL,
         messages=[
             {"role": "system", "content": "你是一个乐于助人的智能助理。"},
             {"role": "user", "content": "请记住：红=1，绿=2"},
@@ -64,9 +64,9 @@ def test_qwen2_5_conversation(pytorch_server: Server) -> None:
     assert result.content.find("2") >= 0
 
 
-def test_qwen2_5_tool_calling(pytorch_server: Server) -> None:
+def test_qwen3_tool_calling(pytorch_server: Server) -> None:
     pytorch_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
+        QWEN3_CHAT_MODEL, BACKEND_ID_PYTORCH, "text-generation", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -99,7 +99,7 @@ def test_qwen2_5_tool_calling(pytorch_server: Server) -> None:
     ]
 
     completion = client.chat.completions.create(
-        model=QWEN2_CHAT_MODEL,
+        model=QWEN3_CHAT_MODEL,
         messages=messages,  # pyright: ignore[reportArgumentType]
         tools=tools,  # pyright: ignore[reportArgumentType]
         seed=100,
@@ -131,7 +131,7 @@ def test_qwen2_5_tool_calling(pytorch_server: Server) -> None:
     messages.append({"role": "tool", "content": "888", "tool_call_id": tool_call.id})
 
     completion = client.chat.completions.create(
-        model=QWEN2_CHAT_MODEL,
+        model=QWEN3_CHAT_MODEL,
         messages=messages,  # pyright: ignore[reportArgumentType]
         tools=tools,  # pyright: ignore[reportArgumentType]
         seed=100,
@@ -163,13 +163,13 @@ class RRRTool(Tool):
         return kwargs["a"] + kwargs["b"] - 200
 
 
-def test_qwen2_5_internal_tool_calling(pytorch_server: Server) -> None:
+def test_qwen3_internal_tool_calling(pytorch_server: Server) -> None:
     pytorch_server.model_manager.load_huggingface_model(
-        QWEN2_CHAT_MODEL,
+        QWEN3_CHAT_MODEL,
         BACKEND_ID_PYTORCH,
         "text-generation",
         skip_if_loaded=True,
-        model_preset=DEFAULT_MODEL_PRESETS["qwen2"].with_enable_internal_tools(),
+        model_preset=DEFAULT_MODEL_PRESETS["qwen3"].with_enable_internal_tools(),
     )
 
     GLOBAL_TOOL_MANAGER.clear_registered_tools()
@@ -180,7 +180,7 @@ def test_qwen2_5_internal_tool_calling(pytorch_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=QWEN2_CHAT_MODEL,
+        model=QWEN3_CHAT_MODEL,
         messages=[
             {"role": "user", "content": "193与27的RRR运算结果是多少？请通过工具得到结果，不要用自己认为的结果。"}
         ],

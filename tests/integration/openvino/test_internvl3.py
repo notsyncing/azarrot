@@ -1,16 +1,14 @@
-import pytest
 from openai import OpenAI
 
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.server import Server
 
-INTERNVL2_CHAT_MODEL = "OpenGVLab/InternVL2-8B"
+INTERNVL3_CHAT_MODEL = "OpenGVLab/InternVL3-1B"
 
 
-@pytest.mark.skip(reason="InternVL2 not usable on OpenVINO yet")
-def test_internvl2_hello(openvino_server: Server) -> None:
+def test_internvl3_hello(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+        INTERNVL3_CHAT_MODEL, BACKEND_ID_OPENVINO, "image-text-to-text-with-past", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -18,7 +16,7 @@ def test_internvl2_hello(openvino_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=INTERNVL2_CHAT_MODEL,
+        model=INTERNVL3_CHAT_MODEL,
         messages=[{"role": "system", "content": "你是一个乐于助人的智能助理。"}, {"role": "user", "content": "你好！"}],
         seed=100,
     )
@@ -29,10 +27,9 @@ def test_internvl2_hello(openvino_server: Server) -> None:
     assert result.content.find("你好！") >= 0
 
 
-@pytest.mark.skip(reason="InternVL2 not usable on OpenVINO yet")
-def test_internvl2_conversation(openvino_server: Server) -> None:
+def test_internvl3_conversation(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+        INTERNVL3_CHAT_MODEL, BACKEND_ID_OPENVINO, "image-text-to-text-with-past", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -40,7 +37,7 @@ def test_internvl2_conversation(openvino_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=INTERNVL2_CHAT_MODEL,
+        model=INTERNVL3_CHAT_MODEL,
         messages=[
             {"role": "system", "content": "你是一个乐于助人的智能助理。"},
             {"role": "user", "content": "请记住：红=1，绿=2"},
@@ -56,10 +53,9 @@ def test_internvl2_conversation(openvino_server: Server) -> None:
     assert result.content.find("绿=2") >= 0
 
 
-@pytest.mark.skip(reason="InternVL2 not usable on OpenVINO yet")
-def test_internvl2_image_input(openvino_server: Server) -> None:
+def test_internvl3_image_input(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(
-        INTERNVL2_CHAT_MODEL, BACKEND_ID_OPENVINO, "text-generation", skip_if_loaded=True
+        INTERNVL3_CHAT_MODEL, BACKEND_ID_OPENVINO, "image-text-to-text-with-past", skip_if_loaded=True
     )
 
     client = OpenAI(
@@ -67,7 +63,7 @@ def test_internvl2_image_input(openvino_server: Server) -> None:
     )
 
     completion = client.chat.completions.create(
-        model=INTERNVL2_CHAT_MODEL,
+        model=INTERNVL3_CHAT_MODEL,
         messages=[
             {"role": "system", "content": "你是一个乐于助人的智能助理，并且会用中文回答问题。"},
             {
@@ -89,4 +85,4 @@ def test_internvl2_image_input(openvino_server: Server) -> None:
     result = completion.choices[0].message
     assert result is not None
     assert result.content is not None
-    assert result.content.find("小熊猫") >= 0
+    assert result.content.find("小熊猫") >= 0 or result.content.find("红熊猫") >= 0

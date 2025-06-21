@@ -1,0 +1,16 @@
+id: InternVL3-8B
+# backend: pytorch
+backend: openvino
+path: huggingface://OpenGVLab/InternVL3-8B-Instruct
+task: image-text-to-text-with-past
+
+# pytorch:
+#   compile: True
+#   compile_backend: inductor
+
+# openvino:
+#   quantization_configs:
+#     bits: 4
+#     sym: False
+#     all_layers: True
+

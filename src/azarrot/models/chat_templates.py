@@ -16,7 +16,7 @@ DEFAULT_LOCALE = "zh-cn"
 DEFAULT_SYSTEM_PROMPT = {"zh-cn": "你是一个乐于助人的智能助手。", "en-us": "You are a helpful assistant."}
 
 BASE_SYSTEM_PROMPTS = {
-    "internvl2": {
+    "internvl": {
         "zh-cn": "你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL，是一个有用无害的人工智能助手。"  # noqa: RUF001, E501
     }
 }

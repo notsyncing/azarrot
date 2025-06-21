@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast, override
 
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoProcessor, AutoTokenizer
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
@@ -15,17 +15,21 @@ from azarrot.backends.common import (
     GenerationHandlers,
     GenerationMethods,
 )
-from azarrot.backends.internvl2_support import (
-    InternVL2TransformersGenerationMethods,
-    internvl2_apply_chat_template,
-    internvl2_patch_model,
+from azarrot.backends.internvl_support import (
+    InternVLTransformersGenerationMethods,
+    internvl_apply_chat_template,
+    internvl_patch_model,
 )
 from azarrot.backends.pytorch_common import (
     determine_pytorch_default_device,
     parse_pytorch_device_str,
     print_pytorch_device_list,
 )
-from azarrot.backends.transformers_common import TransformersGenerationMethods, to_transformers_chat_messages
+from azarrot.backends.transformers_common import (
+    ProcessorToTokenizerAdapter,
+    TransformersGenerationMethods,
+    to_transformers_chat_messages,
+)
 from azarrot.common_data import (
     EmbeddingModelInfo,
     GenerationMessage,
@@ -41,11 +45,17 @@ from azarrot.tools.tool import convert_tool_descriptions_to_json_schema
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
+    from transformers.processing_utils import ProcessorMixin
     from transformers.tokenization_utils import PreTrainedTokenizer
 
 TRANSFORMERS_TASK_MODEL_MAP = {
     "text-generation": AutoModelForCausalLM,
     "text-generation-with-past": AutoModelForCausalLM,
+}
+
+TRANSFORMERS_TASK_NEED_PROCESSOR_MAP = {
+    "image-text-to-text": True,
+    "image-text-to-text-with-past": True,
 }
 
 MODEL_PYTORCH_QUIRKS = {}
@@ -55,7 +65,8 @@ MODEL_PYTORCH_QUIRKS = {}
 class LoadedTransformersModel:
     data: Model
     model: "PreTrainedModel"
-    tokenizer: "PreTrainedTokenizer"
+    tokenizer: "PreTrainedTokenizer | None"
+    processor: "ProcessorMixin | None"
     device: str
 
 
@@ -86,7 +97,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         self._generation_variants = {
             "normal": self.__generate_normal,
-            "internvl2": self.__generate_internvl2,
+            "internvl": self.__generate_internvl,
         }
 
         accel_device_count = self._print_device_list()
@@ -109,6 +120,9 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _get_model_class(self, task: str) -> Any | None:
         return TRANSFORMERS_TASK_MODEL_MAP.get(task)
 
+    def _is_model_need_processor(self, model: Model) -> bool:
+        return TRANSFORMERS_TASK_NEED_PROCESSOR_MAP.get(model.task, False)
+
     def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
         pass
 
@@ -116,7 +130,8 @@ class TransformersBasedBackend(BaseBackend, ABC):
         self,
         model: Model,  # noqa: ARG002
         loaded_model: "PreTrainedModel",
-        loaded_tokenizer: "PreTrainedTokenizer",  # noqa: ARG002
+        loaded_tokenizer: "PreTrainedTokenizer | None",  # noqa: ARG002
+        loaded_processor: "ProcessorMixin | None",  # noqa: ARG002
         model_kwargs: dict[str, Any],  # noqa: ARG002
     ) -> "PreTrainedModel":
         return loaded_model
@@ -149,7 +164,13 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         model_path = model.path.absolute()
 
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        tokenizer: PreTrainedTokenizer | None = None
+        processor: ProcessorMixin | None = None
+
+        if self._is_model_need_processor:
+            processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
 
         generation_variant = model.generation_variant
 
@@ -169,9 +190,9 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         transformers_model.eval()
 
-        transformers_model = self._customize_loaded_model(model, transformers_model, tokenizer, model_kwargs)
+        transformers_model = self._customize_loaded_model(model, transformers_model, tokenizer, processor, model_kwargs)
 
-        self._models[model.id] = LoadedTransformersModel(model, transformers_model, tokenizer, device)
+        self._models[model.id] = LoadedTransformersModel(model, transformers_model, tokenizer, processor, device)
 
         self._log.info("Loaded model %s", model.id)
 
@@ -222,21 +243,41 @@ class TransformersBasedBackend(BaseBackend, ABC):
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
         if not loaded_model.data.is_for_raw_completion:
-            result = loaded_model.tokenizer.apply_chat_template(
-                to_transformers_chat_messages(request.messages),
-                tools=cast(
-                    "Any",
-                    convert_tool_descriptions_to_json_schema(request.tools_info.tools)
-                    if request.tools_info is not None
-                    else None,
-                ),
-                add_generation_prompt=True,
-                return_tensors="pt",
-                return_dict=True,
+            transformers_tools_desc = cast(
+                "Any",
+                convert_tool_descriptions_to_json_schema(request.tools_info.tools)
+                if request.tools_info is not None
+                else None,
             )
+
+            if loaded_model.tokenizer is not None:
+                result = loaded_model.tokenizer.apply_chat_template(
+                    to_transformers_chat_messages(request.messages),
+                    tools=transformers_tools_desc,
+                    add_generation_prompt=True,
+                    return_tensors="pt",
+                    return_dict=True,
+                )
+            elif loaded_model.processor is not None:
+                result = loaded_model.processor.apply_chat_template(
+                    to_transformers_chat_messages(request.messages),
+                    tools=transformers_tools_desc,
+                    tokenize=True,
+                    add_generation_prompt=True,
+                    return_tensors="pt",
+                    return_dict=True,
+                    processor_kwargs={},
+                    mm_load_kwargs={},
+                    template_kwargs={},
+                )
+            else:
+                raise ValueError(f"This model {loaded_model.data.id} has neither tokenizer nor processor!")
 
             result = cast("dict[str, Any]", result)
         else:
+            if loaded_model.tokenizer is None:
+                raise ValueError(f"This model {loaded_model.data.id} is not supported for raw completion!")
+
             first_user_msg = self.__get_first_text_message_with_role("user", request.messages)
 
             if first_user_msg is None:
@@ -294,7 +335,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
             model=loaded_model.model, streamer=streamer, seed=seed, generation_kwargs=generation_kwargs
         )
 
-    def __generate_internvl2(
+    def __generate_internvl(
         self,
         loaded_model: LoadedTransformersModel,
         request: TextGenerationRequest,
@@ -302,10 +343,11 @@ class TransformersBasedBackend(BaseBackend, ABC):
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
-        internvl2_patch_model(loaded_model.model, loaded_model.tokenizer)
+        # The processor is actually a Qwen2TokenizerFast
+        internvl_patch_model(loaded_model.model, loaded_model.processor)    # type: ignore[reportArgumentType]
 
-        inputs, attention_mask, pixel_values = internvl2_apply_chat_template(
-            loaded_model.model, loaded_model.tokenizer, request.messages
+        inputs, attention_mask, pixel_values = internvl_apply_chat_template(
+            loaded_model.model, loaded_model.processor, request.messages    # type: ignore[reportArgumentType]
         )
 
         text_input_length = len(cast("torch.Tensor", inputs[0]))
@@ -330,12 +372,22 @@ class TransformersBasedBackend(BaseBackend, ABC):
                 "pixel_values": pixel_values,
                 "streamer": streamer,
                 "max_new_tokens": request.max_tokens or self.__determine_default_max_tokens(loaded_model.data),
+                "eos_token_id": [151645]
             }
         )
 
-        return InternVL2TransformersGenerationMethods(
+        return InternVLTransformersGenerationMethods(
             model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
         )
+
+    def __make_streamer_tokenizer(self, loaded_model: LoadedTransformersModel) -> Any:
+        if loaded_model.tokenizer is not None:
+            return loaded_model.tokenizer
+        else:
+            if loaded_model.processor is None:
+                raise ValueError(f"Model {loaded_model.data.id} has neither tokenizer nor processor!")
+
+            return ProcessorToTokenizerAdapter(loaded_model.processor)
 
     @override
     def _generate(
@@ -356,7 +408,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.data.generation_variant)
 
         streamer = CustomTextIteratorStreamer(
-            cast("AutoTokenizer", loaded_model.tokenizer),
+            cast("AutoTokenizer", self.__make_streamer_tokenizer(loaded_model)),
             gen_stats,
             skip_prompt=True,
             timeout=self._server_config.single_token_generation_timeout / 1000,

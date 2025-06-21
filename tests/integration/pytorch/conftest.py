@@ -27,7 +27,7 @@ def pytorch_server() -> Generator[Server, Any, Any]:
 
     server = create_server(
         config=config,
-        enable_backends=[PyTorchBackend(config, force_use_device="cpu")],
+        enable_backends=[PyTorchBackend(config)],
         enable_schedule_thread=False,
     )
 

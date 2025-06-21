@@ -24,11 +24,14 @@ from azarrot.common_data import (
     EmbeddingsGenerationRequest,
     GenerationStatistics,
     Model,
+    ModelQuirks,
 )
 from azarrot.config import ServerConfig
+from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
+    from transformers.processing_utils import ProcessorMixin
     from transformers.tokenization_utils import PreTrainedTokenizer
 
 OPENVINO_TASK_MODEL_MAP = {
@@ -151,9 +154,12 @@ class OpenVINOBackend(TransformersBasedBackend):
 
         return "CPU"
 
-    def __patch_model(self, original_model: Any) -> Any:
-        cast("Any", original_model).compiled_model = None
-        original_model.compile = MethodType(patched_compile, original_model)
+    def __patch_model(self, original_model: Any, model_quirks: ModelQuirks | None) -> Any:
+        should_patch_compile = not model_quirks.openvino_dont_patch_model_compile if model_quirks is not None else True
+
+        if should_patch_compile:
+            cast("Any", original_model).compiled_model = None
+            original_model.compile = MethodType(patched_compile, original_model)
 
         return original_model
 
@@ -241,7 +247,8 @@ class OpenVINOBackend(TransformersBasedBackend):
         self,
         model: Model,
         loaded_model: "PreTrainedModel",
-        loaded_tokenizer: "PreTrainedTokenizer",
+        loaded_tokenizer: "PreTrainedTokenizer | None",
+        loaded_processor: "ProcessorMixin | None",
         model_kwargs: dict[str, Any],
     ) -> "PreTrainedModel":
         if model_kwargs.get("export", False):
@@ -249,10 +256,18 @@ class OpenVINOBackend(TransformersBasedBackend):
 
             ov_model_export_path = self.__make_openvino_export_path(model)
             loaded_model.save_pretrained(ov_model_export_path)
-            loaded_tokenizer.save_pretrained(ov_model_export_path)
+
+            if loaded_tokenizer is not None:
+                loaded_tokenizer.save_pretrained(ov_model_export_path)
+
+            if loaded_processor is not None:
+                loaded_processor.save_pretrained(ov_model_export_path)
+
             self._log.info("Exported OpenVINO model to %s", ov_model_export_path)
 
-        ov_model = self.__patch_model(loaded_model)
+        model_quirks = MODEL_GENERATION_QUIRKS.get(model.generation_variant)
+
+        ov_model = self.__patch_model(loaded_model, model_quirks)
         ov_model.compile()
         return ov_model
 

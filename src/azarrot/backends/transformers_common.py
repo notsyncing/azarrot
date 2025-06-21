@@ -11,10 +11,16 @@ from azarrot.backends.common import (
     GenerationMethods,
     StopGenerationError,
 )
-from azarrot.common_data import GenerationMessage, TextGenerationMessageContent, ToolCallRequestMessageContent
+from azarrot.common_data import (
+    GenerationMessage,
+    ImageGenerationMessageContent,
+    TextGenerationMessageContent,
+    ToolCallRequestMessageContent,
+)
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
+    from transformers.processing_utils import ProcessorMixin
 
 
 class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMethods", CustomTextIteratorStreamer]):
@@ -72,7 +78,7 @@ class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMet
 
         try:
             with torch.inference_mode():
-                self._model.generate(**self.generation_kwargs)
+                self._model.generate(**self.generation_kwargs)     # type: ignore[reportCallIssue]
         except StopGenerationError:
             pass
         except:
@@ -101,15 +107,23 @@ class TransformersGenerationMethods(GenerationMethods["TransformersGenerationMet
         self.streamer.set_failed()
 
 
+class ProcessorToTokenizerAdapter:
+    _processor: "ProcessorMixin"
+
+    def __init__(self, processor: "ProcessorMixin") -> None:
+        self._processor = processor
+
+    def decode(self, tokens: list, **kwargs: Any) -> str:
+        return (cast("Any", self._processor)).decode(tokens, **kwargs)
+
+
 def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dict[str, str]]:
     c = []
 
     for m in messages:
         transformers_msg: dict[str, Any]
 
-        if isinstance(m.contents[0], TextGenerationMessageContent):
-            transformers_msg = {"content": m.contents[0].text}
-        elif isinstance(m.contents[0], ToolCallRequestMessageContent):
+        if isinstance(m.contents[0], ToolCallRequestMessageContent):
             transformers_msg = {
                 "tool_calls": [
                     {
@@ -122,9 +136,26 @@ def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dic
                 ]
             }
         else:
-            raise ValueError(f"Invalid generation message for chat: {m}")
+            contents: list | str
 
-        transformers_msg["role"] = m.role
-        c.append(transformers_msg)
+            if len(m.contents) == 1 and isinstance(m.contents[0], TextGenerationMessageContent):
+                # For many models only expecting non-list content field in their chat templates
+                contents = m.contents[0].text
+            elif all(isinstance(mc, TextGenerationMessageContent) for mc in m.contents):
+                # For many models only expecting non-list content field in their chat templates
+                contents = "".join([(cast("TextGenerationMessageContent", mc)).text for mc in m.contents])
+            else:
+                contents = []
+
+                for mc in m.contents:
+                    if isinstance(mc, TextGenerationMessageContent):
+                        contents.append({"type": "text", "text": mc.text})
+                    elif isinstance(mc, ImageGenerationMessageContent):
+                        contents.append({"type": "image", "path": mc.image_file_path})
+                    else:
+                        raise ValueError(f"Generation message for chat contains unsupported content {mc}: {m}")
+
+            transformers_msg = {"role": m.role, "content": contents}
+            c.append(transformers_msg)
 
     return c
