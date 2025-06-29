@@ -1,8 +1,10 @@
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, Literal, TypeVar, cast, override
+from uu import Error
 
 import dataclass_wizard
 
@@ -56,7 +58,7 @@ class ModelPreset:
 
 @dataclass
 class ModelQuirks:
-    output_buffering_length: int = 10
+    output_buffering_length: int = 0
     additional_stop_before_strings: list[str] | None = None
     full_text_indicators: list[str] | None = None
     does_not_support_batching: bool = False
@@ -182,6 +184,61 @@ class ToolCallResponse:
     tool_result: str
 
 
+class DifferentChunkError(Error):
+    pass
+
+
+class GeneratedMessageChunk(ABC):
+    @abstractmethod
+    def __add__(self, another: "GeneratedMessageChunk") -> "GeneratedMessageChunk":
+        pass
+
+
+class EmptyMessageChunk(GeneratedMessageChunk):
+    @override
+    def __add__(self, another: "GeneratedMessageChunk") -> "GeneratedMessageChunk":
+        return another
+
+
+@dataclass
+class TextGeneratedMessageChunk(GeneratedMessageChunk):
+    content: str
+
+    @override
+    def __add__(self, another: GeneratedMessageChunk) -> "TextGeneratedMessageChunk":
+        if isinstance(another, EmptyMessageChunk):
+            return self
+
+        if not isinstance(another, TextGeneratedMessageChunk):
+            raise DifferentChunkError
+
+        return TextGeneratedMessageChunk(content=self.content + another.content)
+
+
+@dataclass
+class ToolCallGeneratedMessageChunk(GeneratedMessageChunk):
+    index: int
+    name: str | None
+    arguments: str
+
+    @override
+    def __add__(self, another: GeneratedMessageChunk) -> "ToolCallGeneratedMessageChunk":
+        if isinstance(another, EmptyMessageChunk):
+            return self
+
+        if not isinstance(another, ToolCallGeneratedMessageChunk):
+            raise DifferentChunkError
+
+        if self.index != another.index:
+            raise DifferentChunkError
+
+        return ToolCallGeneratedMessageChunk(
+            index=another.index,
+            name=(self.name or "") + (another.name or ""),
+            arguments=self.arguments + another.arguments,
+        )
+
+
 @dataclass
 class GenerationStatistics:
     start_time: datetime
@@ -210,12 +267,26 @@ class GenerationStatistics:
 
 
 @dataclass
+class ModelToolCallExtractedInfo:
+    name: str | None = None
+    name_completed: bool = False
+    arguments: str | None = None
+
+
+@dataclass
 class ModelToolCallConfig:
     prompts: dict[str, str] | None
     indicators: list[str]
     request_parsing_method: Callable[[str], list[ToolCallRequestMessageContent]]
     request_formatting_method: Callable[[list[ToolCallRequestMessageContent]], str] | None
     response_formatting_method: Callable[[list[ToolCallResponseMessageContent]], str] | None
+
+    tool_call_start_indicator: str | None = None
+    tool_call_stop_indicator: str | None = None
+    tool_call_info_extracting_method: (
+        Callable[["ModelToolCallConfig", dict[str, Any], str], ModelToolCallExtractedInfo] | None
+    ) = None
+    tool_call_arguments_wrapped_by_string: bool = False
 
 
 PR_T = TypeVar("PR_T")

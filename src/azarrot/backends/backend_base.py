@@ -9,9 +9,8 @@ from queue import Empty, Queue
 from typing import Any, ClassVar
 
 from azarrot.backends.common import (
-    CustomTextIteratorStreamer,
+    CompletionChunkStreamer,
     EmbeddingsGenerationResult,
-    GenerationHandlers,
     GenerationMethods,
 )
 from azarrot.common_data import (
@@ -317,20 +316,18 @@ class BaseBackend(ABC):
 
         return first_device_task_ref
 
-    def generate(
-        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+    def generate(self, request: TextGenerationRequest) -> tuple[CompletionChunkStreamer, GenerationStatistics]:
         if self._server_config.log_generation_details:
             self._log.info("Generation request: %s", request)
 
-        task, streamer, gen_stats = self._generate(request, generation_handlers)
+        task, streamer, gen_stats = self._generate(request)
         self.__submit_task_to_device(task)
 
         return streamer, gen_stats
 
     def _generate(
-        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
+        self, request: TextGenerationRequest
+    ) -> tuple[BackendGenerationTask, CompletionChunkStreamer, GenerationStatistics]:
         raise NotImplementedError
 
     def generate_embeddings(

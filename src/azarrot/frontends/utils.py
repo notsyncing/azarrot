@@ -4,11 +4,19 @@ from typing import Any, Literal
 
 import dataclass_wizard
 import openai.types
+from openai.types.chat import ChatCompletionMessageToolCall
+from openai.types.chat.chat_completion_message_tool_call import Function
+from openai.types.completion_usage import CompletionUsage
 from openai.types.create_embedding_response import Usage
 
 from azarrot.agents.common_data import AgentToolResourceRequest
 from azarrot.agents.manager import AgentToolInfo, AgentToolRequest, AgentToolResourceInfo
-from azarrot.common_data import CallableToolsInfo, GenerationStatistics, ToolCallRequestMessageContents
+from azarrot.common_data import (
+    CallableToolsInfo,
+    GenerationStatistics,
+    ToolCallGeneratedMessageChunk,
+    ToolCallRequestMessageContents,
+)
 from azarrot.frontends.openai_support.openai_assistants import (
     OpenAIAssistantTool,
     OpenAICodeInterpreterTool,
@@ -137,6 +145,33 @@ def to_openai_tool_calls(content: ToolCallRequestMessageContents) -> list[OpenAI
     ]
 
 
+def to_openai_tool_calls2(
+    content: ToolCallRequestMessageContents | list[ToolCallGeneratedMessageChunk],
+) -> list[ChatCompletionMessageToolCall]:
+    if isinstance(content, ToolCallRequestMessageContents):
+        return [
+            ChatCompletionMessageToolCall(
+                id=tool_call_req.id,
+                type="function",
+                function=Function(
+                    name=tool_call_req.function_name, arguments=json.dumps(tool_call_req.function_arguments)
+                ),
+            )
+            for tool_call_req in content.tool_requests
+        ]
+    elif isinstance(content, list):
+        return [
+            ChatCompletionMessageToolCall(
+                id=str(chunk.index),
+                type="function",
+                function=Function(name=chunk.name or "", arguments=chunk.arguments),
+            )
+            for chunk in content
+        ]
+    else:
+        raise ValueError(f"Unsupported content type {content}")
+
+
 def to_openai_assistant_tools(
     agent_id: str | uuid.UUID, agent_tools: list[AgentToolInfo] | list[AgentToolRequest] | None
 ) -> list[OpenAIAssistantTool] | None:
@@ -219,6 +254,14 @@ def to_openai_assistant_tool_resources(
 
 def to_openai_token_usage(gen_stats: GenerationStatistics) -> OpenAITokenUsage:
     return OpenAITokenUsage(
+        prompt_tokens=gen_stats.prompt_tokens,
+        completion_tokens=gen_stats.completion_tokens,
+        total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,
+    )
+
+
+def to_openai_token_usage2(gen_stats: GenerationStatistics) -> CompletionUsage:
+    return CompletionUsage(
         prompt_tokens=gen_stats.prompt_tokens,
         completion_tokens=gen_stats.completion_tokens,
         total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,

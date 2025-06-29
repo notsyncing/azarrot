@@ -1,20 +1,15 @@
-import json
 import logging
 from copy import copy, deepcopy
-from typing import Any, cast
+from typing import cast
 
 from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.common import (
-    CTIS_DELEGATE_TO_NEXT,
-    CTIS_HAS_OBJECT,
-    CustomTextIteratorStreamer,
-    GenerationHandlers,
+    CompletionChunkStreamer,
 )
 from azarrot.common_data import (
     CallableToolsInfo,
     EmbeddingsGenerationRequest,
     GenerationMessage,
-    GenerationMessageContent,
     GenerationStatistics,
     Model,
     RerankResultItem,
@@ -22,7 +17,6 @@ from azarrot.common_data import (
     TextGenerationMessageContent,
     TextGenerationRequest,
     ToolCallRequestMessageContent,
-    ToolCallRequestMessageContents,
     ToolCallResponseMessageContent,
 )
 from azarrot.models.chat_templates import (
@@ -45,73 +39,6 @@ class BackendPipe:
         self._chat_template_manager = chat_template_manager
         self._tool_manager = tool_manager
 
-    def __delegate_internal_tool_calls(
-        self,
-        tool_calling_requests: list[ToolCallRequestMessageContent],
-        model: Model,
-        original_request: TextGenerationRequest,
-    ) -> CustomTextIteratorStreamer:
-        resp_map: dict[str, Any] = {}
-
-        for req in tool_calling_requests:
-            resp = self._tool_manager.execute_tool(req.function_name, req.function_arguments)
-            resp_map[req.id] = resp
-
-        tool_calling_responses = [
-            ToolCallResponseMessageContent(to_id=tool_call_id, result=json.dumps(resp))
-            for tool_call_id, resp in resp_map.items()
-        ]
-
-        new_request = copy(original_request)
-
-        new_request.messages.append(
-            GenerationMessage(role="assistant", contents=cast("list[GenerationMessageContent]", tool_calling_requests))
-        )
-
-        for tool_calling_response in tool_calling_responses:
-            new_request.messages.append(
-                GenerationMessage(role="tool", contents=cast("list[GenerationMessageContent]", [tool_calling_response]))
-            )
-
-        new_streamer, _ = self.generate(model, new_request)
-        return new_streamer
-
-    def __on_full_text_available(
-        self,
-        model: Model,
-        streamer: CustomTextIteratorStreamer,
-        original_request: TextGenerationRequest,
-        full_text: str,
-    ) -> tuple[bool, str | None]:
-        is_tool_calling_request, tool_calling_requests = self._chat_template_manager.parse_tool_calling_request(
-            full_text, model.generation_variant, model.preset
-        )
-
-        if is_tool_calling_request and tool_calling_requests is not None:
-            internal_req_list = []
-            external_req_list = []
-
-            for req in tool_calling_requests:
-                if self._tool_manager.is_internal_tool(req.function_name):
-                    internal_req_list.append(req)
-                else:
-                    external_req_list.append(req)
-
-            if len(internal_req_list) > 0 and len(external_req_list) <= 0:
-                new_streamer = self.__delegate_internal_tool_calls(internal_req_list, model, original_request)
-                streamer.set_next_streamer(new_streamer)
-                return True, CTIS_DELEGATE_TO_NEXT
-            elif len(external_req_list) > 0:
-                if len(internal_req_list) > 0:
-                    self._log.warning(
-                        "The model called both internal and external tools. Internal tool calls will be ignored."
-                    )
-
-                streamer.put_object(ToolCallRequestMessageContents(external_req_list))
-                return True, CTIS_HAS_OBJECT
-
-        return False, None
-
     def __append_internal_tools_to_request(self, model: Model, request: TextGenerationRequest) -> None:
         if model.preset.enable_internal_tools:
             locale = self._chat_template_manager.determine_model_locale(model.preset)
@@ -130,7 +57,7 @@ class BackendPipe:
 
     def generate(
         self, model: Model, request: TextGenerationRequest
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+    ) -> tuple[CompletionChunkStreamer, GenerationStatistics]:
         messages = []
         next_index = 0
 
@@ -196,12 +123,8 @@ class BackendPipe:
 
         request.messages = messages
 
-        gen_handlers = GenerationHandlers(
-            full_text_handler=lambda streamer, text: self.__on_full_text_available(model, streamer, request, text)
-        )
-
         bk = self._backends[model.backend]
-        return bk.generate(request, gen_handlers)
+        return bk.generate(request)
 
     def generate_embeddings(
         self, model: Model, request: EmbeddingsGenerationRequest

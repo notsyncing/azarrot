@@ -11,8 +11,8 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoProcessor, AutoTo
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
+    CompletionChunkStreamer,
     CustomTextIteratorStreamer,
-    GenerationHandlers,
     GenerationMethods,
 )
 from azarrot.backends.internvl_support import (
@@ -40,7 +40,9 @@ from azarrot.common_data import (
     TextGenerationRequest,
 )
 from azarrot.config import DEFAULT_MAX_TOKENS, DEFAULT_REASONING_MAX_TOKENS, ServerConfig
+from azarrot.models.chat_templates import MODEL_TOOL_CALL_CONFIGS
 from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
+from azarrot.models.supports.default_chat_support import DEFAULT_MODEL_TOOL_CALL_CONFIG
 from azarrot.tools.tool import convert_tool_descriptions_to_json_schema
 
 if TYPE_CHECKING:
@@ -348,7 +350,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         inputs, attention_mask, pixel_values = internvl_apply_chat_template(
             loaded_model.model,
-            loaded_model.processor,
+            cast("PreTrainedTokenizer", loaded_model.processor),
             request.messages,  # type: ignore[reportArgumentType]
         )
 
@@ -393,8 +395,8 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
     @override
     def _generate(
-        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
+        self, request: TextGenerationRequest
+    ) -> tuple[BackendGenerationTask, CompletionChunkStreamer, GenerationStatistics]:
         loaded_model = self._get_model(request.model_id)
         generation_variant = loaded_model.data.generation_variant
         generation_method = self._generation_variants.get(generation_variant, self.__generate_normal)
@@ -416,7 +418,11 @@ class TransformersBasedBackend(BaseBackend, ABC):
             timeout=self._server_config.single_token_generation_timeout / 1000,
             skip_special_tokens=True,
             model_quirks=model_quirks,
-            generation_handlers=generation_handlers,
+        )
+
+        chunk_streamer = CompletionChunkStreamer(
+            text_streamer=streamer,
+            model_tool_call_config=MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG),
         )
 
         common_generation_kwargs = {"do_sample": True, "temperature": request.temperature, "top_p": request.top_p}
@@ -432,4 +438,4 @@ class TransformersBasedBackend(BaseBackend, ABC):
             seed=request.seed,
         )
 
-        return task, streamer, gen_stats
+        return task, chunk_streamer, gen_stats

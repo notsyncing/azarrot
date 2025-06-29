@@ -9,6 +9,7 @@ from azarrot.config import ServerConfig
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
+    from transformers.processing_utils import ProcessorMixin
     from transformers.tokenization_utils import PreTrainedTokenizer
 
 BACKEND_ID_PYTORCH = "pytorch"
@@ -52,7 +53,8 @@ class PyTorchBackend(TransformersBasedBackend):
         self,
         model: Model,
         loaded_model: "PreTrainedModel",
-        loaded_tokenizer: "PreTrainedTokenizer",
+        loaded_tokenizer: "PreTrainedTokenizer | None",
+        loaded_processor: "ProcessorMixin | None",
         model_kwargs: dict[str, Any],
     ) -> "PreTrainedModel":
         if model.pytorch is not None:

@@ -11,9 +11,8 @@ from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
 from azarrot.backends.common import (
-    CustomTextIteratorStreamer,
+    CompletionChunkStreamer,
     EmbeddingsGenerationResult,
-    GenerationHandlers,
     GenerationMethods,
 )
 from azarrot.backends.pytorch_common import (
@@ -201,15 +200,13 @@ class SentenceTransformersBackend(BaseBackend):
         return parse_pytorch_device_str(device_str)
 
     @override
-    def generate(
-        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[CustomTextIteratorStreamer, GenerationStatistics]:
+    def generate(self, request: TextGenerationRequest) -> tuple[CompletionChunkStreamer, GenerationStatistics]:
         raise NotImplementedError
 
     @override
     def _generate(
-        self, request: TextGenerationRequest, generation_handlers: GenerationHandlers
-    ) -> tuple[BackendGenerationTask, CustomTextIteratorStreamer, GenerationStatistics]:
+        self, request: TextGenerationRequest
+    ) -> tuple[BackendGenerationTask, CompletionChunkStreamer, GenerationStatistics]:
         raise NotImplementedError
 
     @override

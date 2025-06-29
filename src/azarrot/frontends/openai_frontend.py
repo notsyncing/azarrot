@@ -3,10 +3,11 @@ import logging
 import uuid
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any, cast, override
+from typing import Any, Literal, cast, override
 
-import dataclass_wizard
 import openai.types
+import openai.types.chat
+import openai.types.chat.chat_completion_chunk
 from fastapi import APIRouter, FastAPI, HTTPException
 from openai.pagination import SyncPage
 from starlette.responses import StreamingResponse
@@ -14,17 +15,21 @@ from starlette.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from azarrot.agents.chat_task_manager import AgentChatTaskManager
 from azarrot.agents.manager import AgentManager
-from azarrot.backends.common import CTIS_HAS_OBJECT, CustomTextIteratorStreamer
+from azarrot.backends.common import CompletionChunkStreamer
 from azarrot.chats.thread_manager import ChatThreadManager
 from azarrot.common_data import (
+    DifferentChunkError,
     EmbeddingsGenerationRequest,
+    GeneratedMessageChunk,
     GenerationMessage,
     GenerationMessageContent,
     GenerationStatistics,
     ImageGenerationMessageContent,
     Model,
+    TextGeneratedMessageChunk,
     TextGenerationMessageContent,
     TextGenerationRequest,
+    ToolCallGeneratedMessageChunk,
     ToolCallRequestMessageContent,
     ToolCallRequestMessageContents,
     ToolCallResponseMessageContent,
@@ -55,8 +60,8 @@ from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorSt
 from azarrot.frontends.utils import (
     to_backend_tools_info,
     to_openai_embedding_token_usage,
-    to_openai_token_usage,
-    to_openai_tool_calls,
+    to_openai_token_usage2,
+    to_openai_tool_calls2,
 )
 from azarrot.models.model_manager import ModelManager
 from azarrot.utils.downloader import download_file_to_store
@@ -288,69 +293,120 @@ class OpenAIFrontend(Frontend):
     def __to_openai_chat_completion_object(
         self,
         model: Model,
-        content: Any | None,
-        finish_reason: str | None = None,
+        content: str
+        | GenerationMessageContent
+        | ToolCallRequestMessageContents
+        | GeneratedMessageChunk
+        | list[GeneratedMessageChunk]
+        | None,
+        completion_id: str,
+        finish_reason: Literal["stop", "length", "tool_calls", "content_filter", "function_call"] | None = None,
         contains_usage_info: bool = False,
         usage_info: GenerationStatistics | None = None,
         is_delta: bool = False,
-    ) -> dict:
-        message: dict[str, Any]
+    ) -> openai.types.chat.ChatCompletionChunk | openai.types.chat.ChatCompletion:
+        create_time = int(datetime.now().timestamp())
 
-        if isinstance(content, str):
-            message = {"role": "assistant", "content": content}
-        elif isinstance(content, ToolCallResponseMessageContent):
-            message = {"role": "tool", "content": content.result, "tool_call_id": content.to_id}
-        elif isinstance(content, ToolCallRequestMessageContents):
-            tool_calls = to_openai_tool_calls(content)
-            message = {"role": "assistant", "tool_calls": [dataclass_wizard.asdict(tc) for tc in tool_calls]}
+        if is_delta:
+            choice = openai.types.chat.chat_completion_chunk.ChoiceDelta(
+                role="assistant",
+            )
+
+            if content is None:
+                choice.content = None
+            elif isinstance(content, TextGeneratedMessageChunk):
+                choice.content = content.content
+            elif isinstance(content, ToolCallGeneratedMessageChunk):
+                choice.tool_calls = [
+                    openai.types.chat.chat_completion_chunk.ChoiceDeltaToolCall(
+                        index=content.index,
+                        function=openai.types.chat.chat_completion_chunk.ChoiceDeltaToolCallFunction(
+                            name=content.name,
+                            arguments=content.arguments,
+                        ),
+                    ),
+                ]
+            else:
+                raise ValueError(f"Unsupported chunk type {content}")
+
+            openai_chunk = openai.types.chat.ChatCompletionChunk(
+                id=completion_id,
+                created=create_time,
+                model=model.id,
+                object="chat.completion.chunk",
+                choices=[
+                    openai.types.chat.chat_completion_chunk.Choice(
+                        index=0,
+                        delta=choice,
+                        finish_reason=finish_reason,
+                    )
+                ],
+                system_fingerprint="azarrot",
+            )
+
+            if contains_usage_info and usage_info is not None:
+                openai_chunk.usage = to_openai_token_usage2(usage_info)
+
+            return openai_chunk
         else:
-            message = {}
+            assert finish_reason is not None
 
-        resp: dict[str, Any] = {
-            "id": str(uuid.uuid4()),
-            "object": "chat.completion.chunk" if is_delta else "chat.completion",
-            "created": int(datetime.now().timestamp()),
-            "model": model.id,
-            "system_fingerprint": "azarrot",
-            "choices": [
-                {
-                    "index": 0,
-                    ("delta" if is_delta else "message"): message,
-                    "logprobs": None,
-                    "finish_reason": finish_reason,
-                }
-            ],
-        }
+            message = openai.types.chat.ChatCompletionMessage(role="assistant")
 
-        if contains_usage_info and usage_info is not None:
-            resp["usage"] = to_openai_token_usage(usage_info)
+            if isinstance(content, str):
+                message.content = content
+            elif isinstance(content, TextGenerationMessageContent):
+                message.content = content.text
+            elif isinstance(content, ToolCallGeneratedMessageChunk):
+                tool_calls = to_openai_tool_calls2([content])
+                message.tool_calls = tool_calls
+            elif isinstance(content, list):
+                text_contents = [c for c in content if isinstance(c, TextGeneratedMessageChunk)]
+                tool_call_contents = [c for c in content if isinstance(c, ToolCallGeneratedMessageChunk)]
+                tool_calls = to_openai_tool_calls2(tool_call_contents)
+                message.content = "".join([c.content for c in text_contents])
+                message.tool_calls = tool_calls if len(tool_calls) > 0 else None
+            else:
+                raise ValueError(f"Unsupported content type {content}")
 
-        return resp
+            openai_resp = openai.types.chat.ChatCompletion(
+                id=completion_id,
+                created=create_time,
+                model=model.id,
+                object="chat.completion",
+                choices=[
+                    openai.types.chat.chat_completion.Choice(finish_reason=finish_reason, index=0, message=message),
+                ],
+                system_fingerprint="azarrot",
+            )
+
+            if contains_usage_info and usage_info is not None:
+                openai_resp.usage = to_openai_token_usage2(usage_info)
+
+            return openai_resp
 
     def __log_generation_statistics(self, generation_statistics: GenerationStatistics) -> None:
         self._log.info(generation_statistics.to_stats_text())
 
     def __wrap_to_openai_chat_completion_stream(
         self,
-        streamer: CustomTextIteratorStreamer,
+        streamer: CompletionChunkStreamer,
         model: Model,
+        completion_id: str,
         generation_statistics: GenerationStatistics,
         contains_usage_info: bool = False,
     ) -> Generator[str, Any, None]:
-        for text in streamer:
-            if text == "":
-                continue
+        has_tool_calls = False
 
-            result = text
-
-            if text == CTIS_HAS_OBJECT:
-                result = streamer.fetch_object()
+        for chunk in streamer:
+            if isinstance(chunk, ToolCallGeneratedMessageChunk):
+                has_tool_calls = True
 
             yield (
                 "data: "
                 + json.dumps(
                     self.__to_openai_chat_completion_object(
-                        model, result, finish_reason=None, contains_usage_info=False, is_delta=True
+                        model, chunk, completion_id, finish_reason=None, contains_usage_info=False, is_delta=True
                     )
                 )
                 + "\n\n"
@@ -365,7 +421,8 @@ class OpenAIFrontend(Frontend):
                 self.__to_openai_chat_completion_object(
                     model,
                     None,
-                    finish_reason="stop",
+                    completion_id,
+                    finish_reason="stop" if not has_tool_calls else "tool_calls",
                     contains_usage_info=contains_usage_info,
                     usage_info=generation_statistics,
                     is_delta=True,
@@ -382,7 +439,7 @@ class OpenAIFrontend(Frontend):
 
         return model
 
-    def chat_completions(self, request: ChatCompletionRequest) -> dict | StreamingResponse:
+    def chat_completions(self, request: ChatCompletionRequest) -> openai.types.chat.ChatCompletion | StreamingResponse:
         generate_request = TextGenerationRequest(
             model_id=request.model,
             messages=self.__to_backend_generation_messages(request.messages),
@@ -396,37 +453,48 @@ class OpenAIFrontend(Frontend):
 
         model = self.__get_model(request.model)
         streamer, gen_stats = self._backend_pipe.generate(model, generate_request)
+        completion_id = str(uuid.uuid4())
 
         if request.stream:
             return StreamingResponse(
                 self.__wrap_to_openai_chat_completion_stream(
-                    streamer, model, gen_stats, request.stream_options.include_usage
+                    streamer,
+                    model,
+                    completion_id,
+                    gen_stats,
+                    request.stream_options.include_usage,
                 ),
                 media_type="text/event-stream",
             )
 
-        result = None
-        content = ""
+        contents: list[GeneratedMessageChunk] = []
+        current_content: GeneratedMessageChunk | None = None
 
-        for text in streamer:
-            if text == CTIS_HAS_OBJECT:
-                result = streamer.fetch_object()
-                break
+        for chunk in streamer:
+            if current_content is None:
+                current_content = chunk
+            else:
+                try:
+                    current_content += chunk
+                except DifferentChunkError:
+                    contents.append(current_content)
+                    current_content = chunk
 
-            content += text
-
-        if result is None:
-            result = content
+        if current_content is not None:
+            contents.append(current_content)
 
         if self._server_config.log_generation_details:
-            self._log.info("Generation response: %s", result)
+            self._log.info(f"Generation response: {contents}")
 
         gen_stats.end_time = datetime.now()
         self.__log_generation_statistics(gen_stats)
 
-        return self.__to_openai_chat_completion_object(
-            model, result, "stop", contains_usage_info=True, usage_info=gen_stats
+        r = self.__to_openai_chat_completion_object(
+            model, contents, completion_id, "stop", contains_usage_info=True, usage_info=gen_stats
         )
+
+        assert isinstance(r, openai.types.chat.ChatCompletion)
+        return r
 
     def create_embeddings(self, request: openai.types.EmbeddingCreateParams) -> openai.types.CreateEmbeddingResponse:
         text: str | list[str]

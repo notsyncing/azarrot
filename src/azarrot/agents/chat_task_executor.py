@@ -21,7 +21,7 @@ from azarrot.agents.common_data import (
     AgentToolRequest,
 )
 from azarrot.agents.manager import AgentManager
-from azarrot.backends.common import CTIS_HAS_OBJECT, CustomTextIteratorStreamer
+from azarrot.backends.common import CompletionChunkStreamer
 from azarrot.chats.common_data import (
     ChatMessageContentImagePart,
     ChatMessageContentTextPart,
@@ -34,14 +34,17 @@ from azarrot.chats.common_data import (
 from azarrot.chats.thread_manager import ChatThreadManager, ChatThreadMessageListener
 from azarrot.common_data import (
     CallableToolsInfo,
+    DifferentChunkError,
+    GeneratedMessageChunk,
     GenerationMessage,
     GenerationMessageContent,
     GenerationStatistics,
     ImageGenerationMessageContent,
+    TextGeneratedMessageChunk,
     TextGenerationMessageContent,
     TextGenerationRequest,
+    ToolCallGeneratedMessageChunk,
     ToolCallRequestMessageContent,
-    ToolCallRequestMessageContents,
     ToolCallResponseMessageContent,
 )
 from azarrot.common_types import (
@@ -387,34 +390,37 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
         thread.start()
 
     def __run_generation(
-        self, task: AgentChatTaskInfo, streamer: CustomTextIteratorStreamer, gen_stats: GenerationStatistics
+        self, task: AgentChatTaskInfo, streamer: CompletionChunkStreamer, gen_stats: GenerationStatistics
     ) -> None:
-        result = None
-        content = ""
+        contents: list[GeneratedMessageChunk] = []
+        current_content: GeneratedMessageChunk | None = None
 
-        for text in streamer:
-            if text == CTIS_HAS_OBJECT:
-                result = streamer.fetch_object()
-                break
+        for chunk in streamer:
+            if current_content is None:
+                current_content = chunk
+            else:
+                try:
+                    current_content += chunk
+                except DifferentChunkError:
+                    contents.append(current_content)
+                    current_content = chunk
 
-            content += text
-
-        if result is None:
-            result = content
+        if current_content is not None:
+            contents.append(current_content)
 
         if self._server_config.log_generation_details:
-            self._log.info("Generation response: %s", result)
+            self._log.info(f"Generation response: {contents}")
 
         gen_stats.end_time = datetime.now()
         self._log.info(gen_stats.to_stats_text())
 
-        self.__handle_generation_result(task, result, gen_stats)
+        self.__handle_generation_result(task, contents, gen_stats)
 
     def __handle_generation_result(self, task: AgentChatTaskInfo, result: Any, gen_stats: GenerationStatistics) -> None:
         task_id = UUID(task.id)
 
-        if isinstance(result, str):
-            message = ChatMessageInputItem(role="assistant", contents=[ChatMessageContentTextPart(result)])
+        if isinstance(result, TextGeneratedMessageChunk):
+            message = ChatMessageInputItem(role="assistant", contents=[ChatMessageContentTextPart(result.content)])
 
             msg = self._chat_thread_manager.add_message(task.thread_id, message, self)
 
@@ -430,16 +436,20 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
             )
 
             self.__update_task_status(task_id, "in_progress", "completed")
-        elif isinstance(result, ToolCallRequestMessageContents):
+        elif isinstance(result, (ToolCallGeneratedMessageChunk, list)):
+            if isinstance(result, ToolCallGeneratedMessageChunk):
+                result = [result]
+
             message = ChatMessageInputItem(
                 role="assistant",
                 contents=[
                     ChatMessageToolRequestsPart(
                         tool_requests=[
                             ChatMessageToolRequestItem(
-                                id=c.id, function_name=c.function_name, function_arguments=c.function_arguments
+                                id=str(c.index), function_name=c.name or "", function_arguments=json.loads(c.arguments)
                             )
-                            for c in result.tool_requests
+                            for c in result
+                            if isinstance(c, ToolCallGeneratedMessageChunk)
                         ]
                     )
                 ],
@@ -454,12 +464,13 @@ class AgentChatTaskExecutor(ChatThreadMessageListener):
                 data=AgentChatTaskToolCallDetailsData(
                     tool_calls=[
                         AgentChatTaskDetailToolCallItem(
-                            tool_call_id=c.id,
-                            tool_name=c.function_name,
-                            tool_input=json.dumps(c.function_arguments),
+                            tool_call_id=str(c.index),
+                            tool_name=c.name or "",
+                            tool_input=c.arguments,
                             tool_output="",
                         )
-                        for c in result.tool_requests
+                        for c in result
+                        if isinstance(c, ToolCallGeneratedMessageChunk)
                     ]
                 ),
                 generation_statistics=gen_stats,

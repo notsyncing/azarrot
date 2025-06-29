@@ -4,6 +4,8 @@ The following are change log of each versions.
 
 ## 0.4.0 (2025-06-??)
 
+- Support tool call streaming
+- Removed implicit internal tool calling mechanism
 - Support Qwen3 reasoning
 - Support loading AWQ model with OpenVINO
 - Removed IPEX-LLM backend
