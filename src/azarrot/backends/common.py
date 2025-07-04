@@ -13,9 +13,11 @@ from azarrot.common_data import (
     GenerationStatistics,
     ModelQuirks,
     ModelToolCallConfig,
+    ReasoningGeneratedMessageChunk,
     TextGeneratedMessageChunk,
     ToolCallGeneratedMessageChunk,
 )
+from azarrot.models.supports.default_chat_support import DEFAULT_MODEL_QUIRKS
 
 if TYPE_CHECKING:
     from transformers import AutoTokenizer
@@ -34,7 +36,6 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     _first_token = True
     _model_quirks: ModelQuirks | None = None
     _output_buffer: str = ""
-    _full_text = False
     _object_queue: Queue[Any]
     _current_ended = False
     _batch_mode = False
@@ -118,11 +119,6 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
             if self._model_quirks.output_buffering_length > 0:
                 self._output_buffer += text
 
-                if self._model_quirks.full_text_indicators is not None and not self._full_text:
-                    for full_text_indicator in self._model_quirks.full_text_indicators:
-                        if self._output_buffer.find(full_text_indicator) >= 0:
-                            self._full_text = True
-
                 if self._model_quirks.additional_stop_before_strings is not None:
                     should_stop, cut_index = self.__check_and_strip_stop_before_strings()
 
@@ -139,7 +135,7 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
                         super().on_finalized_text(new_text, stream_end=False)
                         return
 
-                if not self._full_text and len(self._output_buffer) > self._model_quirks.output_buffering_length * 2:
+                if len(self._output_buffer) > self._model_quirks.output_buffering_length * 2:
                     output_text = self._output_buffer[: self._model_quirks.output_buffering_length]
                     self._output_buffer = self._output_buffer[self._model_quirks.output_buffering_length :]
                     super().on_finalized_text(output_text, stream_end=False)
@@ -244,8 +240,9 @@ class GenerationMethods[GM: "GenerationMethods", R](ABC):
 
 class CompletionChunkStreamer(Iterator[GeneratedMessageChunk]):
     _text_streamer: TextIteratorStreamer
+    _model_quirks: ModelQuirks
     _tc_config: ModelToolCallConfig | None = None
-    _state: Literal["text", "tool_call"]
+    _state: Literal["reasoning", "text", "tool_call"]
     _tool_call_counter: int = 0
     _tool_call_extracting_state: dict[str, Any]
     _queue: Queue
@@ -253,6 +250,7 @@ class CompletionChunkStreamer(Iterator[GeneratedMessageChunk]):
     def __init__(
         self,
         text_streamer: TextIteratorStreamer,
+        model_quirks: ModelQuirks | None = None,
         model_tool_call_config: ModelToolCallConfig | None = None,
     ) -> None:
         self._text_streamer = text_streamer
@@ -260,6 +258,11 @@ class CompletionChunkStreamer(Iterator[GeneratedMessageChunk]):
         self._state = "text"
         self._tool_call_extracting_state = {}
         self._queue = Queue()
+
+        if model_quirks is None:
+            self._model_quirks = DEFAULT_MODEL_QUIRKS
+        else:
+            self._model_quirks = model_quirks
 
     @override
     def __iter__(self) -> Self:
@@ -280,7 +283,7 @@ class CompletionChunkStreamer(Iterator[GeneratedMessageChunk]):
 
         if self._tc_config is not None:
             tcsi = self._tc_config.tool_call_start_indicator
-            tcei = self._tc_config.tool_call_stop_indicator
+            tcei = self._tc_config.tool_call_end_indicator
         else:
             tcsi = None
             tcei = None
@@ -298,6 +301,18 @@ class CompletionChunkStreamer(Iterator[GeneratedMessageChunk]):
 
                         text = text[tcsi_start:]
                         self._state = "tool_call"
+
+                if self._state == "text" and self._model_quirks.reasoning_start_indicator is not None:
+                    rsi_start = text.find(self._model_quirks.reasoning_start_indicator)
+
+                    if rsi_start >= 0:
+                        remaining_text = text[:rsi_start]
+
+                        if len(remaining_text) > 0:
+                            self._queue.put(TextGeneratedMessageChunk(content=remaining_text))
+
+                        text = text[rsi_start:]
+                        self._state = "reasoning"
 
                 if self._state == "text" and len(text) > 0:
                     self._queue.put(TextGeneratedMessageChunk(content=text))
@@ -337,6 +352,7 @@ class CompletionChunkStreamer(Iterator[GeneratedMessageChunk]):
                         ToolCallGeneratedMessageChunk(
                             index=self._tool_call_counter,
                             name=tool_call_extracted_info.name,
+                            name_completed=tool_call_extracted_info.name_completed,
                             arguments=tool_call_extracted_info.arguments or "",
                         )
                     )
@@ -344,6 +360,35 @@ class CompletionChunkStreamer(Iterator[GeneratedMessageChunk]):
                 if tool_call_end_pos >= 0:
                     self._tool_call_counter += 1
                     self._tool_call_extracting_state = {}
+                    self._state = "text"
+
+            if self._state == "reasoning":
+                assert self._model_quirks.reasoning_start_indicator is not None
+                assert self._model_quirks.reasoning_end_indicator is not None
+                rsi = self._model_quirks.reasoning_start_indicator
+                rei = self._model_quirks.reasoning_end_indicator
+
+                reasoning_start_pos = text.find(rsi)
+
+                if reasoning_start_pos == 0:
+                    reasoning_content = text[reasoning_start_pos + len(rsi) :]
+                elif reasoning_start_pos < 0:
+                    reasoning_content = text
+                else:
+                    raise ValueError(f"Invalid reasoning start pos {reasoning_start_pos} in text {text}")
+
+                reasoning_end_pos = reasoning_content.find(rei)
+
+                if reasoning_end_pos >= 0:
+                    text = reasoning_content[reasoning_end_pos + len(rei) :]
+                    reasoning_content = reasoning_content[:reasoning_end_pos]
+                else:
+                    text = ""
+
+                if len(reasoning_content) > 0:
+                    self._queue.put(ReasoningGeneratedMessageChunk(content=reasoning_content))
+
+                if reasoning_end_pos >= 0:
                     self._state = "text"
 
         if not self._queue.empty():

@@ -1,13 +1,16 @@
 import json
 import uuid
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import dataclass_wizard
 import openai.types
+import openai.types.responses as oai_resps
 from openai.types.chat import ChatCompletionMessageToolCall
 from openai.types.chat.chat_completion_message_tool_call import Function
 from openai.types.completion_usage import CompletionUsage
 from openai.types.create_embedding_response import Usage
+from openai.types.responses import ResponseFunctionToolCall, ResponseUsage, ToolParam
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
 from azarrot.agents.common_data import AgentToolResourceRequest
 from azarrot.agents.manager import AgentToolInfo, AgentToolRequest, AgentToolResourceInfo
@@ -69,33 +72,63 @@ def to_backend_tool_parameters(tool_parameters: dict[str, Any] | None) -> list[L
 
 
 def to_backend_tools_info(
-    tools_info: list[ToolInfo] | None, tools_choice: OpenAIToolChoiceConstant | ToolChoice | None
+    tools_info: list[ToolInfo] | list[ToolParam] | None,
+    tools_choice: OpenAIToolChoiceConstant | ToolChoice | oai_resps.response_create_params.ToolChoice | None,
 ) -> CallableToolsInfo | None:
     if tools_info is None:
         return None
 
-    tools = [
-        LocalizedToolDescription(
-            name=tool_info.function.name,
-            display_name=None,
-            description=tool_info.function.description,
-            parameters=to_backend_tool_parameters(tool_info.function.parameters),
-        )
-        for tool_info in tools_info
-    ]
+    if len(tools_info) <= 0:
+        return None
+
+    tools: list[LocalizedToolDescription]
+
+    if isinstance(tools_info[0], ToolInfo):
+        tools = [
+            LocalizedToolDescription(
+                name=tool_info.function.name,
+                display_name=None,
+                description=tool_info.function.description,
+                parameters=to_backend_tool_parameters(tool_info.function.parameters),
+            )
+            for tool_info in tools_info
+            if isinstance(tool_info, ToolInfo)
+        ]
+    else:
+        tools_info = cast("list[ToolParam]", tools_info)
+        tools = []
+
+        for tool_info in tools_info:
+            if tool_info["type"] == "function":
+                tools.append(
+                    LocalizedToolDescription(
+                        name=tool_info["name"],
+                        display_name=None,
+                        description=tool_info.get("description"),
+                        parameters=to_backend_tool_parameters(tool_info["parameters"]),
+                    )
+                )
+            else:
+                raise ValueError(f"Unsupported tool type {tool_info['type']} in {tool_info}")
 
     force_use_tool_name = None
 
-    if isinstance(tools_choice, ToolChoice):
-        if tools_choice.type == "function":
-            if tools_choice.function is None:
-                raise ValueError(f"OpenAI tool choice type is {tools_choice.type}, but no function name specified!")
+    if tools_choice is not None:
+        if isinstance(tools_choice, ToolChoice):
+            if tools_choice.type == "function":
+                if tools_choice.function is None:
+                    raise ValueError(f"OpenAI tool choice type is {tools_choice.type}, but no function name specified!")
 
-            force_use_tool_name = tools_choice.function.name
-        elif tools_choice.type == "file_search":
-            force_use_tool_name = INTERNAL_TOOL_RAG_SEARCH
-        else:
-            raise ValueError(f"Unsupported OpenAI tool choice type {tools_choice.type}")
+                force_use_tool_name = tools_choice.function.name
+            elif tools_choice.type == "file_search":
+                force_use_tool_name = INTERNAL_TOOL_RAG_SEARCH
+            else:
+                raise ValueError(f"Unsupported OpenAI tool choice type {tools_choice.type}")
+        elif isinstance(tools_choice, dict):
+            if tools_choice["type"] == "function":
+                force_use_tool_name = tools_choice["name"]
+            else:
+                raise ValueError(f"Unsupported OpenAI tool choice type {tools_choice['type']}")
 
     return CallableToolsInfo(
         tools=tools,
@@ -129,6 +162,48 @@ def to_openai_tool_choice(tools_info: CallableToolsInfo | None) -> OpenAIToolCho
             function = ToolChoiceFunction(name=tools_info.force_use_tool_name)
 
         return ToolChoice(type=tool_type, function=function)
+
+
+def to_openai_responses_tool_choice(tools_info: CallableToolsInfo | None) -> oai_resps.response.ToolChoice:
+    if tools_info is None:
+        return "auto"
+
+    if tools_info.force_use_no_tool:
+        return "none"
+
+    if tools_info.force_use_any_tool:
+        return "required"
+
+    if tools_info.force_use_tool_name is None:
+        return "auto"
+    elif tools_info.force_use_tool_name == INTERNAL_TOOL_RAG_SEARCH:
+        return oai_resps.ToolChoiceTypes(type="file_search")
+    else:
+        return oai_resps.ToolChoiceFunction(name=tools_info.force_use_tool_name, type="function")
+
+
+def to_openai_responses_tools(tools_info: CallableToolsInfo | None) -> list[oai_resps.Tool]:
+    if tools_info is None:
+        return []
+
+    tools: list[oai_resps.Tool] = []
+
+    for t in tools_info.tools:
+        if t.name == INTERNAL_TOOL_RAG_SEARCH:
+            # TODO: Placeholder. Support this later
+
+            tools.append(oai_resps.FileSearchTool(type="file_search", vector_store_ids=[]))
+        else:
+            tools.append(
+                oai_resps.FunctionTool(
+                    name=t.name,
+                    parameters=t.parameters_dict(),
+                    type="function",
+                    description=t.description,
+                )
+            )
+
+    return tools
 
 
 def to_openai_tool_calls(content: ToolCallRequestMessageContents) -> list[OpenAIToolCallRequest]:
@@ -165,6 +240,33 @@ def to_openai_tool_calls2(
                 id=str(chunk.index),
                 type="function",
                 function=Function(name=chunk.name or "", arguments=chunk.arguments),
+            )
+            for chunk in content
+        ]
+    else:
+        raise ValueError(f"Unsupported content type {content}")
+
+
+def to_openai_responses_tool_calls(
+    content: ToolCallRequestMessageContents | list[ToolCallGeneratedMessageChunk],
+) -> list[ResponseFunctionToolCall]:
+    if isinstance(content, ToolCallRequestMessageContents):
+        return [
+            ResponseFunctionToolCall(
+                call_id=tool_call_req.id,
+                type="function_call",
+                name=tool_call_req.function_name,
+                arguments=json.dumps(tool_call_req.function_arguments),
+            )
+            for tool_call_req in content.tool_requests
+        ]
+    elif isinstance(content, list):
+        return [
+            ResponseFunctionToolCall(
+                call_id=str(chunk.index),
+                type="function_call",
+                name=chunk.name or "",
+                arguments=chunk.arguments,
             )
             for chunk in content
         ]
@@ -264,6 +366,16 @@ def to_openai_token_usage2(gen_stats: GenerationStatistics) -> CompletionUsage:
     return CompletionUsage(
         prompt_tokens=gen_stats.prompt_tokens,
         completion_tokens=gen_stats.completion_tokens,
+        total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,
+    )
+
+
+def to_openai_responses_token_usage(gen_stats: GenerationStatistics) -> ResponseUsage:
+    return ResponseUsage(
+        input_tokens=gen_stats.prompt_tokens,
+        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        output_tokens=gen_stats.completion_tokens,
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
         total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,
     )
 

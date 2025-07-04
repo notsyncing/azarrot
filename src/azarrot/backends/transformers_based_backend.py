@@ -422,6 +422,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         chunk_streamer = CompletionChunkStreamer(
             text_streamer=streamer,
+            model_quirks=model_quirks,
             model_tool_call_config=MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG),
         )
 

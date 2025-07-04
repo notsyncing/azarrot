@@ -60,9 +60,11 @@ class ModelPreset:
 class ModelQuirks:
     output_buffering_length: int = 0
     additional_stop_before_strings: list[str] | None = None
-    full_text_indicators: list[str] | None = None
     does_not_support_batching: bool = False
     openvino_dont_patch_model_compile: bool = False
+
+    reasoning_start_indicator: str | None = None
+    reasoning_end_indicator: str | None = None
 
     def extend_with(self, **kwargs: Any) -> "ModelQuirks":
         current = cast("dict", dataclass_wizard.asdict(self))
@@ -201,6 +203,21 @@ class EmptyMessageChunk(GeneratedMessageChunk):
 
 
 @dataclass
+class ReasoningGeneratedMessageChunk(GeneratedMessageChunk):
+    content: str
+
+    @override
+    def __add__(self, another: GeneratedMessageChunk) -> "ReasoningGeneratedMessageChunk":
+        if isinstance(another, EmptyMessageChunk):
+            return self
+
+        if not isinstance(another, ReasoningGeneratedMessageChunk):
+            raise DifferentChunkError
+
+        return ReasoningGeneratedMessageChunk(content=self.content + another.content)
+
+
+@dataclass
 class TextGeneratedMessageChunk(GeneratedMessageChunk):
     content: str
 
@@ -219,6 +236,7 @@ class TextGeneratedMessageChunk(GeneratedMessageChunk):
 class ToolCallGeneratedMessageChunk(GeneratedMessageChunk):
     index: int
     name: str | None
+    name_completed: bool
     arguments: str
 
     @override
@@ -235,6 +253,7 @@ class ToolCallGeneratedMessageChunk(GeneratedMessageChunk):
         return ToolCallGeneratedMessageChunk(
             index=another.index,
             name=(self.name or "") + (another.name or ""),
+            name_completed=another.name_completed,
             arguments=self.arguments + another.arguments,
         )
 
@@ -275,14 +294,10 @@ class ModelToolCallExtractedInfo:
 
 @dataclass
 class ModelToolCallConfig:
-    prompts: dict[str, str] | None
-    indicators: list[str]
-    request_parsing_method: Callable[[str], list[ToolCallRequestMessageContent]]
-    request_formatting_method: Callable[[list[ToolCallRequestMessageContent]], str] | None
-    response_formatting_method: Callable[[list[ToolCallResponseMessageContent]], str] | None
+    prompts: dict[str, str] | None = None
 
     tool_call_start_indicator: str | None = None
-    tool_call_stop_indicator: str | None = None
+    tool_call_end_indicator: str | None = None
     tool_call_info_extracting_method: (
         Callable[["ModelToolCallConfig", dict[str, Any], str], ModelToolCallExtractedInfo] | None
     ) = None

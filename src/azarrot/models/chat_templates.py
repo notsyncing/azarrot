@@ -5,8 +5,7 @@ import jinja2
 from azarrot.common_data import (
     CallableToolsInfo,
     ModelPreset,
-    ToolCallRequestMessageContent,
-    ToolCallResponseMessageContent,
+    ModelToolCallConfig,
 )
 from azarrot.models.supports.default_chat_support import DEFAULT_MODEL_TOOL_CALL_CONFIG
 from azarrot.tools.tool_manager import ToolManager
@@ -21,7 +20,7 @@ BASE_SYSTEM_PROMPTS = {
     }
 }
 
-MODEL_TOOL_CALL_CONFIGS = {}
+MODEL_TOOL_CALL_CONFIGS: dict[str, ModelToolCallConfig] = {}
 
 
 @dataclass
@@ -134,52 +133,3 @@ class ChatTemplateManager:
                 final_sys_prompt += f"\n\n{tool_calling_prompt}"
 
         return final_sys_prompt
-
-    def format_tool_calling_request(
-        self, tool_calling_requests: list[ToolCallRequestMessageContent], generation_variant: str
-    ) -> str | None:
-        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG)
-
-        if config is None:
-            raise ValueError("No tool calling config found for %s", generation_variant)
-
-        if config.request_formatting_method is not None:
-            return config.request_formatting_method(tool_calling_requests)
-        else:
-            return None
-
-    def parse_tool_calling_request(
-        self, message: str, generation_variant: str, model_preset: ModelPreset
-    ) -> tuple[bool, list[ToolCallRequestMessageContent] | None]:
-        if not model_preset.supports_tool_calling:
-            return False, None
-
-        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG)
-
-        if config is None:
-            raise ValueError("No tool calling config found for %s", generation_variant)
-
-        if config.indicators is None:
-            return False, None
-
-        for indicator in config.indicators:
-            if message.find(indicator) >= 0:
-                parsed_requests = config.request_parsing_method(message)
-                return len(parsed_requests) > 0, parsed_requests
-
-        return False, None
-
-    def format_tool_calling_response(
-        self, tool_calling_responses: list[ToolCallResponseMessageContent], generation_variant: str
-    ) -> str:
-        config = MODEL_TOOL_CALL_CONFIGS.get(generation_variant, DEFAULT_MODEL_TOOL_CALL_CONFIG)
-
-        if config is None:
-            raise ValueError("No tool calling config found for %s", generation_variant)
-
-        tool_calling_responses = sorted(tool_calling_responses, key=lambda c: int(c.to_id))
-
-        if config.response_formatting_method is not None:
-            return config.response_formatting_method(tool_calling_responses)
-        else:
-            return tool_calling_responses[0].result

@@ -1,9 +1,6 @@
-import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Literal
-
-import dataclass_wizard
 
 
 @dataclass
@@ -21,11 +18,8 @@ class LocalizedToolDescription:
     description: str | None
     parameters: list[LocalizedToolParameter]
 
-    def parameters_json(self) -> str:
-        return json.dumps([p.__dict__ for p in self.parameters])
-
     def parameters_dict(self) -> dict[str, Any]:
-        return dataclass_wizard.asdict(self.parameters)
+        return convert_tool_parameters_to_json_schema(self.parameters)
 
 
 @dataclass
@@ -82,16 +76,20 @@ class Tool(ABC):
         pass
 
 
+def convert_tool_parameters_to_json_schema(tool_parameters: list[LocalizedToolParameter]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {p.name: {"description": p.description, "type": p.type} for p in tool_parameters},
+        "required": [p.name for p in tool_parameters if p.required],
+    }
+
+
 def convert_tool_descriptions_to_json_schema(tools: list[LocalizedToolDescription]) -> list[dict[str, Any]]:
     return [
         {
             "name": tool.name,
             "description": tool.description,
-            "parameters": {
-                "type": "object",
-                "properties": {p.name: {"description": p.description, "type": p.type} for p in tool.parameters},
-                "required": [p.name for p in tool.parameters if p.required],
-            },
+            "parameters": convert_tool_parameters_to_json_schema(tool.parameters),
         }
         for tool in tools
     ]

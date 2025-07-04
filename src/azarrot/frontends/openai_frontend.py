@@ -2,14 +2,44 @@ import json
 import logging
 import uuid
 from collections.abc import Generator
+from copy import copy, deepcopy
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, cast, override
+from typing import TYPE_CHECKING, Any, Literal, cast, override
 
 import openai.types
 import openai.types.chat
 import openai.types.chat.chat_completion_chunk
+import openai.types.responses
 from fastapi import APIRouter, FastAPI, HTTPException
 from openai.pagination import SyncPage
+from openai.types.responses import (
+    EasyInputMessageParam,
+    ResponseCompletedEvent,
+    ResponseContentPartAddedEvent,
+    ResponseContentPartDoneEvent,
+    ResponseCreatedEvent,
+    ResponseCreateParams,
+    ResponseFunctionCallArgumentsDeltaEvent,
+    ResponseFunctionCallArgumentsDoneEvent,
+    ResponseFunctionToolCall,
+    ResponseFunctionToolCallParam,
+    ResponseInProgressEvent,
+    ResponseOutputItem,
+    ResponseOutputItemAddedEvent,
+    ResponseOutputItemDoneEvent,
+    ResponseOutputMessage,
+    ResponseOutputText,
+    ResponseReasoningDeltaEvent,
+    ResponseReasoningDoneEvent,
+    ResponseReasoningItem,
+    ResponseReasoningSummaryDoneEvent,
+    ResponseStreamEvent,
+    ResponseTextDeltaEvent,
+    ResponseTextDoneEvent,
+)
+from openai.types.responses.response_input_param import ResponseInputParam
+from openai.types.responses.response_reasoning_item import Summary
 from starlette.responses import StreamingResponse
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
@@ -20,12 +50,14 @@ from azarrot.chats.thread_manager import ChatThreadManager
 from azarrot.common_data import (
     DifferentChunkError,
     EmbeddingsGenerationRequest,
+    EmptyMessageChunk,
     GeneratedMessageChunk,
     GenerationMessage,
     GenerationMessageContent,
     GenerationStatistics,
     ImageGenerationMessageContent,
     Model,
+    ReasoningGeneratedMessageChunk,
     TextGeneratedMessageChunk,
     TextGenerationMessageContent,
     TextGenerationRequest,
@@ -60,12 +92,33 @@ from azarrot.frontends.openai_support.openai_vector_stores import OpenAIVectorSt
 from azarrot.frontends.utils import (
     to_backend_tools_info,
     to_openai_embedding_token_usage,
+    to_openai_responses_token_usage,
+    to_openai_responses_tool_calls,
+    to_openai_responses_tool_choice,
+    to_openai_responses_tools,
     to_openai_token_usage2,
     to_openai_tool_calls2,
 )
 from azarrot.models.model_manager import ModelManager
 from azarrot.utils.downloader import download_file_to_store
 from azarrot.vector_store import VectorStoreManager
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from openai.types.responses.response_input_item_param import FunctionCallOutput
+
+
+@dataclass
+class OpenAIResponseDeltaState:
+    outputs: list[ResponseOutputItem]
+    current_item: ResponseOutputItem | None
+    seq_number: int
+
+    def get_and_increase_seq_number(self) -> int:
+        v = self.seq_number
+        self.seq_number += 1
+        return v
 
 
 class OpenAIFrontend(Frontend):
@@ -74,6 +127,7 @@ class OpenAIFrontend(Frontend):
     _model_manager: ModelManager
     _backend_pipe: BackendPipe
     _working_dirs: WorkingDirectories
+    _file_store: FileStore
     _openai_files: OpenAIFiles
     _assistants: OpenAIAssistants
     _threads: OpenAIAssistantThreads
@@ -99,6 +153,7 @@ class OpenAIFrontend(Frontend):
         self._model_manager = model_manager
         self._working_dirs = working_dirs
         self._backend_pipe = backend_pipe
+        self._file_store = file_store
         self._openai_files = OpenAIFiles(file_store)
         self._assistants = OpenAIAssistants(server_config.openai_configs, agent_manager, vector_store, model_manager)
 
@@ -129,6 +184,9 @@ class OpenAIFrontend(Frontend):
 
         # Embeddings API
         router.add_api_route("/v1/embeddings", self.create_embeddings, methods=["POST"])
+
+        # Responses API
+        router.add_api_route("/v1/responses", self.create_response, methods=["POST"], response_model=None)
 
         # Files API
         router.add_api_route("/v1/files", self._openai_files.upload_file, methods=["POST"])
@@ -290,6 +348,82 @@ class OpenAIFrontend(Frontend):
 
         return result
 
+    def __to_backend_generation_messages_for_responses(
+        self,
+        openai_inputs: str | ResponseInputParam,
+    ) -> list[GenerationMessage]:
+        result: list[GenerationMessage] = []
+
+        if isinstance(openai_inputs, str):
+            result = [GenerationMessage("user", [TextGenerationMessageContent(openai_inputs)])]
+        else:
+            for openai_input in openai_inputs:
+                input_type = openai_input.get("type")
+
+                if input_type is None:
+                    raise ValueError(f"Unsupported input type {input_type} in {openai_inputs}")
+
+                contents: list[GenerationMessageContent]
+
+                if input_type == "message":
+                    openai_input = cast("EasyInputMessageParam", openai_input)
+                    contents = []
+
+                    if isinstance(openai_input["content"], str):
+                        contents.append(TextGenerationMessageContent(openai_input["content"]))
+                    else:
+                        for c in openai_input["content"]:
+                            if c["type"] == "input_text":
+                                contents.append(TextGenerationMessageContent(c["text"]))
+                            elif c["type"] == "input_image":
+                                image_path: Path
+
+                                if "image_url" in c:
+                                    assert c["image_url"] is not None
+                                    url = c["image_url"]
+
+                                    image_path = download_file_to_store(
+                                        url, self._working_dirs.uploaded_images, file_extension=".image"
+                                    )
+                                elif "file_id" in c:
+                                    assert c["file_id"] is not None
+                                    image_path = self._file_store.make_store_file_path(c["file_id"])
+                                else:
+                                    raise ValueError(f"No image url or file id in input {openai_input}")
+
+                                contents.append(ImageGenerationMessageContent(str(image_path)))
+                            else:
+                                raise ValueError(f"Unsupported content type {c['type']} in {c}")
+
+                    result.append(GenerationMessage(openai_input["role"], contents))
+                elif input_type == "function_call":
+                    openai_input = cast("ResponseFunctionToolCallParam", openai_input)
+
+                    contents = [
+                        ToolCallRequestMessageContent(
+                            id=openai_input["call_id"],
+                            function_name=openai_input["name"],
+                            function_arguments=json.loads(openai_input["arguments"]),
+                        )
+                    ]
+
+                    result.append(GenerationMessage(role="assistant", contents=contents))
+                elif input_type == "function_call_output":
+                    openai_input = cast("FunctionCallOutput", openai_input)
+
+                    contents = [
+                        ToolCallResponseMessageContent(
+                            to_id=openai_input["call_id"],
+                            result=openai_input["output"],
+                        )
+                    ]
+
+                    result.append(GenerationMessage(role="tool", contents=contents))
+                else:
+                    raise ValueError(f"Unsupported input type {input_type}")
+
+        return result
+
     def __to_openai_chat_completion_object(
         self,
         model: Model,
@@ -385,6 +519,319 @@ class OpenAIFrontend(Frontend):
 
             return openai_resp
 
+    def __generate_openai_response_item_done_events(
+        self,
+        delta_state: OpenAIResponseDeltaState,
+        item: ResponseOutputItem,
+        item_index: int,
+    ) -> list[ResponseStreamEvent]:
+        events: list[ResponseStreamEvent] = []
+
+        if item.type == "message":
+            assert isinstance(item.content[-1], ResponseOutputText)
+            item.status = "completed"
+
+            events.append(
+                ResponseTextDoneEvent(
+                    content_index=len(item.content) - 1,
+                    item_id=item.id,
+                    output_index=item_index,
+                    sequence_number=delta_state.get_and_increase_seq_number(),
+                    text=item.content[-1].text,
+                    type="response.output_text.done",
+                )
+            )
+
+            events.append(
+                ResponseContentPartDoneEvent(
+                    content_index=len(item.content) - 1,
+                    item_id=item.id,
+                    output_index=item_index,
+                    part=item.content[-1],
+                    sequence_number=delta_state.get_and_increase_seq_number(),
+                    type="response.content_part.done",
+                )
+            )
+        elif item.type == "function_call":
+            item.status = "completed"
+
+            events.append(
+                ResponseFunctionCallArgumentsDoneEvent(
+                    arguments=item.arguments,
+                    item_id=item.id or "",
+                    output_index=item_index,
+                    sequence_number=delta_state.get_and_increase_seq_number(),
+                    type="response.function_call_arguments.done",
+                )
+            )
+        elif item.type == "reasoning":
+            item.status = "completed"
+
+            events.append(
+                ResponseReasoningDoneEvent(
+                    content_index=0,
+                    item_id=item.id,
+                    output_index=item_index,
+                    sequence_number=delta_state.get_and_increase_seq_number(),
+                    text=item.encrypted_content or "",
+                    type="response.reasoning.done",
+                )
+            )
+
+            events.append(
+                ResponseReasoningSummaryDoneEvent(
+                    item_id=item.id,
+                    output_index=item_index,
+                    sequence_number=delta_state.get_and_increase_seq_number(),
+                    summary_index=0,
+                    text=item.encrypted_content or "",
+                    type="response.reasoning_summary.done",
+                )
+            )
+
+        else:
+            raise ValueError(f"Unsupported response output type {item.type} in item {item}")
+
+        events.append(
+            ResponseOutputItemDoneEvent(
+                item=item,
+                output_index=item_index,
+                sequence_number=delta_state.get_and_increase_seq_number(),
+                type="response.output_item.done",
+            )
+        )
+
+        return events
+
+    def __to_openai_response_object(  # noqa: PLR0915
+        self,
+        model: Model,
+        content: str
+        | GenerationMessageContent
+        | ToolCallRequestMessageContents
+        | GeneratedMessageChunk
+        | list[GeneratedMessageChunk],
+        completion_id: str,
+        usage_info: GenerationStatistics,
+        is_delta: bool = False,
+        delta_state: OpenAIResponseDeltaState | None = None,
+    ) -> list[ResponseStreamEvent] | openai.types.responses.Response:
+        create_time = int(datetime.now().timestamp())
+
+        if is_delta:
+            events: list[ResponseStreamEvent] = []
+
+            assert delta_state is not None
+
+            if isinstance(content, TextGeneratedMessageChunk):
+                if delta_state.current_item is None or delta_state.current_item.type != "message":
+                    if delta_state.current_item is not None and delta_state.current_item.type != "message":
+                        events.extend(
+                            self.__generate_openai_response_item_done_events(
+                                delta_state, delta_state.current_item, len(delta_state.outputs) - 1
+                            )
+                        )
+
+                    output_item = ResponseOutputMessage(
+                        id=str(uuid.uuid4()), content=[], role="assistant", status="in_progress", type="message"
+                    )
+
+                    delta_state.current_item = output_item
+                    delta_state.outputs.append(output_item)
+
+                    events.append(
+                        ResponseOutputItemAddedEvent(
+                            item=deepcopy(output_item),
+                            output_index=len(delta_state.outputs) - 1,
+                            sequence_number=delta_state.get_and_increase_seq_number(),
+                            type="response.output_item.added",
+                        )
+                    )
+
+                if len(delta_state.current_item.content) <= 0:
+                    item_content = ResponseOutputText(
+                        annotations=[],
+                        text="",
+                        type="output_text",
+                    )
+
+                    delta_state.current_item.content.append(item_content)
+
+                    events.append(
+                        ResponseContentPartAddedEvent(
+                            content_index=0,
+                            item_id=delta_state.current_item.id,
+                            output_index=len(delta_state.outputs) - 1,
+                            part=copy(item_content),
+                            sequence_number=delta_state.get_and_increase_seq_number(),
+                            type="response.content_part.added",
+                        )
+                    )
+
+                assert isinstance(delta_state.current_item.content[0], ResponseOutputText)
+                delta_state.current_item.content[0].text += content.content
+
+                events.append(
+                    ResponseTextDeltaEvent(
+                        content_index=0,
+                        delta=content.content,
+                        item_id=delta_state.current_item.id,
+                        output_index=len(delta_state.outputs) - 1,
+                        sequence_number=delta_state.get_and_increase_seq_number(),
+                        type="response.output_text.delta",
+                    )
+                )
+            elif isinstance(content, ToolCallGeneratedMessageChunk):
+                if delta_state.current_item is None or delta_state.current_item.type != "function_call":
+                    if delta_state.current_item is not None and delta_state.current_item.type != "function_call":
+                        events.extend(
+                            self.__generate_openai_response_item_done_events(
+                                delta_state, delta_state.current_item, len(delta_state.outputs) - 1
+                            )
+                        )
+
+                    output_item = ResponseFunctionToolCall(
+                        id=str(uuid.uuid4()),
+                        name="",
+                        arguments="",
+                        call_id=str(content.index),
+                        status="in_progress",
+                        type="function_call",
+                    )
+
+                    delta_state.current_item = output_item
+                    delta_state.outputs.append(output_item)
+
+                delta_state.current_item.name += content.name or ""
+                delta_state.current_item.arguments += content.arguments
+
+                if content.name_completed:
+                    events.append(
+                        ResponseOutputItemAddedEvent(
+                            item=copy(delta_state.current_item),
+                            output_index=len(delta_state.outputs) - 1,
+                            sequence_number=delta_state.get_and_increase_seq_number(),
+                            type="response.output_item.added",
+                        )
+                    )
+
+                if len(content.arguments) > 0:
+                    assert delta_state.current_item.id is not None
+
+                    events.append(
+                        ResponseFunctionCallArgumentsDeltaEvent(
+                            delta=content.arguments,
+                            item_id=delta_state.current_item.id,
+                            output_index=len(delta_state.outputs) - 1,
+                            sequence_number=delta_state.get_and_increase_seq_number(),
+                            type="response.function_call_arguments.delta",
+                        )
+                    )
+            elif isinstance(content, ReasoningGeneratedMessageChunk):
+                if delta_state.current_item is None or delta_state.current_item.type != "reasoning":
+                    if delta_state.current_item is not None and delta_state.current_item.type != "reasoning":
+                        events.extend(
+                            self.__generate_openai_response_item_done_events(
+                                delta_state, delta_state.current_item, len(delta_state.outputs) - 1
+                            )
+                        )
+
+                    output_item = ResponseReasoningItem(
+                        id=str(uuid.uuid4()),
+                        summary=[Summary(text="", type="summary_text")],
+                        type="reasoning",
+                        encrypted_content="",
+                        status="in_progress",
+                    )
+
+                    delta_state.current_item = output_item
+                    delta_state.outputs.append(output_item)
+
+                    events.append(
+                        ResponseOutputItemAddedEvent(
+                            item=deepcopy(output_item),
+                            output_index=len(delta_state.outputs) - 1,
+                            sequence_number=delta_state.get_and_increase_seq_number(),
+                            type="response.output_item.added",
+                        )
+                    )
+
+                delta_state.current_item.summary[0].text += content.content
+
+                events.append(
+                    ResponseReasoningDeltaEvent(
+                        content_index=0,
+                        delta={
+                            "text": content.content,
+                        },
+                        item_id=delta_state.current_item.id,
+                        output_index=len(delta_state.outputs) - 1,
+                        sequence_number=delta_state.get_and_increase_seq_number(),
+                        type="response.reasoning.delta",
+                    )
+                )
+            else:
+                raise ValueError(f"Unsupported chunk type {content}")
+
+            return events
+        else:
+            outputs: list[ResponseOutputItem] = []
+            real_contents = [content] if not isinstance(content, list) else content
+
+            for real_content in real_contents:
+                if isinstance(real_content, (str, TextGenerationMessageContent, TextGeneratedMessageChunk)):
+                    text: str
+
+                    if isinstance(real_content, str):
+                        text = real_content
+                    elif isinstance(real_content, TextGenerationMessageContent):
+                        text = real_content.text
+                    elif isinstance(real_content, TextGeneratedMessageChunk):
+                        text = real_content.content
+                    else:
+                        raise ValueError(f"Unsupported text content {real_content}")
+
+                    output = ResponseOutputMessage(
+                        id=str(uuid.uuid4()),
+                        role="assistant",
+                        content=[ResponseOutputText(text=text, annotations=[], type="output_text")],
+                        status="completed",
+                        type="message",
+                    )
+
+                    outputs.append(output)
+                elif isinstance(real_content, ReasoningGeneratedMessageChunk):
+                    output = ResponseReasoningItem(
+                        id=str(uuid.uuid4()),
+                        summary=[Summary(text=real_content.content, type="summary_text")],
+                        type="reasoning",
+                    )
+
+                    outputs.append(output)
+                elif isinstance(real_content, ToolCallRequestMessageContents):
+                    tool_calls = to_openai_responses_tool_calls(real_content)
+                    outputs.extend(tool_calls)
+                elif isinstance(real_content, ToolCallGeneratedMessageChunk):
+                    tool_calls = to_openai_responses_tool_calls([real_content])
+                    outputs.extend(tool_calls)
+                else:
+                    raise ValueError(f"Unsupported content type {real_content}")
+
+            openai_resp = openai.types.responses.Response(
+                id=completion_id,
+                created_at=create_time,
+                model=model.id,
+                object="response",
+                output=outputs,
+                parallel_tool_calls=False,
+                tool_choice="auto",
+                tools=[],
+            )
+
+            openai_resp.usage = to_openai_responses_token_usage(usage_info)
+
+            return openai_resp
+
     def __log_generation_statistics(self, generation_statistics: GenerationStatistics) -> None:
         self._log.info(generation_statistics.to_stats_text())
 
@@ -430,6 +877,86 @@ class OpenAIFrontend(Frontend):
             )
             + "\n\n"
         )
+
+    def __wrap_to_openai_response_stream(
+        self,
+        generate_request: TextGenerationRequest,
+        streamer: CompletionChunkStreamer,
+        model: Model,
+        completion_id: str,
+        generation_statistics: GenerationStatistics,
+    ) -> Generator[str, Any, None]:
+        delta_state = OpenAIResponseDeltaState(
+            outputs=[],
+            current_item=None,
+            seq_number=0,
+        )
+
+        created_event = ResponseCreatedEvent(
+            response=openai.types.responses.Response(
+                id=completion_id,
+                created_at=int(datetime.now().timestamp()),
+                model=model.id,
+                object="response",
+                output=[],
+                parallel_tool_calls=generate_request.parallel_tool_calling,
+                tool_choice=to_openai_responses_tool_choice(generate_request.tools_info),
+                tools=to_openai_responses_tools(generate_request.tools_info),
+            ),
+            sequence_number=delta_state.get_and_increase_seq_number(),
+            type="response.created",
+        )
+
+        yield f"data: {created_event.model_dump_json()}\n\n"
+
+        in_progress_event = ResponseInProgressEvent(
+            response=created_event.response,
+            sequence_number=delta_state.get_and_increase_seq_number(),
+            type="response.in_progress",
+        )
+
+        yield f"data: {in_progress_event.model_dump_json()}\n\n"
+
+        for chunk in streamer:
+            if isinstance(chunk, EmptyMessageChunk):
+                continue
+
+            events: list[ResponseStreamEvent] = cast(
+                "list[ResponseStreamEvent]",
+                self.__to_openai_response_object(
+                    model,
+                    chunk,
+                    completion_id,
+                    usage_info=generation_statistics,
+                    is_delta=True,
+                    delta_state=delta_state,
+                ),
+            )
+
+            for event in events:
+                yield f"data: {event.model_dump_json()}\n\n"
+
+        if delta_state.current_item is not None:
+            events = self.__generate_openai_response_item_done_events(
+                delta_state, delta_state.current_item, len(delta_state.outputs) - 1
+            )
+
+            for event in events:
+                yield f"data: {event.model_dump_json()}\n\n"
+
+        generation_statistics.end_time = datetime.now()
+        self.__log_generation_statistics(generation_statistics)
+
+        created_event.response.output = delta_state.outputs
+        created_event.response.usage = to_openai_responses_token_usage(generation_statistics)
+
+        completed_event = ResponseCompletedEvent(
+            response=created_event.response,
+            sequence_number=delta_state.get_and_increase_seq_number(),
+            type="response.completed",
+        )
+
+        yield f"data: {completed_event.model_dump_json()}\n\n"
 
     def __get_model(self, model_id: str) -> Model:
         model = self._model_manager.get_model(model_id)
@@ -524,3 +1051,57 @@ class OpenAIFrontend(Frontend):
             object="list",
             usage=to_openai_embedding_token_usage(gen_stats),
         )
+
+    def create_response(self, request: ResponseCreateParams) -> openai.types.responses.Response | StreamingResponse:
+        generate_request = TextGenerationRequest(
+            model_id=request["model"],
+            messages=self.__to_backend_generation_messages_for_responses(request["input"]),
+            max_tokens=request.get("max_output_tokens"),
+            temperature=request.get("temperature") or 1.0,
+            top_p=request.get("top_p") or 1.0,
+            tools_info=to_backend_tools_info(list(request.get("tools", [])), request.get("tool_choice")),
+            parallel_tool_calling=request.get("parallel_tool_calls") or False,
+        )
+
+        model = self.__get_model(request["model"])
+        streamer, gen_stats = self._backend_pipe.generate(model, generate_request)
+        completion_id = str(uuid.uuid4())
+
+        if request.get("stream") or False:
+            return StreamingResponse(
+                self.__wrap_to_openai_response_stream(
+                    generate_request,
+                    streamer,
+                    model,
+                    completion_id,
+                    gen_stats,
+                ),
+                media_type="text/event-stream",
+            )
+
+        contents: list[GeneratedMessageChunk] = []
+        current_content: GeneratedMessageChunk | None = None
+
+        for chunk in streamer:
+            if current_content is None:
+                current_content = chunk
+            else:
+                try:
+                    current_content += chunk
+                except DifferentChunkError:
+                    contents.append(current_content)
+                    current_content = chunk
+
+        if current_content is not None:
+            contents.append(current_content)
+
+        if self._server_config.log_generation_details:
+            self._log.info(f"Generation response: {contents}")
+
+        gen_stats.end_time = datetime.now()
+        self.__log_generation_statistics(gen_stats)
+
+        r = self.__to_openai_response_object(model, contents, completion_id, gen_stats)
+
+        assert isinstance(r, openai.types.responses.Response)
+        return r

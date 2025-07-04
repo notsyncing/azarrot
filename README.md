@@ -1,6 +1,6 @@
 # Azarrot
 
-(Early WIP) An OpenAI compatible LLM inference server, focusing on OpenVINO™ usage.
+(WIP) An OpenAI compatible LLM inference server, focusing on OpenVINO™ usage.
 
 The name `azarrot` is combined from `azalea` and `parrot`.
 
@@ -25,13 +25,15 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 |Chat|Streaming response|✅|✅|❌||
 |Chat|Image input|❌|✅|❌|InternVL3 supported|
 |Embeddings|Create embeddings|☑️|❌|✅|`encoding_format` not implemented yet|
+|Responses|Basic chat completion|☑️|☑️|❌|Text generation works, some advanced parameters (like `top_logprobs`, etc) not implemented yet|
 
 ### Backend-agnostic features
 
 |Feature|Subfeature|Supported|Remarks|
 |-------|----------|---------|-------|
 |Models|List models|✅||
-|Chat|Tool calling|✅|`<tool_call>`  flavors supported|
+|Chat|Tool calling|✅|`<tool_call>` flavors supported|
+|Responses|Function calling|✅|`<tool_call>` flavors supported|
 |Files|Upload, list, retrieve, delete, retrieve content|✅||
 |Uploads|Create, upload, complete, cancel|✅||
 |Assistants (v2)|Assistants|☑️|`response_format` not implemented yet|

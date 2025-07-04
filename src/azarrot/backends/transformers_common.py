@@ -16,6 +16,7 @@ from azarrot.common_data import (
     ImageGenerationMessageContent,
     TextGenerationMessageContent,
     ToolCallRequestMessageContent,
+    ToolCallResponseMessageContent,
 )
 
 if TYPE_CHECKING:
@@ -125,6 +126,7 @@ def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dic
 
         if isinstance(m.contents[0], ToolCallRequestMessageContent):
             transformers_msg = {
+                "role": "assistant",
                 "tool_calls": [
                     {
                         "type": "function",
@@ -133,8 +135,17 @@ def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dic
                     }
                     for t in m.contents
                     if isinstance(t, ToolCallRequestMessageContent)
-                ]
+                ],
             }
+
+            c.append(transformers_msg)
+        elif all(isinstance(mc, ToolCallResponseMessageContent) for mc in m.contents):
+            for mc in m.contents:
+                assert isinstance(mc, ToolCallResponseMessageContent)
+
+                transformers_msg = {"role": "tool", "content": mc.result}
+
+                c.append(transformers_msg)
         else:
             contents: list | str
 

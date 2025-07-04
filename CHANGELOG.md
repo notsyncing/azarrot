@@ -2,8 +2,9 @@
 
 The following are change log of each versions.
 
-## 0.4.0 (2025-06-??)
+## 0.4.0 (2025-07-??)
 
+- Basic support for OpenAI Responses API
 - Support tool call streaming
 - Removed implicit internal tool calling mechanism
 - Support Qwen3 reasoning
