@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from datetime import datetime
 from queue import Empty, Queue
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, override
+from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, cast, override
 
 import torch
 from transformers.generation.streamers import TextIteratorStreamer
@@ -21,6 +21,7 @@ from azarrot.models.supports.default_chat_support import DEFAULT_MODEL_QUIRKS
 
 if TYPE_CHECKING:
     from transformers import AutoTokenizer
+    from transformers.tokenization_utils import PreTrainedTokenizer
 
 
 EmbeddingsGenerationResult = list[list[float]]
@@ -40,6 +41,12 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     _current_ended = False
     _batch_mode = False
     _cut_text = False
+    _token_counter: int = 0
+
+    _statistics_state: Literal["text", "reasoning"] = "text"
+
+    _reasoning_start_token: int | None = None
+    _reasoning_end_token: int | None = None
 
     def __init__(  # type: ignore[no-untyped-def]
         self,
@@ -48,13 +55,22 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
         skip_prompt: bool = False,
         timeout: float | None = None,
         model_quirks: ModelQuirks | None = None,
-        **decode_kwargs,  # noqa: ANN003
+        **decode_kwargs: Any,
     ) -> None:
         super().__init__(tokenizer, skip_prompt, timeout, **decode_kwargs)
 
         self._object_queue = Queue()
         self._generation_statistics = generation_statistics
         self._model_quirks = model_quirks
+
+        if model_quirks is not None:
+            p_tokenizer = cast("PreTrainedTokenizer", self.tokenizer)
+
+            if model_quirks.reasoning_start_indicator is not None:
+                self._reasoning_start_token = p_tokenizer.encode(model_quirks.reasoning_start_indicator)[0]
+
+            if model_quirks.reasoning_end_indicator is not None:
+                self._reasoning_end_token = p_tokenizer.encode(model_quirks.reasoning_end_indicator)[0]
 
     def get_generation_statistics(self) -> GenerationStatistics:
         return self._generation_statistics
@@ -76,7 +92,43 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
             value = value[0]
 
         if not self.next_tokens_are_prompt:
-            self._generation_statistics.completion_tokens += len(value)
+            tokens = value.tolist()
+
+            text_token_count = 0
+            reasoning_token_count = 0
+            rsi: int | None = None
+
+            while len(tokens) > 0:
+                if self._statistics_state == "text":
+                    try:
+                        rsi = tokens.index(self._reasoning_start_token)
+                    except ValueError:
+                        rsi = None
+
+                    if rsi is not None:
+                        self._statistics_state = "reasoning"
+                        text_token_count += rsi + 1
+                        tokens = tokens[rsi + 1 :]
+                    else:
+                        text_token_count += len(tokens)
+                        tokens = []
+
+                if self._statistics_state == "reasoning":
+                    try:
+                        rei = tokens.index(self._reasoning_end_token)
+                    except ValueError:
+                        rei = None
+
+                    if rei is not None:
+                        self._statistics_state = "text"
+                        reasoning_token_count += rei
+                        tokens = tokens[rei:]
+                    else:
+                        reasoning_token_count += len(tokens)
+                        tokens = []
+
+            self._generation_statistics.completion_tokens += text_token_count + reasoning_token_count
+            self._generation_statistics.reasoning_tokens += reasoning_token_count
 
             if self._first_token:
                 self._generation_statistics.first_token_time = datetime.now()

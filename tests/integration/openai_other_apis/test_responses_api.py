@@ -51,6 +51,10 @@ def test_create_response_with_hello(openvino_server: Server) -> None:
     log.info("Output: %s", result)
     assert result.find("你好") >= 0 or result.find("您好") >= 0
 
+    assert resp.usage is not None
+    assert resp.usage.output_tokens > 0
+    assert resp.usage.output_tokens_details.reasoning_tokens > 0
+
 
 def test_create_response_with_hello_streaming(openvino_server: Server) -> None:
     openvino_server.model_manager.load_huggingface_model(

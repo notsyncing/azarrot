@@ -265,6 +265,7 @@ class GenerationStatistics:
     end_time: datetime
     prompt_tokens: int
     completion_tokens: int
+    reasoning_tokens: int
 
     def total_tokens(self) -> int:
         return self.prompt_tokens + self.completion_tokens
@@ -279,7 +280,8 @@ class GenerationStatistics:
         decode_speed = self.completion_tokens / (time_delta - ftt) * 1000
 
         return (
-            f"Total tokens: {total_tokens} (prompt {self.prompt_tokens}, completion {self.completion_tokens}), "
+            f"Total tokens: {total_tokens} (prompt {self.prompt_tokens}, completion {self.completion_tokens} "
+            f"(contains reasoning {self.reasoning_tokens})), "
             f"first token latency: {ftt} ms, cost {time_delta} ms, {speed:.3f} tok/s (prefill {prefill_speed:.3f} "
             f"tok/s, decode {decode_speed:.3f} tok/s)"
         )

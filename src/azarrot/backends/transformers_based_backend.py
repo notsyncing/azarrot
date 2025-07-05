@@ -407,6 +407,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
             end_time=datetime.max,
             prompt_tokens=0,
             completion_tokens=0,
+            reasoning_tokens=0,
         )
 
         model_quirks = MODEL_GENERATION_QUIRKS.get(loaded_model.data.generation_variant)

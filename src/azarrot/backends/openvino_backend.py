@@ -300,6 +300,7 @@ class OpenVINOBackend(TransformersBasedBackend):
             end_time=datetime.max,
             prompt_tokens=0,
             completion_tokens=0,
+            reasoning_tokens=0,
         )
 
         pipe = pipeline(

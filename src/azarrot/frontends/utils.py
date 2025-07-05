@@ -375,7 +375,7 @@ def to_openai_responses_token_usage(gen_stats: GenerationStatistics) -> Response
         input_tokens=gen_stats.prompt_tokens,
         input_tokens_details=InputTokensDetails(cached_tokens=0),
         output_tokens=gen_stats.completion_tokens,
-        output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=gen_stats.reasoning_tokens),
         total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,
     )
 

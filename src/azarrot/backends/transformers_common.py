@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast, override
 
 import torch
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_utils import set_seed
 
 from azarrot.backends.common import (
@@ -116,6 +117,13 @@ class ProcessorToTokenizerAdapter:
 
     def decode(self, tokens: list, **kwargs: Any) -> str:
         return (cast("Any", self._processor)).decode(tokens, **kwargs)
+
+    def encode(self, input_text: Any, **kwargs: Any) -> list[int]:
+        if isinstance(self._processor, PreTrainedTokenizerBase):
+            return self._processor.encode(input_text, **kwargs)
+        else:
+            tokenizer: PreTrainedTokenizerBase = cast("Any", self._processor).tokenizer
+            return tokenizer.encode(input_text, **kwargs)
 
 
 def to_transformers_chat_messages(messages: list[GenerationMessage]) -> list[dict[str, str]]:

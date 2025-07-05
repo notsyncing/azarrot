@@ -269,6 +269,7 @@ class SentenceTransformersBackend(BaseBackend):
             end_time=datetime.max,
             prompt_tokens=0,
             completion_tokens=0,
+            reasoning_tokens=0,
         )
 
         m = SentenceTransformerGenerationMethods(
@@ -303,6 +304,7 @@ class SentenceTransformersBackend(BaseBackend):
             end_time=datetime.max,
             prompt_tokens=0,
             completion_tokens=0,
+            reasoning_tokens=0,
         )
 
         m = CrossEncoderGenerationMethods(model=loaded_model.model, inputs=request, generation_statistics=gen_stats)
