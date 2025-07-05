@@ -1,13 +1,16 @@
 import logging
-from typing import Any, override
+from typing import Any, cast, override
 
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessage
+from openai.types.chat.chat_completion_chunk import ChoiceDelta
 
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.models.model_manager import DEFAULT_MODEL_PRESETS
 from azarrot.server import Server
 from azarrot.tools import GLOBAL_TOOL_MANAGER
 from azarrot.tools.tool import Tool, ToolDescription, ToolParameter
+from tests.integration.utils import add_fields_to_pydantic_model
 
 QWEN3_CHAT_MODEL = "Qwen/Qwen3-1.7B"
 
@@ -27,6 +30,8 @@ def test_qwen3_hello(openvino_server: Server) -> None:
         base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
     )
 
+    add_fields_to_pydantic_model(ChatCompletionMessage, reasoning_content=(str | None, ...))
+
     completion = client.chat.completions.create(
         model=QWEN3_CHAT_MODEL,
         messages=[{"role": "system", "content": "你是一个乐于助人的智能助理。"}, {"role": "user", "content": "你好！"}],
@@ -38,6 +43,51 @@ def test_qwen3_hello(openvino_server: Server) -> None:
     assert result.content is not None
     log.info("Output: %s", result.content)
     assert result.content.find("你好") >= 0
+
+    any_result = cast("Any", result)
+    log.info("Reasoning output: %s", any_result.reasoning_content)
+    assert any_result.reasoning_content is not None
+    assert any_result.reasoning_content.find("用户") >= 0
+
+
+def test_qwen3_hello_with_streaming(openvino_server: Server) -> None:
+    openvino_server.model_manager.load_huggingface_model(
+        QWEN3_CHAT_MODEL,
+        BACKEND_ID_OPENVINO,
+        "text-generation-with-past",
+        skip_if_loaded=True,
+        is_reasoning_model=True,
+    )
+
+    client = OpenAI(
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
+    )
+
+    add_fields_to_pydantic_model(ChoiceDelta, reasoning_content=(str | None, ...))
+
+    completion = client.chat.completions.create(
+        model=QWEN3_CHAT_MODEL,
+        messages=[{"role": "system", "content": "你是一个乐于助人的智能助理。"}, {"role": "user", "content": "你好！"}],
+        seed=100,
+        stream=True,
+    )
+
+    reasoning_content = ""
+    content = ""
+
+    for chunk in completion:
+        any_delta = cast("Any", chunk.choices[0].delta)
+
+        if any_delta.reasoning_content:
+            reasoning_content += any_delta.reasoning_content
+        elif any_delta.content:
+            content += any_delta.content
+
+    log.info("Output: %s", content)
+    assert content.find("你好") >= 0
+
+    log.info("Reasoning output: %s", reasoning_content)
+    assert reasoning_content.find("用户") >= 0
 
 
 def test_qwen3_conversation(openvino_server: Server) -> None:

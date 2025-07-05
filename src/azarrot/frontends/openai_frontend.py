@@ -109,6 +109,14 @@ if TYPE_CHECKING:
     from openai.types.responses.response_input_item_param import FunctionCallOutput
 
 
+class OpenAIExtendedChatCompletionMessage(openai.types.chat.ChatCompletionMessage):
+    reasoning_content: str | None = None
+
+
+class OpenAIExtendedChoiceDelta(openai.types.chat.chat_completion_chunk.ChoiceDelta):
+    reasoning_content: str | None = None
+
+
 @dataclass
 class OpenAIResponseDeltaState:
     outputs: list[ResponseOutputItem]
@@ -442,7 +450,7 @@ class OpenAIFrontend(Frontend):
         create_time = int(datetime.now().timestamp())
 
         if is_delta:
-            choice = openai.types.chat.chat_completion_chunk.ChoiceDelta(
+            choice = OpenAIExtendedChoiceDelta(
                 role="assistant",
             )
 
@@ -450,6 +458,8 @@ class OpenAIFrontend(Frontend):
                 choice.content = None
             elif isinstance(content, TextGeneratedMessageChunk):
                 choice.content = content.content
+            elif isinstance(content, ReasoningGeneratedMessageChunk):
+                choice.reasoning_content = content.content
             elif isinstance(content, ToolCallGeneratedMessageChunk):
                 choice.tool_calls = [
                     openai.types.chat.chat_completion_chunk.ChoiceDeltaToolCall(
@@ -485,7 +495,7 @@ class OpenAIFrontend(Frontend):
         else:
             assert finish_reason is not None
 
-            message = openai.types.chat.ChatCompletionMessage(role="assistant")
+            message = OpenAIExtendedChatCompletionMessage(role="assistant")
 
             if isinstance(content, str):
                 message.content = content
@@ -496,10 +506,14 @@ class OpenAIFrontend(Frontend):
                 message.tool_calls = tool_calls
             elif isinstance(content, list):
                 text_contents = [c for c in content if isinstance(c, TextGeneratedMessageChunk)]
+                reasoning_contents = [c for c in content if isinstance(c, ReasoningGeneratedMessageChunk)]
                 tool_call_contents = [c for c in content if isinstance(c, ToolCallGeneratedMessageChunk)]
                 tool_calls = to_openai_tool_calls2(tool_call_contents)
                 message.content = "".join([c.content for c in text_contents])
                 message.tool_calls = tool_calls if len(tool_calls) > 0 else None
+
+                if len(reasoning_contents) > 0:
+                    message.reasoning_content = "".join([c.content for c in reasoning_contents])
             else:
                 raise ValueError(f"Unsupported content type {content}")
 
@@ -846,37 +860,37 @@ class OpenAIFrontend(Frontend):
         has_tool_calls = False
 
         for chunk in streamer:
+            if isinstance(chunk, EmptyMessageChunk):
+                continue
+
             if isinstance(chunk, ToolCallGeneratedMessageChunk):
                 has_tool_calls = True
 
-            yield (
-                "data: "
-                + json.dumps(
-                    self.__to_openai_chat_completion_object(
-                        model, chunk, completion_id, finish_reason=None, contains_usage_info=False, is_delta=True
-                    )
-                )
-                + "\n\n"
+            openai_chunk = self.__to_openai_chat_completion_object(
+                model, chunk, completion_id, finish_reason=None, contains_usage_info=False, is_delta=True
             )
+
+            assert isinstance(openai_chunk, openai.types.chat.ChatCompletionChunk)
+
+            yield f"data: {openai_chunk.model_dump_json()}\n\n"
 
         generation_statistics.end_time = datetime.now()
         self.__log_generation_statistics(generation_statistics)
 
-        yield (
-            "data: "
-            + json.dumps(
-                self.__to_openai_chat_completion_object(
-                    model,
-                    None,
-                    completion_id,
-                    finish_reason="stop" if not has_tool_calls else "tool_calls",
-                    contains_usage_info=contains_usage_info,
-                    usage_info=generation_statistics,
-                    is_delta=True,
-                )
-            )
-            + "\n\n"
+        openai_chunk = self.__to_openai_chat_completion_object(
+            model,
+            None,
+            completion_id,
+            finish_reason="stop" if not has_tool_calls else "tool_calls",
+            contains_usage_info=contains_usage_info,
+            usage_info=generation_statistics,
+            is_delta=True,
         )
+
+        assert isinstance(openai_chunk, openai.types.chat.ChatCompletionChunk)
+
+        yield f"data: {openai_chunk.model_dump_json()}\n\n"
+
 
     def __wrap_to_openai_response_stream(
         self,
