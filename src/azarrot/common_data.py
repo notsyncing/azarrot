@@ -3,12 +3,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, TypeVar, cast, override
-from uu import Error
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, override
 
 import dataclass_wizard
 
 from azarrot.tools.tool import LocalizedToolDescription
+
+if TYPE_CHECKING:
+    from azarrot.backends.caching import ModelPrefixCache
 
 
 @dataclass
@@ -107,9 +109,47 @@ class Model:
 
     # The following properties are computed at runtime
 
-    device: str | None = None
-    info: ModelInfo | None = None
-    create_time: datetime = datetime.min
+    create_time: datetime
+
+
+@dataclass
+class LoadedModel(Model):
+    device: str
+    info: ModelInfo
+    loaded_time: datetime
+
+    prefix_cache: "ModelPrefixCache | None" = None
+
+    @classmethod
+    def from_model(
+        cls,
+        model: Model,
+        *,
+        device: str,
+        info: ModelInfo,
+        loaded_time: datetime = datetime.min,
+        prefix_cache: "ModelPrefixCache | None" = None,
+    ) -> "LoadedModel":
+        return cls(
+            id=model.id,
+            backend=model.backend,
+            path=model.path,
+            task=model.task,
+            revision=model.revision,
+            generation_variant=model.generation_variant,
+            preset=model.preset,
+            use_original_precision=model.use_original_precision,
+            is_for_raw_completion=model.is_for_raw_completion,
+            is_reasoning_model=model.is_reasoning_model,
+            transformers=model.transformers,
+            openvino=model.openvino,
+            pytorch=model.pytorch,
+            create_time=model.create_time,
+            device=device,
+            info=info,
+            loaded_time=loaded_time,
+            prefix_cache=prefix_cache,
+        )
 
 
 @dataclass
@@ -186,7 +226,7 @@ class ToolCallResponse:
     tool_result: str
 
 
-class DifferentChunkError(Error):
+class DifferentChunkError(Exception):
     pass
 
 
@@ -264,6 +304,7 @@ class GenerationStatistics:
     first_token_time: datetime
     end_time: datetime
     prompt_tokens: int
+    cached_prompt_tokens: int
     completion_tokens: int
     reasoning_tokens: int
 
@@ -280,8 +321,8 @@ class GenerationStatistics:
         decode_speed = self.completion_tokens / (time_delta - ftt) * 1000
 
         return (
-            f"Total tokens: {total_tokens} (prompt {self.prompt_tokens}, completion {self.completion_tokens} "
-            f"(contains reasoning {self.reasoning_tokens})), "
+            f"Total tokens: {total_tokens} (prompt {self.prompt_tokens} (cached {self.cached_prompt_tokens}), "
+            f"completion {self.completion_tokens} (contains reasoning {self.reasoning_tokens})), "
             f"first token latency: {ftt} ms, cost {time_delta} ms, {speed:.3f} tok/s (prefill {prefill_speed:.3f} "
             f"tok/s, decode {decode_speed:.3f} tok/s)"
         )

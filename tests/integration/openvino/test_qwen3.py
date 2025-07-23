@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, cast, override
 
 from openai import OpenAI
@@ -120,6 +121,59 @@ def test_qwen3_conversation(openvino_server: Server) -> None:
     log.info("Output: %s", result.content)
     assert result.content.find("绿") >= 0
     assert result.content.find("2") >= 0
+
+
+def test_qwen3_prefix_cache(openvino_server: Server) -> None:
+    openvino_server.model_manager.load_huggingface_model(
+        QWEN3_CHAT_MODEL,
+        BACKEND_ID_OPENVINO,
+        "text-generation-with-past",
+        skip_if_loaded=True,
+        is_reasoning_model=True,
+    )
+
+    client = OpenAI(
+        base_url=f"http://{openvino_server.config.host}:{openvino_server.config.port}/openai/v1", api_key="__TEST__"
+    )
+
+    completion = client.chat.completions.create(
+        model=QWEN3_CHAT_MODEL,
+        messages=[
+            {"role": "system", "content": "你是一个乐于助人的智能助理，名叫A380。"},
+            {"role": "user", "content": "请问你的名字是什么？"},
+        ],
+        seed=100,
+    )
+
+    result = completion.choices[0].message
+    assert result is not None
+    assert result.content is not None
+    log.info("Output: %s", result.content)
+    assert result.content.find("A380") >= 0
+    assert completion.usage is not None
+    assert completion.usage.prompt_tokens_details is not None
+    assert completion.usage.prompt_tokens_details.cached_tokens == 0
+
+    time.sleep(10)
+
+    completion2 = client.chat.completions.create(
+        model=QWEN3_CHAT_MODEL,
+        messages=[
+            {"role": "system", "content": "你是一个乐于助人的智能助理，名叫A380。"},
+            {"role": "user", "content": "请问你的名字叫什么？"},
+        ],
+        seed=100,
+    )
+
+    result2 = completion2.choices[0].message
+    assert result2 is not None
+    assert result2.content is not None
+    log.info("Output: %s", result2.content)
+    assert result2.content.find("A380") >= 0
+    assert completion2.usage is not None
+    assert completion2.usage.prompt_tokens_details is not None
+    assert completion2.usage.prompt_tokens_details.cached_tokens is not None
+    assert completion2.usage.prompt_tokens_details.cached_tokens > 0
 
 
 def test_qwen3_tool_calling(openvino_server: Server) -> None:

@@ -4,6 +4,7 @@ The following are change log of each versions.
 
 ## 0.4.0 (2025-07-??)
 
+- Support prefix KV caching based on radix tree
 - Basic support for OpenAI Responses API
 - Support tool call streaming
 - Removed implicit internal tool calling mechanism

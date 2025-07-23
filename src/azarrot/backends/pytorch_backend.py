@@ -5,7 +5,7 @@ import torch
 
 from azarrot.backends.transformers_based_backend import TransformersBasedBackend
 from azarrot.common_data import Model
-from azarrot.config import ServerConfig
+from azarrot.config import ModelPrefixCacheConfig, ServerConfig
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
@@ -37,7 +37,15 @@ class PyTorchBackend(TransformersBasedBackend):
         return BACKEND_ID_PYTORCH
 
     @override
-    def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(
+        self,
+        model: Model,
+        model_config: Any,
+        model_kwargs: dict[str, Any],
+        *,
+        device: str,
+        prefix_cache_config: ModelPrefixCacheConfig | None = None,
+    ) -> None:
         model_kwargs["low_cpu_mem_usage"] = True
 
         # TODO: Enable this when bitsandbytes is usable

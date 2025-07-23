@@ -1,6 +1,5 @@
 import logging
 import sys
-import threading
 from datetime import datetime
 from pathlib import Path
 from types import MethodType, ModuleType
@@ -11,22 +10,29 @@ import openvino
 import psutil
 import torch
 from openvino import properties as ov_props
+from openvino._pyopenvino import VariableState
 from optimum.intel import (
     OVModelForCausalLM,
     OVModelForFeatureExtraction,
     OVModelForVisualCausalLM,
     OVWeightQuantizationConfig,
 )
+from transformers.cache_utils import DynamicCache
 from transformers.pipelines import pipeline
 
-from azarrot.backends.transformers_based_backend import TransformersBasedBackend
+from azarrot.backends.backend_base import BackendGenerationTask
+from azarrot.backends.caching import PreparedCache
+from azarrot.backends.common import CompletionChunkStreamer, CustomTextIteratorStreamer
+from azarrot.backends.transformers_based_backend import LoadedTransformersModel, TransformersBasedBackend
+from azarrot.backends.transformers_common import TransformersGenerationMethods, TransformersModelPrefixCache
 from azarrot.common_data import (
     EmbeddingsGenerationRequest,
     GenerationStatistics,
     Model,
     ModelQuirks,
+    TextGenerationRequest,
 )
-from azarrot.config import ServerConfig
+from azarrot.config import ModelPrefixCacheConfig, ServerConfig
 from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 
 if TYPE_CHECKING:
@@ -45,19 +51,125 @@ OPENVINO_TASK_MODEL_MAP = {
 BACKEND_ID_OPENVINO = "openvino"
 
 
-class ThreadLocalAwareInferRequest:
+class OpenVINOGenerationMethod(TransformersGenerationMethods):
+    def __init__(
+        self,
+        model: "PreTrainedModel",
+        streamer: CustomTextIteratorStreamer,
+        prefix_cache: TransformersModelPrefixCache | None,
+        seed: int | None,
+        generation_kwargs: dict[str, Any],
+    ) -> None:
+        super().__init__(model, streamer, prefix_cache, seed, generation_kwargs)
+
+    @override
+    def generate(self) -> tuple[bool, list[CustomTextIteratorStreamer]]:
+        if self.prefix_cache is not None:
+            current_cache: DynamicCache = self.generation_kwargs["past_key_values"]
+            # del self.generation_kwargs["past_key_values"]
+
+            if len(current_cache) == 0:
+                del self.generation_kwargs["past_key_values"]
+            else:
+                self.generation_kwargs["past_key_values"] = current_cache.to_legacy_cache()
+                request_wrapper = cast("CustomInferRequestWrapper", self.model.request)
+                request_wrapper.bind_prefix_cache(current_cache)
+
+            del self.generation_kwargs["cache_position"]
+
+        return super().generate()
+
+    def __convert_to_hf_transformers_cache(self) -> DynamicCache:
+        request_wrapper = cast("CustomInferRequestWrapper", self.model.request)
+        request = request_wrapper.get_request()
+
+        new_cache = DynamicCache()
+        key_caches = {}
+        value_caches = {}
+
+        for var_state in request.query_state():
+            if "past_key_values." in var_state.name:
+                name_parts = var_state.name.split(".")
+
+                if len(name_parts) != 5:  # noqa: PLR2004
+                    continue
+
+                layer = int(name_parts[1])
+
+                if name_parts[4] == "key":
+                    key_caches[layer] = torch.from_numpy(var_state.state.data)
+                elif name_parts[4] == "value":
+                    value_caches[layer] = torch.from_numpy(var_state.state.data)
+                else:
+                    continue
+
+                if layer in key_caches and layer in value_caches:
+                    new_cache.update(key_caches[layer], value_caches[layer], layer)
+
+        return new_cache
+
+    @override
+    def split_from_batch(self, others: list["TransformersGenerationMethods"]) -> None:
+        if self.prefix_cache is not None:
+            self.generation_kwargs["past_key_values"] = self.__convert_to_hf_transformers_cache()
+
+        return super().split_from_batch(others)
+
+    @override
+    def on_execution_successful(self, index_in_batch: int) -> None:
+        if self.prefix_cache is not None:
+            new_cache = self.__convert_to_hf_transformers_cache()
+            self.generation_kwargs["past_key_values"] = new_cache
+
+        super().on_execution_successful(index_in_batch)
+
+
+class CustomInferRequestWrapper:
     _log = logging.getLogger(__name__)
     _model: openvino.CompiledModel
-    _request_holder = threading.local()
+    _hf_model: "PreTrainedModel"
+    _request: openvino.InferRequest | None = None
 
-    def __init__(self, model: openvino.CompiledModel) -> None:
+    def __init__(self, model: openvino.CompiledModel, hf_model: "PreTrainedModel") -> None:
         self._model = model
+        self._hf_model = hf_model
 
     def __get_request(self) -> openvino.InferRequest:
-        if not hasattr(self._request_holder, "request"):
-            self._request_holder.request = self._model.create_infer_request()
+        if self._request is None:
+            self._request = self._model.create_infer_request()
 
-        return self._request_holder.request
+        return self._request
+
+    def get_request(self) -> openvino.InferRequest:
+        assert self._request is not None
+        return self._request
+
+    def bind_prefix_cache(self, cache: DynamicCache) -> None:
+        req = self.__get_request()
+        req.reset_state()
+
+        for var_state in req.query_state():
+            if "past_key_values." in var_state.name:
+                name_parts = var_state.name.split(".")
+
+                if len(name_parts) != 5:  # noqa: PLR2004
+                    continue
+
+                layer = int(name_parts[1])
+
+                if layer >= len(cache):
+                    continue
+
+                if name_parts[4] == "key":
+                    cached_tensor = cache.key_cache[layer]
+                elif name_parts[4] == "value":
+                    cached_tensor = cache.value_cache[layer]
+                else:
+                    continue
+
+                var_state.state = openvino.Tensor(cached_tensor.numpy())
+
+        self._hf_model._past_length = cache.get_seq_length()  # type: ignore[assignment]  # noqa: SLF001
 
     def reset_state(self) -> None:
         req = self.__get_request()
@@ -71,9 +183,13 @@ class ThreadLocalAwareInferRequest:
         req = self.__get_request()
         req.wait()
 
-    def get_tensor(self, *args, **kwargs) -> openvino.Tensor:  # type: ignore[no-untyped-def]    # noqa: ANN002, ANN003
+    def get_tensor(self, *args: Any, **kwargs: Any) -> openvino.Tensor:
         req = self.__get_request()
         return req.get_tensor(*args, **kwargs)
+
+    def query_state(self) -> list[VariableState]:
+        req = self.__get_request()
+        return req.query_state()
 
     def __call__(self, inputs: Any) -> Any:
         req = self.__get_request()
@@ -91,7 +207,7 @@ def patched_compile(self) -> None:  # type: ignore[no-untyped-def]    # noqa: AN
         else:
             self.compiled_model = self.request
 
-        self.request = ThreadLocalAwareInferRequest(self.compiled_model)
+        self.request = CustomInferRequestWrapper(self.compiled_model, self)
 
 
 class OpenVINOBackend(TransformersBasedBackend):
@@ -186,7 +302,15 @@ class OpenVINOBackend(TransformersBasedBackend):
         del sys.modules["auto_gptq"]
 
     @override
-    def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(
+        self,
+        model: Model,
+        model_config: Any,
+        model_kwargs: dict[str, Any],
+        *,
+        device: str,
+        prefix_cache_config: ModelPrefixCacheConfig | None = None,
+    ) -> None:
         model_path = model.path.absolute()
         openvino_model_file_path = model_path / Path("openvino_model.xml")
         need_export = not openvino_model_file_path.exists()
@@ -208,6 +332,8 @@ class OpenVINOBackend(TransformersBasedBackend):
         need_load_in_4bit = need_export and not model.use_original_precision
         model_kwargs["export"] = need_export
 
+        model_kwargs["use_cache"] = model.task.endswith("-with-past")
+
         if model.openvino is not None:
             if need_export and model.openvino.quantization_configs is not None:
                 model_kwargs["quantization_config"] = OVWeightQuantizationConfig(
@@ -227,17 +353,19 @@ class OpenVINOBackend(TransformersBasedBackend):
             "PERFORMANCE_HINT": ov_props.hint.PerformanceMode.LATENCY,
         }
 
-        if model.device is not None and model.device.upper() == "CPU":
+        if prefix_cache_config is not None and model_kwargs["use_cache"] and "GPU" in device.upper():
+            self._log.info("Prefix caching enabled, and device is GPU, forcing KV_CACHE_PRECISION to undefined.")
+            ov_config["KV_CACHE_PRECISION"] = "undefined"
+
+        if device.upper() == "CPU":
             ov_config["INFERENCE_NUM_THREADS"] = self._cpu_phy_core_count
             ov_config["SCHEDULING_CORE_TYPE"] = ov_props.hint.SchedulingCoreType.PCORE_ONLY
             ov_config["ENABLE_HYPER_THREADING"] = False
             ov_config["ENABLE_CPU_PINNING"] = True
 
-        self._log.info("Using OpenVINO configs for device %s: %s", model.device, ov_config)
+        self._log.info("Using OpenVINO configs for device %s: %s", device, ov_config)
 
         model_kwargs["ov_config"] = ov_config
-
-        model_kwargs["use_cache"] = model.task.endswith("-with-past")
 
         if need_export:
             self.__workaround_optimum_intel_gptqmodel_export_begin()
@@ -289,6 +417,49 @@ class OpenVINOBackend(TransformersBasedBackend):
         return [sanitize_device(d.strip().upper()) for d in device_str.split(",")]
 
     @override
+    def _bind_prefix_cache_to_generation(
+        self,
+        loaded_model: LoadedTransformersModel,
+        prepared_cache: PreparedCache[DynamicCache],
+        generation_kwargs: dict[str, Any],
+    ) -> None:
+        super()._bind_prefix_cache_to_generation(loaded_model, prepared_cache, generation_kwargs)
+
+        input_ids: torch.Tensor = generation_kwargs["input_ids"]
+        cache_positions: torch.Tensor = generation_kwargs["cache_position"]
+        cache_pos = int(cache_positions[0])
+
+        if "position_ids" in generation_kwargs:
+            position_ids = generation_kwargs["position_ids"]
+            generation_kwargs["position_ids"] = position_ids[:, cache_pos:]
+        else:
+            generation_kwargs["position_ids"] = torch.Tensor([list(range(cache_pos, len(input_ids[0])))])
+
+        generation_kwargs["cache_position"] = torch.Tensor([0])
+
+    @override
+    def _prefix_cache_need_copying(self) -> bool:
+        return False
+
+    @override
+    def _generate(
+        self, request: TextGenerationRequest
+    ) -> tuple[BackendGenerationTask, CompletionChunkStreamer, GenerationStatistics]:
+        task, streamer, stats = super()._generate(request)
+
+        original_methods = cast("TransformersGenerationMethods", task.methods)
+
+        task.methods = OpenVINOGenerationMethod(
+            model=original_methods.model,
+            streamer=original_methods.streamer,
+            prefix_cache=original_methods.prefix_cache,
+            seed=original_methods.seed,
+            generation_kwargs=original_methods.generation_kwargs,
+        )
+
+        return task, streamer, stats
+
+    @override
     def generate_embeddings(
         self, request: EmbeddingsGenerationRequest
     ) -> tuple[list[list[float]], GenerationStatistics]:
@@ -299,6 +470,7 @@ class OpenVINOBackend(TransformersBasedBackend):
             first_token_time=datetime.now(),
             end_time=datetime.max,
             prompt_tokens=0,
+            cached_prompt_tokens=0,
             completion_tokens=0,
             reasoning_tokens=0,
         )

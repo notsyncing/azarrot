@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from azarrot.backends.openvino_backend import OpenVINOBackend
-from azarrot.config import ENV_AZARROT_TEST_MODE, ENV_AZARROT_TEST_RESOURCES_ROOT, ServerConfig
+from azarrot.config import ENV_AZARROT_TEST_MODE, ENV_AZARROT_TEST_RESOURCES_ROOT, ModelPrefixCacheConfig, ServerConfig
 from azarrot.server import Server, create_server
 
 
@@ -26,6 +26,7 @@ def openvino_server() -> Generator[Server, Any, Any]:
         working_dir=tmp_path / "working",
         huggingface_download_to_home=True,
         log_generation_details=True,
+        model_prefix_cache_configs={"Qwen/Qwen3-1.7B": ModelPrefixCacheConfig(max_cache_size=8589934592)},
     )
 
     server = create_server(

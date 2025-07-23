@@ -129,7 +129,9 @@ class AgentChatTaskInfo:
                 first_token_time=dbo.start_time or datetime.min,
                 end_time=dbo.complete_time or datetime.min,
                 prompt_tokens=0,
+                cached_prompt_tokens=0,
                 completion_tokens=0,
+                reasoning_tokens=0,
             )
 
         if dbo.generation_parameters is not None:

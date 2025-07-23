@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, cast
 from openai import OpenAI
 from pydantic.fields import FieldInfo
 
-from azarrot.common_data import EmbeddingModelInfo, Model, ModelPreset
+from azarrot.common_data import EmbeddingModelInfo, LoadedModel, ModelPreset
 from azarrot.file_store import FileStore
 from azarrot.server import Server
 
@@ -28,8 +28,8 @@ def get_file_store(server: Server) -> FileStore:
     return cast("OpenAIFrontend", server.frontends[0])._openai_files._file_store
 
 
-def create_fake_embedding_model(model_id: str) -> Model:
-    return Model(
+def create_fake_embedding_model(model_id: str) -> LoadedModel:
+    return LoadedModel(
         id=model_id,
         backend="openvino",
         path=Path("./"),
@@ -44,7 +44,9 @@ def create_fake_embedding_model(model_id: str) -> Model:
         openvino=None,
         pytorch=None,
         info=EmbeddingModelInfo(1024),
+        device="cpu",
         create_time=datetime.now(),
+        loaded_time=datetime.now(),
     )
 
 

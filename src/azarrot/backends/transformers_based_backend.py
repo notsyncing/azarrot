@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING, Any, cast, override
 
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoProcessor, AutoTokenizer
+from transformers.cache_utils import DynamicCache
 
 from azarrot.backends.backend_base import BackendGenerationTask, BaseBackend
+from azarrot.backends.caching import PreparedCache
 from azarrot.backends.common import (
     CompletionChunkStreamer,
     CustomTextIteratorStreamer,
@@ -28,18 +30,20 @@ from azarrot.backends.pytorch_common import (
 from azarrot.backends.transformers_common import (
     ProcessorToTokenizerAdapter,
     TransformersGenerationMethods,
+    TransformersModelPrefixCache,
     to_transformers_chat_messages,
 )
 from azarrot.common_data import (
     EmbeddingModelInfo,
     GenerationMessage,
     GenerationStatistics,
+    LoadedModel,
     Model,
     ModelInfo,
     TextGenerationMessageContent,
     TextGenerationRequest,
 )
-from azarrot.config import DEFAULT_MAX_TOKENS, DEFAULT_REASONING_MAX_TOKENS, ServerConfig
+from azarrot.config import DEFAULT_MAX_TOKENS, DEFAULT_REASONING_MAX_TOKENS, ModelPrefixCacheConfig, ServerConfig
 from azarrot.models.chat_templates import MODEL_TOOL_CALL_CONFIGS
 from azarrot.models.model_quirks import MODEL_GENERATION_QUIRKS
 from azarrot.models.supports.default_chat_support import DEFAULT_MODEL_TOOL_CALL_CONFIG
@@ -60,12 +64,12 @@ TRANSFORMERS_TASK_NEED_PROCESSOR_MAP = {
     "image-text-to-text-with-past": True,
 }
 
-MODEL_PYTORCH_QUIRKS = {}
+MODEL_PYTORCH_QUIRKS: dict[str, Any] = {}
 
 
 @dataclass
 class LoadedTransformersModel:
-    data: Model
+    data: LoadedModel
     model: "PreTrainedModel"
     tokenizer: "PreTrainedTokenizer | None"
     processor: "ProcessorMixin | None"
@@ -125,7 +129,15 @@ class TransformersBasedBackend(BaseBackend, ABC):
     def _is_model_need_processor(self, model: Model) -> bool:
         return TRANSFORMERS_TASK_NEED_PROCESSOR_MAP.get(model.task, False)
 
-    def _customize_model_and_kwargs(self, model: Model, model_config: Any, model_kwargs: dict[str, Any]) -> None:
+    def _customize_model_and_kwargs(
+        self,
+        model: Model,
+        model_config: Any,
+        model_kwargs: dict[str, Any],
+        *,
+        device: str,
+        prefix_cache_config: ModelPrefixCacheConfig | None = None,
+    ) -> None:
         pass
 
     def _customize_loaded_model(
@@ -142,7 +154,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
         return True
 
     @override
-    def load_model(self, model: Model) -> ModelInfo:
+    def load_model(self, model: Model) -> LoadedModel:
         model_class = self._get_model_class(model.task)
 
         if model_class is None:
@@ -150,11 +162,9 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         if model.id in self._models:
             self._log.warning("Model %s is already loaded, will skip it.", model.id)
-            assert model.info is not None
-            return model.info
+            return self._models[model.id].data
 
         device = self._determine_device_for_model(model.id)
-        model.device = device
 
         self._log.info("Loading model %s from %s to device %s", model.id, model.path, device)
 
@@ -162,14 +172,22 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         model_kwargs: dict[str, Any] = {}
 
-        self._customize_model_and_kwargs(model, model_config, model_kwargs)
+        prefix_cache_config = self._server_config.model_prefix_cache_configs.get(model.id)
+
+        self._customize_model_and_kwargs(
+            model,
+            model_config,
+            model_kwargs,
+            device=device,
+            prefix_cache_config=prefix_cache_config,
+        )
 
         model_path = model.path.absolute()
 
         tokenizer: PreTrainedTokenizer | None = None
         processor: ProcessorMixin | None = None
 
-        if self._is_model_need_processor:
+        if self._is_model_need_processor(model):
             processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
         else:
             tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
@@ -194,11 +212,25 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
         transformers_model = self._customize_loaded_model(model, transformers_model, tokenizer, processor, model_kwargs)
 
-        self._models[model.id] = LoadedTransformersModel(model, transformers_model, tokenizer, processor, device)
+        loaded_model = LoadedModel.from_model(
+            model, device=device, info=self.__extract_model_info(transformers_model, model.task)
+        )
+
+        if prefix_cache_config is not None:
+            if model_kwargs.get("use_cache", True):
+                loaded_model.prefix_cache = TransformersModelPrefixCache(max_size=prefix_cache_config.max_cache_size)
+
+                self._log.info(
+                    "Model %s has enabled prefix cache, max size %d", model.id, prefix_cache_config.max_cache_size
+                )
+            else:
+                self._log.warning("Model %s wants to enable prefix cache, but use_cache is False!", model.id)
+
+        self._models[model.id] = LoadedTransformersModel(loaded_model, transformers_model, tokenizer, processor, device)
 
         self._log.info("Loaded model %s", model.id)
 
-        return self.__extract_model_info(transformers_model, model.task)
+        return loaded_model
 
     @override
     def unload_model(self, model_id: str) -> None:
@@ -236,6 +268,22 @@ class TransformersBasedBackend(BaseBackend, ABC):
         else:
             return DEFAULT_MAX_TOKENS
 
+    def _bind_prefix_cache_to_generation(
+        self,
+        loaded_model: LoadedTransformersModel,  # noqa: ARG002
+        prepared_cache: PreparedCache[DynamicCache],
+        generation_kwargs: dict[str, Any],
+    ) -> None:
+        generation_kwargs.update(
+            {
+                "past_key_values": prepared_cache.cache,
+                "cache_position": torch.Tensor([prepared_cache.cached_token_count]),
+            }
+        )
+
+    def _prefix_cache_need_copying(self) -> bool:
+        return True
+
     def __generate_normal(
         self,
         loaded_model: LoadedTransformersModel,
@@ -244,6 +292,8 @@ class TransformersBasedBackend(BaseBackend, ABC):
         streamer: CustomTextIteratorStreamer,
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
+        result: Any
+
         if not loaded_model.data.is_for_raw_completion:
             transformers_tools_desc = cast(
                 "Any",
@@ -290,10 +340,10 @@ class TransformersBasedBackend(BaseBackend, ABC):
 
             result = loaded_model.tokenizer(first_user_msg, return_tensors="pt")
 
-        inputs: Any = result["input_ids"]
+        inputs: torch.Tensor = result["input_ids"]
         attention_mask = result.get("attention_mask")
 
-        gen_stats.prompt_tokens = len(cast("torch.Tensor", inputs[0]))
+        gen_stats.prompt_tokens = len(inputs[0])
 
         generation_kwargs = common_generation_kwargs.copy()
 
@@ -333,8 +383,21 @@ class TransformersBasedBackend(BaseBackend, ABC):
         if seed is None:
             seed = self._server_config.default_seed
 
+        if loaded_model.data.prefix_cache is not None:
+            prepared_cache = loaded_model.data.prefix_cache.retrieve_cache(
+                inputs[0], loaded_model.device, copy=self._prefix_cache_need_copying()
+            )
+
+            gen_stats.cached_prompt_tokens = prepared_cache.cached_token_count
+
+            self._bind_prefix_cache_to_generation(loaded_model, prepared_cache, generation_kwargs)
+
         return TransformersGenerationMethods(
-            model=loaded_model.model, streamer=streamer, seed=seed, generation_kwargs=generation_kwargs
+            model=loaded_model.model,
+            streamer=streamer,
+            prefix_cache=cast("TransformersModelPrefixCache | None", loaded_model.data.prefix_cache),
+            seed=seed,
+            generation_kwargs=generation_kwargs,
         )
 
     def __generate_internvl(
@@ -346,12 +409,12 @@ class TransformersBasedBackend(BaseBackend, ABC):
         gen_stats: GenerationStatistics,
     ) -> GenerationMethods:
         # The processor is actually a Qwen2TokenizerFast
-        internvl_patch_model(loaded_model.model, loaded_model.processor)  # type: ignore[reportArgumentType]
+        internvl_patch_model(loaded_model.model, loaded_model.processor)  # type: ignore[reportArgumentType, arg-type, unused-ignore]
 
         inputs, attention_mask, pixel_values = internvl_apply_chat_template(
             loaded_model.model,
             cast("PreTrainedTokenizer", loaded_model.processor),
-            request.messages,  # type: ignore[reportArgumentType]
+            request.messages,
         )
 
         text_input_length = len(cast("torch.Tensor", inputs[0]))
@@ -381,7 +444,11 @@ class TransformersBasedBackend(BaseBackend, ABC):
         )
 
         return InternVLTransformersGenerationMethods(
-            model=loaded_model.model, streamer=streamer, seed=request.seed, generation_kwargs=generation_kwargs
+            model=loaded_model.model,
+            streamer=streamer,
+            prefix_cache=None,
+            seed=request.seed,
+            generation_kwargs=generation_kwargs,
         )
 
     def __make_streamer_tokenizer(self, loaded_model: LoadedTransformersModel) -> Any:
@@ -406,6 +473,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
             first_token_time=datetime.max,
             end_time=datetime.max,
             prompt_tokens=0,
+            cached_prompt_tokens=0,
             completion_tokens=0,
             reasoning_tokens=0,
         )
@@ -419,6 +487,7 @@ class TransformersBasedBackend(BaseBackend, ABC):
             timeout=self._server_config.single_token_generation_timeout / 1000,
             skip_special_tokens=True,
             model_quirks=model_quirks,
+            cache_all_output_tokens=loaded_model.data.prefix_cache is not None,
         )
 
         chunk_streamer = CompletionChunkStreamer(

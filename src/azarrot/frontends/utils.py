@@ -7,7 +7,7 @@ import openai.types
 import openai.types.responses as oai_resps
 from openai.types.chat import ChatCompletionMessageToolCall
 from openai.types.chat.chat_completion_message_tool_call import Function
-from openai.types.completion_usage import CompletionUsage
+from openai.types.completion_usage import CompletionUsage, PromptTokensDetails
 from openai.types.create_embedding_response import Usage
 from openai.types.responses import ResponseFunctionToolCall, ResponseUsage, ToolParam
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
@@ -365,6 +365,7 @@ def to_openai_token_usage(gen_stats: GenerationStatistics) -> OpenAITokenUsage:
 def to_openai_token_usage2(gen_stats: GenerationStatistics) -> CompletionUsage:
     return CompletionUsage(
         prompt_tokens=gen_stats.prompt_tokens,
+        prompt_tokens_details=PromptTokensDetails(cached_tokens=gen_stats.cached_prompt_tokens),
         completion_tokens=gen_stats.completion_tokens,
         total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,
     )
@@ -373,7 +374,7 @@ def to_openai_token_usage2(gen_stats: GenerationStatistics) -> CompletionUsage:
 def to_openai_responses_token_usage(gen_stats: GenerationStatistics) -> ResponseUsage:
     return ResponseUsage(
         input_tokens=gen_stats.prompt_tokens,
-        input_tokens_details=InputTokensDetails(cached_tokens=0),
+        input_tokens_details=InputTokensDetails(cached_tokens=gen_stats.cached_prompt_tokens),
         output_tokens=gen_stats.completion_tokens,
         output_tokens_details=OutputTokensDetails(reasoning_tokens=gen_stats.reasoning_tokens),
         total_tokens=gen_stats.prompt_tokens + gen_stats.completion_tokens,

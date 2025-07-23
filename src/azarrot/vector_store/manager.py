@@ -12,7 +12,7 @@ from sqlakeyset import select_page
 from sqlalchemy import Engine, and_, delete, func, select, update
 from sqlalchemy.orm import Session
 
-from azarrot.common_data import EmbeddingModelInfo, Model, PageResult
+from azarrot.common_data import EmbeddingModelInfo, LoadedModel, PageResult
 from azarrot.common_types import VectorStoreExpireBaseline, VectorStoreFileFailedReason, VectorStoreFileState
 from azarrot.config import ServerConfig
 from azarrot.database_schemas import VectorStore, VectorStoreFile
@@ -160,7 +160,7 @@ class VectorStoreManager:
     def create(
         self,
         name: str | None,
-        embedding_model: Model,
+        embedding_model: LoadedModel,
         store_id: uuid.UUID | None = None,
         expire_baseline: VectorStoreExpireBaseline | None = None,
         expire_interval: int = 0,

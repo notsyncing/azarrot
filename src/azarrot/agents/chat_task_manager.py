@@ -100,6 +100,8 @@ class AgentChatTaskDetailItem:
 
     @staticmethod
     def from_db(dbo: AgentChatTaskDetail) -> "AgentChatTaskDetailItem":
+        data: AgentChatTaskDetailsData
+
         if dbo.type == "message":
             data = dataclass_wizard.fromdict(AgentChatTaskMessageDetailsData, json.loads(dbo.data))
         elif dbo.type == "tool_call":

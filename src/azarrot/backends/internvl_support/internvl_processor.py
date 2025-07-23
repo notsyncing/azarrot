@@ -50,8 +50,8 @@ def internvl_apply_chat_template(
 
         c.append({"role": m.role, "content": final_content})
 
-    result = tokenizer.apply_chat_template(c, add_generation_prompt=True, return_tensors="pt", return_dict=True)
-    result = cast("dict[str, Any]", result)
+    raw_result = tokenizer.apply_chat_template(c, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+    result = cast("dict[str, Any]", raw_result)
 
     inputs: Any = result["input_ids"]
     attention_mask = result.get("attention_mask")

@@ -16,8 +16,8 @@ from azarrot.backends.common import (
 from azarrot.common_data import (
     EmbeddingsGenerationRequest,
     GenerationStatistics,
+    LoadedModel,
     Model,
-    ModelInfo,
     ModelQuirks,
     RerankResultItem,
     ReranksGenerationRequest,
@@ -83,8 +83,12 @@ class TaskReference:
         for dep in self.dependencies:
             dep.wait_all_ready()
 
-    def mark_self_as_done(self, result: Any) -> None:
+    def mark_self_as_done(self, index_in_batch: int, result: Any) -> None:
         self._result = result
+
+        if self.task.methods is not None:
+            self.task.methods.on_execution_successful(index_in_batch)
+
         self._done.set()
 
     def is_done(self) -> bool:
@@ -218,15 +222,21 @@ class DeviceWorker:
             first_task_methods = task_ref_list[0].task.methods
             assert first_task_methods is not None
 
+            other_task_methods: list[GenerationMethods]
+
             if fetched_count > 1:
-                other_task_methods = [t.task.methods for t in task_ref_list[1:]]
+                other_task_methods = [t.task.methods for t in task_ref_list[1:] if t.task.methods is not None]
                 first_task_methods.merge_into_batch(other_task_methods)
+            else:
+                other_task_methods = []
 
             success, results = first_task_methods.generate()
 
             if not success:
                 for task_ref in task_ref_list:
                     task_ref.execution_failed()
+            elif fetched_count > 1:
+                first_task_methods.split_from_batch(other_task_methods)
 
             results_len = len(results)
 
@@ -235,7 +245,7 @@ class DeviceWorker:
                     self._log.error("Too less results %d", results_len)
                     task_ref.execution_failed()
                 else:
-                    task_ref.mark_self_as_done(results[index])
+                    task_ref.mark_self_as_done(index, results[index])
 
             if fetched_count == 1:
                 self._log.info(f"Device worker {self._config.device} has done task {task_ref_list[0]}")
@@ -267,7 +277,7 @@ class BaseBackend(ABC):
         pass
 
     @abstractmethod
-    def load_model(self, model: Model) -> ModelInfo:
+    def load_model(self, model: Model) -> LoadedModel:
         pass
 
     @abstractmethod

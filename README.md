@@ -46,6 +46,7 @@ See [CHANGELOG](./CHANGELOG.md) for more details.
 
 ### Other features
 
+- Prefix KV caching based on radix tree with LRU evicting
 - Auto-batching on OpenAI Chat API
 - Auto model downloading from huggingface
 - Jina and Cohere(v2) Rerank API support on SentenceTransformers backend

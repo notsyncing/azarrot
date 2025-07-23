@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from datetime import datetime
 from queue import Empty, Queue
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, cast, override
+from typing import TYPE_CHECKING, Any, Literal, Self, cast, override
 
 import torch
 from transformers.generation.streamers import TextIteratorStreamer
@@ -42,19 +42,22 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     _batch_mode = False
     _cut_text = False
     _token_counter: int = 0
+    _cache_all_output_tokens = False
+    _all_output_tokens: torch.Tensor | None = None
 
     _statistics_state: Literal["text", "reasoning"] = "text"
 
     _reasoning_start_token: int | None = None
     _reasoning_end_token: int | None = None
 
-    def __init__(  # type: ignore[no-untyped-def]
+    def __init__(
         self,
         tokenizer: "AutoTokenizer",
         generation_statistics: GenerationStatistics,
         skip_prompt: bool = False,
         timeout: float | None = None,
         model_quirks: ModelQuirks | None = None,
+        cache_all_output_tokens: bool = False,
         **decode_kwargs: Any,
     ) -> None:
         super().__init__(tokenizer, skip_prompt, timeout, **decode_kwargs)
@@ -72,6 +75,8 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
             if model_quirks.reasoning_end_indicator is not None:
                 self._reasoning_end_token = p_tokenizer.encode(model_quirks.reasoning_end_indicator)[0]
 
+        self._cache_all_output_tokens = cache_all_output_tokens
+
     def get_generation_statistics(self) -> GenerationStatistics:
         return self._generation_statistics
 
@@ -84,6 +89,9 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
     def get_completion_tokens(self) -> int:
         return self._generation_statistics.completion_tokens
 
+    def get_all_output_tokens(self) -> torch.Tensor | None:
+        return self._all_output_tokens
+
     def put(self, value: torch.Tensor) -> None:
         if self._cut_text:
             return
@@ -92,6 +100,12 @@ class CustomTextIteratorStreamer(TextIteratorStreamer):
             value = value[0]
 
         if not self.next_tokens_are_prompt:
+            if self._cache_all_output_tokens:
+                if self._all_output_tokens is None:
+                    self._all_output_tokens = value.clone()
+                else:
+                    self._all_output_tokens = torch.cat([self._all_output_tokens, value])
+
             tokens = value.tolist()
 
             text_token_count = 0
@@ -267,10 +281,6 @@ class BatchedCustomTextIteratorStreamer(CustomTextIteratorStreamer):
             s.update_start_generation_time(time)
 
 
-GM = TypeVar("GM", bound="GenerationMethods")
-R = TypeVar("R")
-
-
 class GenerationMethods[GM: "GenerationMethods", R](ABC):
     def is_batching_supported(self) -> bool:
         return True
@@ -280,10 +290,17 @@ class GenerationMethods[GM: "GenerationMethods", R](ABC):
         pass
 
     @abstractmethod
+    def split_from_batch(self, others: list[GM]) -> None:
+        pass
+
+    @abstractmethod
     def generate(self) -> tuple[bool, list[R]]:
         pass
 
     def update_start_generation_time(self, time: datetime) -> None:  # noqa: B027
+        pass
+
+    def on_execution_successful(self, index_in_batch: int) -> None:  # noqa: B027
         pass
 
     def on_execution_failed(self) -> None:  # noqa: B027

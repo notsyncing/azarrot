@@ -637,6 +637,8 @@ class OpenAIFrontend(Frontend):
 
             assert delta_state is not None
 
+            output_item: ResponseOutputItem
+
             if isinstance(content, TextGeneratedMessageChunk):
                 if delta_state.current_item is None or delta_state.current_item.type != "message":
                     if delta_state.current_item is not None and delta_state.current_item.type != "message":
@@ -770,6 +772,7 @@ class OpenAIFrontend(Frontend):
                         )
                     )
 
+                assert isinstance(delta_state.current_item, ResponseReasoningItem)
                 delta_state.current_item.summary[0].text += content.content
 
                 events.append(
@@ -793,6 +796,8 @@ class OpenAIFrontend(Frontend):
             real_contents = [content] if not isinstance(content, list) else content
 
             for real_content in real_contents:
+                output: ResponseOutputItem
+
                 if isinstance(real_content, (str, TextGenerationMessageContent, TextGeneratedMessageChunk)):
                     text: str
 
@@ -890,7 +895,6 @@ class OpenAIFrontend(Frontend):
         assert isinstance(openai_chunk, openai.types.chat.ChatCompletionChunk)
 
         yield f"data: {openai_chunk.model_dump_json()}\n\n"
-
 
     def __wrap_to_openai_response_stream(
         self,

@@ -22,6 +22,11 @@ class VectorStoreConfig:
 
 
 @dataclass
+class ModelPrefixCacheConfig:
+    max_cache_size: int = 8 * 1024 * 1024 * 1024
+
+
+@dataclass
 class ServerConfig:
     models_dir: Path = Path("./models")
     working_dir: Path = Path("./working")
@@ -42,3 +47,5 @@ class ServerConfig:
     vector_store_configs: VectorStoreConfig = field(default_factory=lambda: VectorStoreConfig())
 
     openai_configs: OpenAIFrontendConfig = field(default_factory=lambda: OpenAIFrontendConfig())
+
+    model_prefix_cache_configs: dict[str, ModelPrefixCacheConfig] = field(default_factory=dict)

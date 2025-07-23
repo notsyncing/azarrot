@@ -13,6 +13,7 @@ from azarrot.backends.backend_base import BaseBackend
 from azarrot.backends.openvino_backend import BACKEND_ID_OPENVINO
 from azarrot.backends.pytorch_backend import BACKEND_ID_PYTORCH
 from azarrot.common_data import (
+    LoadedModel,
     Model,
     ModelPreset,
     OpenVINOModelConfig,
@@ -47,8 +48,8 @@ class ModelManager:
     _log = logging.getLogger(__name__)
     _config: ServerConfig
     _backends: dict[str, BaseBackend]
-    _models: dict[str, Model]
-    _dynamic_loaded_models: dict[str, Model]
+    _models: dict[str, LoadedModel]
+    _dynamic_loaded_models: dict[str, LoadedModel]
 
     def __init__(self, config: ServerConfig, backends: list[BaseBackend]) -> None:
         self._config = config
@@ -190,7 +191,6 @@ class ModelManager:
                 transformers=transformers,
                 openvino=openvino,
                 pytorch=pytorch,
-                info=None,
                 create_time=datetime.fromtimestamp(file.stat().st_mtime),
             )
 
@@ -208,17 +208,16 @@ class ModelManager:
             backend = self._backends[model.backend]
 
             if model.id not in self._models:
-                model_info = backend.load_model(model)
-                model.info = model_info
-                self._models[model.id] = model
+                loaded_model = backend.load_model(model)
+                self._models[model.id] = loaded_model
 
-    def get_models(self) -> list[Model]:
+    def get_models(self) -> list[LoadedModel]:
         return list(self._models.values())
 
-    def get_model(self, model_id: str) -> Model | None:
+    def get_model(self, model_id: str) -> LoadedModel | None:
         return self._models.get(model_id)
 
-    def add_model(self, model: Model) -> None:
+    def add_model(self, model: LoadedModel) -> None:
         self._models[model.id] = model
 
     def load_huggingface_model(
@@ -272,12 +271,10 @@ class ModelManager:
             transformers=None,
             openvino=None,
             pytorch=None,
-            info=None,
             create_time=datetime.now(),
         )
 
-        model_info = backend.load_model(model)
-        model.info = model_info
+        loaded_model = backend.load_model(model)
 
-        self._models[model.id] = model
-        self._dynamic_loaded_models[model.id] = model
+        self._models[model.id] = loaded_model
+        self._dynamic_loaded_models[model.id] = loaded_model

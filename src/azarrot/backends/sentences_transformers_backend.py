@@ -24,6 +24,7 @@ from azarrot.common_data import (
     EmbeddingModelInfo,
     EmbeddingsGenerationRequest,
     GenerationStatistics,
+    LoadedModel,
     Model,
     ModelInfo,
     RerankResultItem,
@@ -39,7 +40,7 @@ SentenceTransformerModel = SentenceTransformer | CrossEncoder
 
 @dataclass
 class LoadedSentenceTransformersModel:
-    data: Model
+    data: LoadedModel
     model: SentenceTransformerModel
     device: str
 
@@ -68,6 +69,13 @@ class SentenceTransformerGenerationMethods(
     def merge_into_batch(self, others: list["SentenceTransformerGenerationMethods"]) -> None:
         for other in others:
             self._inputs.append(other.get_inputs()[0])
+
+    @override
+    def split_from_batch(self, others: list["SentenceTransformerGenerationMethods"]) -> None:
+        self._inputs = [self._inputs[0]]
+
+        for i, other in enumerate(others):
+            other._inputs = [self._inputs[i + 1]]  # noqa: SLF001
 
     @override
     def generate(self) -> tuple[bool, list[EmbeddingsGenerationResult]]:
@@ -130,6 +138,10 @@ class CrossEncoderGenerationMethods(GenerationMethods["CrossEncoderGenerationMet
 
     @override
     def merge_into_batch(self, others: list["CrossEncoderGenerationMethods"]) -> None:
+        raise NotImplementedError
+
+    @override
+    def split_from_batch(self, others: list["CrossEncoderGenerationMethods"]) -> None:
         raise NotImplementedError
 
     @override
@@ -210,10 +222,9 @@ class SentenceTransformersBackend(BaseBackend):
         raise NotImplementedError
 
     @override
-    def load_model(self, model: Model) -> ModelInfo:
+    def load_model(self, model: Model) -> LoadedModel:
         model_path = str(model.path.absolute())
         device = self._determine_device_for_model(model.id)
-        model.device = device
 
         model_info: ModelInfo
 
@@ -228,11 +239,17 @@ class SentenceTransformersBackend(BaseBackend):
         else:
             raise ValueError(f"Unsupported task {model.task} for model {model.id}")
 
-        self._models[model.id] = LoadedSentenceTransformersModel(model, st_model, device)
+        loaded_model = LoadedModel.from_model(
+            model,
+            device=device,
+            info=model_info,
+        )
+
+        self._models[model.id] = LoadedSentenceTransformersModel(loaded_model, st_model, device)
 
         self._log.info("Loaded model %s for task %s", model.id, model.task)
 
-        return model_info
+        return loaded_model
 
     @override
     def unload_model(self, model_id: str) -> None:
@@ -268,6 +285,7 @@ class SentenceTransformersBackend(BaseBackend):
             first_token_time=datetime.now(),
             end_time=datetime.max,
             prompt_tokens=0,
+            cached_prompt_tokens=0,
             completion_tokens=0,
             reasoning_tokens=0,
         )
@@ -303,6 +321,7 @@ class SentenceTransformersBackend(BaseBackend):
             first_token_time=datetime.now(),
             end_time=datetime.max,
             prompt_tokens=0,
+            cached_prompt_tokens=0,
             completion_tokens=0,
             reasoning_tokens=0,
         )
