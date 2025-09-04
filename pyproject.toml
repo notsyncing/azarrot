@@ -13,40 +13,40 @@ readme = "README.md"
 requires-python = "<= 3.12.99, >=3.12"
 version = "0.4.0"
 dependencies = [
-    "openvino==2025.2",
-    "optimum[openvino]==1.26.1",
-    "optimum-intel==1.24.0",
-    "transformers==4.52.4",
-    "sentence-transformers==5.0.0",
-    "torch==2.7.1+xpu",
+    "openvino==2025.3.0",
+    "optimum[openvino]==1.27.0",
+    "optimum-intel==1.25.2",
+    "transformers==4.53.3",
+    "sentence-transformers==5.1.0",
+    "torch==2.8.0+xpu",
     "torchvision",
     "torchaudio",
-    "intel-extension-for-pytorch==2.7.10+xpu",
-    "oneccl_bind_pt==2.7.0+xpu",
-    "accelerate==1.8.1",
-    "gptqmodel[ipex] @ git+https://github.com/ModelCloud/GPTQModel.git@v3.0.0",
+    "intel-extension-for-pytorch==2.8.10+xpu",
+    "oneccl_bind_pt==2.8.0+xpu",
+    "accelerate==1.10.1",
+    "gptqmodel[ipex]==4.0.0",
     "autoawq==0.2.9",
     "uvicorn==0.35.0",
-    "fastapi==0.115.14",
+    "fastapi==0.116.1",
     "pyyaml==6.0.2",
     "jinja2==3.1.6",
     "python-multipart==0.0.20",
-    "huggingface_hub==0.33.0",
+    "huggingface_hub==0.34.4",
     "SQLAlchemy==2.0.41",
     "sqlakeyset==2.0.1746777265",
-    "alembic==1.16.2",
+    "alembic==1.16.5",
     "schedule==1.2.2",
     "pycron==3.2.0",
-    "pymilvus==2.5.12",
-    "langchain==0.3.26",
-    "langchain-community==0.3.27",
+    "pymilvus==2.6.1",
+    "langchain==0.3.27",
+    "langchain-community==0.3.29",
     "langchain-milvus==0.2.1",
     "langchain-unstructured[local]==0.1.6",
-    "dataclass-wizard==0.35.0",
+    "dataclass-wizard==0.35.1",
     "psutil==7.0.0",
     "decord==0.6.0",
     "einops==0.8.1",
-    "timm==1.0.16",
+    "timm==1.0.19",
 
     # These are gptqmodel dependencies
     "logbar",
@@ -88,9 +88,9 @@ test = [
     "pytest==8.4.1",
     "pytest-cov==6.2.1",
     "expecttest==0.3.0",
-    "coverage[toml]==7.9.1",
-    "openai==1.88.0",
-    "cohere==5.15.0",
+    "coverage[toml]==7.10.6",
+    "openai==1.105.0",
+    "cohere==5.17.0",
 ]
 doc = [
     "sphinx",
@@ -98,17 +98,11 @@ doc = [
     "furo",
 ]
 build = [
-    "build[virtualenv]==1.2.2.post1",
+    "build[virtualenv]==1.3.0",
 ]
 
 [tool.uv]
-override-dependencies = [
-    "dpcpp-cpp-rt==2025.0.4",
-    "intel-sycl-rt==2025.0.4",
-    "intel-cmplr-lic-rt==2025.0.4",
-    "intel-cmplr-lib-ur==2025.0.4",
-    "intel-cmplr-lib-rt==2025.0.4"
-]
+override-dependencies = []
 index-strategy = "unsafe-best-match"
 no-build-isolation-package = ["gptqmodel"]
 prerelease = "allow"
