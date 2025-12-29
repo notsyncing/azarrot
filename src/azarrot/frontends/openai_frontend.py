@@ -30,10 +30,9 @@ from openai.types.responses import (
     ResponseOutputItemDoneEvent,
     ResponseOutputMessage,
     ResponseOutputText,
-    ResponseReasoningDeltaEvent,
-    ResponseReasoningDoneEvent,
     ResponseReasoningItem,
-    ResponseReasoningSummaryDoneEvent,
+    ResponseReasoningTextDeltaEvent,
+    ResponseReasoningTextDoneEvent,
     ResponseStreamEvent,
     ResponseTextDeltaEvent,
     ResponseTextDoneEvent,
@@ -553,6 +552,7 @@ class OpenAIFrontend(Frontend):
                     sequence_number=delta_state.get_and_increase_seq_number(),
                     text=item.content[-1].text,
                     type="response.output_text.done",
+                    logprobs=[],
                 )
             )
 
@@ -571,6 +571,7 @@ class OpenAIFrontend(Frontend):
 
             events.append(
                 ResponseFunctionCallArgumentsDoneEvent(
+                    name=item.name,
                     arguments=item.arguments,
                     item_id=item.id or "",
                     output_index=item_index,
@@ -582,24 +583,13 @@ class OpenAIFrontend(Frontend):
             item.status = "completed"
 
             events.append(
-                ResponseReasoningDoneEvent(
+                ResponseReasoningTextDoneEvent(
                     content_index=0,
                     item_id=item.id,
                     output_index=item_index,
                     sequence_number=delta_state.get_and_increase_seq_number(),
                     text=item.encrypted_content or "",
-                    type="response.reasoning.done",
-                )
-            )
-
-            events.append(
-                ResponseReasoningSummaryDoneEvent(
-                    item_id=item.id,
-                    output_index=item_index,
-                    sequence_number=delta_state.get_and_increase_seq_number(),
-                    summary_index=0,
-                    text=item.encrypted_content or "",
-                    type="response.reasoning_summary.done",
+                    type="response.reasoning_text.done",
                 )
             )
 
@@ -695,6 +685,7 @@ class OpenAIFrontend(Frontend):
                         output_index=len(delta_state.outputs) - 1,
                         sequence_number=delta_state.get_and_increase_seq_number(),
                         type="response.output_text.delta",
+                        logprobs=[],
                     )
                 )
             elif isinstance(content, ToolCallGeneratedMessageChunk):
@@ -776,15 +767,13 @@ class OpenAIFrontend(Frontend):
                 delta_state.current_item.summary[0].text += content.content
 
                 events.append(
-                    ResponseReasoningDeltaEvent(
+                    ResponseReasoningTextDeltaEvent(
                         content_index=0,
-                        delta={
-                            "text": content.content,
-                        },
+                        delta=content.content,
                         item_id=delta_state.current_item.id,
                         output_index=len(delta_state.outputs) - 1,
                         sequence_number=delta_state.get_and_increase_seq_number(),
-                        type="response.reasoning.delta",
+                        type="response.reasoning_text.delta",
                     )
                 )
             else:

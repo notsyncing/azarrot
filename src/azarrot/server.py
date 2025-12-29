@@ -8,7 +8,6 @@ from threading import Thread
 import alembic
 import alembic.command
 import alembic.config
-import intel_extension_for_pytorch as ipex
 import schedule
 import torch
 import uvicorn
@@ -341,7 +340,6 @@ def create_server(
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
 
-    log.info("IPEX version: %s", ipex.ipex_version)
     log.info("XPU count: %d", torch.xpu.device_count())
 
     server = create_server()

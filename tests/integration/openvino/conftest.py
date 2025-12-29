@@ -27,6 +27,7 @@ def openvino_server() -> Generator[Server, Any, Any]:
         huggingface_download_to_home=True,
         log_generation_details=True,
         model_prefix_cache_configs={"Qwen/Qwen3-1.7B": ModelPrefixCacheConfig(max_cache_size=8589934592)},
+        model_device_map={"Qwen/Qwen3-1.7B": "GPU"}
     )
 
     server = create_server(
